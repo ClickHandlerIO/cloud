@@ -1,0 +1,1098 @@
+package io.clickhandler.sql.db;
+
+import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.util.concurrent.AbstractIdleService;
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
+import io.clickhandler.sql.entity.AbstractEntity;
+import io.clickhandler.sql.evolution.EvolutionChangeEntity;
+import io.clickhandler.sql.evolution.EvolutionEntity;
+import javaslang.control.Try;
+import org.h2.server.TcpServer;
+import org.h2.tools.Server;
+import org.jooq.*;
+import org.jooq.conf.*;
+import org.jooq.impl.DSL;
+import org.jooq.impl.DataSourceConnectionProvider;
+import org.jooq.impl.DefaultConfiguration;
+import org.jooq.impl.TableImpl;
+import org.jooq.tools.jdbc.JDBCUtils;
+import org.reflections.Reflections;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.lang.reflect.InvocationTargetException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.util.*;
+import java.util.concurrent.Callable;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+
+/**
+ * @author Clay Molocznik
+ */
+public class Database extends AbstractIdleService {
+    private static final int DEV_POOL_SIZE = 15;
+    private static final int TEST_POOL_SIZE = 15;
+    private static final int PROD_POOL_SIZE = 100;
+    private static final int PROD_READ_POOL_SIZE = 100;
+    private static final int PROD_MYSQL_PREPARE_STMT_CACHE_SIZE = 4096;
+    private static final int DEV_MYSQL_PREPARE_STMT_CACHE_SIZE = 256;
+    private static final int PROD_MYSQL_PREPARE_STMT_CACHE_SQL_LIMIT = 4096;
+    private static final int DEV_MYSQL_PREPARE_STMT_CACHE_SQL_LIMIT = 2048;
+    private static final String ENTITY_PACKAGE = "io.clickhandler.sql.evolution";
+    private static final Logger LOG = LoggerFactory.getLogger(Database.class);
+
+    private final DbConfig config;
+    private final String name;
+    private final ThreadLocal<DatabaseSession> sessionLocal = new ThreadLocal<>();
+    private final Map<Class, Mapping> mappings = new HashMap<>();
+    private final Map<String, TableMapping> tableMappingsByName = Maps.newHashMap();
+    private final Map<Class, TableMapping> tableMappings = Maps.newHashMap();
+    private final Map<Class, TableMapping> tableMappingsByEntity = Maps.newHashMap();
+    private final List<TableMapping> tableMappingList = Lists.newArrayList();
+    private final String[] entityPackageNames;
+    private final String[] jooqPackageNames;
+    private final Map<String, Table> jooqMap = Maps.newHashMap();
+    private final Reflections[] entityReflections;
+    private final Reflections[] jooqReflections;
+    private final HikariConfig hikariConfig;
+    private final HikariConfig hikariReadConfig;
+    private final Set<Class<?>> entityClasses = new HashSet<>();
+
+    private Configuration configuration;
+    private Configuration readConfiguration;
+    private HikariDataSource dataSource;
+    private HikariDataSource readDataSource;
+    private SqlSchema sqlSchema;
+    private DatabasePlatform dbPlatform;
+    private Settings settings;
+    private H2Server h2Server;
+    private WriteService writeService;
+
+    public Database(
+        DbConfig config,
+        String[] entityPackageNames,
+        String[] jooqPackageNames) {
+        entityPackageNames = entityPackageNames == null ? new String[0] : entityPackageNames;
+        jooqPackageNames = jooqPackageNames == null ? new String[0] : jooqPackageNames;
+        this.config = Preconditions.checkNotNull(config, "config must be set.");
+        this.name = Strings.nullToEmpty(config.getName()).trim();
+        this.entityPackageNames = entityPackageNames;
+        this.jooqPackageNames = jooqPackageNames;
+
+        final List<Reflections> entityReflections = new ArrayList<>();
+        final List<Reflections> jooqReflections = new ArrayList<>();
+
+        if (config.isGenerateSchema()) {
+            // Add all look paths for entities.
+            for (String entityPackageName : entityPackageNames) {
+                entityReflections.add(new Reflections(entityPackageName));
+            }
+
+            entityReflections.add(new Reflections(ENTITY_PACKAGE));
+        } else {
+            // Add all look paths for entities.
+            for (String entityPackageName : entityPackageNames) {
+                entityReflections.add(new Reflections(entityPackageName));
+            }
+            // Add all look paths for jOOQ schema.
+            for (String jooqPackageName : jooqPackageNames) {
+                jooqReflections.add(new Reflections(jooqPackageName));
+            }
+
+            // Add Core Entity path.
+            entityReflections.add(new Reflections(ENTITY_PACKAGE));
+            // Add AMP jOOQ path.
+//            jooqReflections.add(new Reflections(SCHEMA_PACKAGE));
+        }
+
+        this.entityReflections = entityReflections.toArray(new Reflections[entityReflections.size()]);
+        this.jooqReflections = jooqReflections.toArray(new Reflections[jooqReflections.size()]);
+
+        final String jdbcUrl = Strings.nullToEmpty((config.getUrl())).trim();
+        final String jdbcUser = Strings.nullToEmpty((config.getUser()));
+        final String jdbcPassword = Strings.nullToEmpty((config.getPassword()));
+
+        final String jdbcReadUrl = Strings.nullToEmpty((config.getReadUrl()));
+        final String jdbcReadUser = Strings.nullToEmpty((config.getReadUser()));
+        final String jdbcReadPassword = Strings.nullToEmpty((config.getReadPassword()));
+        final SQLDialect dialect = JDBCUtils.dialect(jdbcUrl);
+
+        // Configure connection pool.
+        hikariConfig = new HikariConfig();
+        hikariReadConfig = new HikariConfig();
+
+        // Always set auto commit to off.
+        hikariConfig.setAutoCommit(false);
+        hikariConfig.setRegisterMbeans(true);
+
+        hikariReadConfig.setReadOnly(true);
+        hikariReadConfig.setAutoCommit(false);
+        hikariReadConfig.setRegisterMbeans(true);
+
+        // Set the default maximum pool size.
+        if (config.isDev()) {
+            hikariConfig.setMaximumPoolSize(DEV_POOL_SIZE);
+            hikariReadConfig.setMaximumPoolSize(DEV_POOL_SIZE);
+        } else if (config.isTest()) {
+            hikariConfig.setMaximumPoolSize(TEST_POOL_SIZE);
+            hikariReadConfig.setMaximumPoolSize(TEST_POOL_SIZE);
+        } else {
+            hikariConfig.setMaximumPoolSize(PROD_POOL_SIZE);
+            hikariReadConfig.setMaximumPoolSize(PROD_READ_POOL_SIZE);
+        }
+
+        // Sanitize Max Pool size.
+        if (config.getMaxPoolSize() > 0 && config.getMaxPoolSize() < 5001) {
+            hikariConfig.setMaximumPoolSize(config.getMaxPoolSize());
+        }
+        if (config.getMaxReadPoolSize() > 0 && config.getMaxReadPoolSize() < 5001) {
+            hikariReadConfig.setMaximumPoolSize(config.getMaxReadPoolSize());
+        }
+
+        // Always use READ_COMMITTED.
+        // Persist depends on this isolation level.
+        hikariConfig.setTransactionIsolation("TRANSACTION_READ_COMMITTED");
+        hikariReadConfig.setTransactionIsolation("TRANSACTION_READ_COMMITTED");
+        // Set Connection Test Query.
+        // This is valid SQL and is supported by any "ACTUAL" SQL database engine.
+        hikariConfig.setConnectionTestQuery("SELECT 1");
+        hikariReadConfig.setConnectionTestQuery("SELECT 1");
+
+        // Configure jOOQ settings.
+        settings = new Settings();
+        settings.setRenderSchema(false);
+        settings.setExecuteWithOptimisticLocking(true);
+        settings.setRenderNameStyle(RenderNameStyle.QUOTED);
+        settings.setRenderKeywordStyle(RenderKeywordStyle.UPPER);
+        settings.setReflectionCaching(true);
+        settings.setParamType(ParamType.INDEXED);
+        settings.setAttachRecords(true);
+        settings.setBackslashEscaping(BackslashEscaping.DEFAULT);
+        settings.setStatementType(StatementType.PREPARED_STATEMENT);
+
+        // Init jOOQ Configuration.
+        configuration = new DefaultConfiguration();
+        configuration.set(new RecordMapperProviderImpl());
+        configuration.set(settings);
+        configuration.set(dialect);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Database Vendor Specific Configuration
+        ////////////////////////////////////////////////////////////////////////////////////////////////////
+        switch (dialect) {
+            case DEFAULT:
+                break;
+            case CUBRID:
+                break;
+            case DERBY:
+                break;
+            case FIREBIRD:
+                break;
+            case H2:
+                dbPlatform = new H2Platform(configuration, config);
+                hikariConfig.setDataSourceClassName("org.h2.jdbcx.JdbcDataSource");
+                hikariConfig.addDataSourceProperty("URL", jdbcUrl);
+                hikariConfig.addDataSourceProperty("user", jdbcUser);
+                hikariConfig.addDataSourceProperty("password", jdbcPassword);
+                hikariReadConfig.setDataSourceClassName("org.h2.jdbcx.JdbcDataSource");
+                hikariReadConfig.addDataSourceProperty("URL", jdbcReadUrl);
+                hikariReadConfig.addDataSourceProperty("user", jdbcReadUser);
+                hikariReadConfig.addDataSourceProperty("password", jdbcReadPassword);
+                break;
+            case HSQLDB:
+                break;
+            case MARIADB:
+            case MYSQL:
+                dbPlatform = new MySqlPlatform(configuration, config);
+                hikariConfig.setUsername(jdbcUser);
+                hikariConfig.setPassword(jdbcPassword);
+                hikariConfig.setDataSourceClassName("com.mysql.jdbc.jdbc2.optional.MysqlDataSource");
+                hikariConfig.addDataSourceProperty("URL", jdbcUrl);
+                hikariConfig.addDataSourceProperty("user", jdbcUser);
+                hikariConfig.addDataSourceProperty("password", jdbcPassword);
+
+                hikariReadConfig.setUsername(jdbcReadUser);
+                hikariReadConfig.setPassword(jdbcReadPassword);
+                hikariReadConfig.setDataSourceClassName("com.mysql.jdbc.jdbc2.optional.MysqlDataSource");
+                hikariReadConfig.addDataSourceProperty("URL", jdbcReadUrl);
+                hikariReadConfig.addDataSourceProperty("user", jdbcReadUser);
+                hikariReadConfig.addDataSourceProperty("password", jdbcReadPassword);
+
+                ////////////////////////////////////////////////////////////////////////////////////////////////////
+                // MySQL Performance Configuration
+                ////////////////////////////////////////////////////////////////////////////////////////////////////
+                hikariConfig.addDataSourceProperty("cachePrepStmts", config.isCachePrepStmts());
+                hikariReadConfig.addDataSourceProperty("cachePrepStmts", config.isCachePrepStmts());
+                int prepStmtCacheSize = config.getPrepStmtCacheSize();
+                if (prepStmtCacheSize < 1) {
+                    prepStmtCacheSize = config.isProd()
+                        ? PROD_MYSQL_PREPARE_STMT_CACHE_SIZE
+                        : DEV_MYSQL_PREPARE_STMT_CACHE_SIZE;
+                }
+                hikariConfig.addDataSourceProperty("prepStmtCacheSize", prepStmtCacheSize);
+                hikariReadConfig.addDataSourceProperty("prepStmtCacheSize", prepStmtCacheSize);
+                int prepStmtCacheSqlLimit = config.getPrepStmtCacheSqlLimit();
+                if (prepStmtCacheSqlLimit < 1) {
+                    prepStmtCacheSqlLimit = config.isProd()
+                        ? PROD_MYSQL_PREPARE_STMT_CACHE_SQL_LIMIT
+                        : DEV_MYSQL_PREPARE_STMT_CACHE_SQL_LIMIT;
+                }
+                hikariConfig.addDataSourceProperty("prepStmtCacheSqlLimit", prepStmtCacheSqlLimit);
+                hikariReadConfig.addDataSourceProperty("prepStmtCacheSqlLimit", prepStmtCacheSqlLimit);
+                hikariConfig.addDataSourceProperty("useServerPrepStmts", config.isUseServerPrepStmts());
+                hikariReadConfig.addDataSourceProperty("useServerPrepStmts", config.isUseServerPrepStmts());
+                break;
+            case POSTGRES:
+            case POSTGRES_9_3:
+            case POSTGRES_9_4:
+//                dbPlatform = new PGPlatform(configuration, config);
+//                settings.setRenderSchema(true);
+//
+//                // Manually create PG DataSource.
+//                org.postgresql.ds.PGSimpleDataSource d = new PGSimpleDataSource();
+//
+//                // Manually parse URL.
+//                Properties props = org.postgresql.Driver.parseURL(jdbcUrl, new Properties());
+//                if (props != null && !props.isEmpty()) {
+//                    // Set parsed Properties.
+//                    d.setProperty(PGProperty.PG_HOST, PGProperty.PG_HOST.get(props));
+//                    d.setProperty(PGProperty.PG_DBNAME, PGProperty.PG_DBNAME.get(props));
+//                    d.setProperty(PGProperty.PG_PORT, PGProperty.PG_PORT.get(props));
+//                }
+//
+//                // Set username and password.
+//                d.setUser(jdbcUser);
+//                d.setPassword(jdbcPassword);
+//                d.setCurrentSchema("public");
+//                hikariConfig.setDataSource(d);
+                break;
+            case SQLITE:
+                break;
+        }
+
+        // Find all Entity classes.
+        findEntityClasses();
+        // Build jOOQ Schema.
+        findJooqSchema();
+    }
+
+    public DbConfig getConfig() {
+        return config;
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Property Accessors
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    /**
+     * Gets the Session attached to the current thread.
+     *
+     * @return
+     */
+    public DatabaseSession getSession() {
+        final DatabaseSession session = sessionLocal.get();
+
+        if (session == null) {
+            throw new PersistException("DatabaseSession does not exist.  Must call Database.execute()");
+        }
+
+        return session;
+    }
+
+    /**
+     * @return
+     */
+    public List<Mapping> getMappings() {
+        return Lists.newArrayList(mappings.values());
+    }
+
+    public List<TableMapping> getTableMappings() {
+        return Collections.unmodifiableList(tableMappingList);
+    }
+
+    /**
+     * @return
+     */
+    public String getName() {
+        return name;
+    }
+
+    /**
+     * @return
+     */
+    public Configuration getConfiguration() {
+        return configuration.derive();
+    }
+
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Start Up
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    @Override
+    protected void startUp() throws Exception {
+        ////////////////////////////////////////////////////////////////////////////////////////////////////
+        // H2 TCP Server to allow remote connections
+        ////////////////////////////////////////////////////////////////////////////////////////////////////
+//        if (configuration.dialect() == SQLDialect.H2 && AppConfig.get().getDb().getH2Port() > 0) {
+//            h2Server = new H2Server(AppConfig.getH2Port());
+//            h2Server.startAsync().awaitRunning();
+//        }
+
+        try {
+            dataSource = new HikariDataSource(hikariConfig);
+        } catch (Throwable e) {
+            LOG.error("Could not create a Hikari connection pool.", e);
+            throw new PersistException(e);
+        }
+
+        try {
+            readDataSource = new HikariDataSource(hikariReadConfig);
+        } catch (Throwable e) {
+            LOG.error("Could not create a Hikari read connection pool.", e);
+            throw new PersistException(e);
+        }
+
+        // Set Connection Provider.
+        configuration.set(new DataSourceConnectionProvider(dataSource));
+
+        // Create Read Configuration.
+        readConfiguration = configuration.derive(new DataSourceConnectionProvider(readDataSource));
+
+        // Detect changes.
+        List<SchemaInspector.Change> changes = buildEvolution();
+
+        // Are there schema changes that need to be applied?
+        if (changes == null || !changes.isEmpty()) {
+            applyEvolution(changes);
+
+            changes = buildEvolution();
+
+            // Detect changes.
+            if (changes != null && !changes.isEmpty()) {
+                throw new PersistException("Schema Evolution was applied incompletely.");
+            }
+        }
+
+        if (config.isGenerateSchema()) {
+            return;
+        }
+
+        // Finish initializing Table Mappings and ensure Validity.
+        // Wire Relationships.
+        tableMappingList.forEach(mapping -> mapping.wireRelationships(tableMappings));
+        // Validate Table Mapping.
+        tableMappingList.forEach(TableMapping::checkValidity);
+
+        // Startup the WriteService.
+        writeService = new WriteService(this);
+        writeService.startAsync().awaitRunning();
+    }
+
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Shutdown
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    @Override
+    protected void shutDown() throws Exception {
+        if (writeService != null) {
+            Try.run(() -> writeService.stopAsync().awaitTerminated())
+                .onFailure((e) -> LOG.error("Failed to shutdown [WriteService]", e));
+        }
+
+        if (config.getUrl().startsWith("jdbc:h2:mem")) {
+            Try.run(() -> {
+                try (final PreparedStatement stmt = dataSource.getConnection().prepareStatement("DROP ALL OBJECTS;")) {
+                    stmt.execute();
+                    stmt.close();
+                }
+            });
+        }
+
+        Try.run(() -> dataSource.close())
+            .onFailure((e) -> LOG.error("Failed to shutdown Hikari Connection Pool", e));
+
+        Try.run(() -> readDataSource.close())
+            .onFailure((e) -> LOG.error("Failed to shutdown Hikari Connection Pool", e));
+
+        // Stop H2 TCP Server if necessary.
+        if (h2Server != null) {
+            Try.run(() -> h2Server.stopAsync().awaitTerminated())
+                .onFailure((e) -> LOG.error("Failed to stop H2 Server", e));
+        }
+    }
+
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Initialize
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    private void buildTableMappings() {
+        final Map<Class, TableMapping> mappingMap = Maps.newHashMap();
+        for (Class<?> cls : entityClasses) {
+            final io.clickhandler.sql.annotations.Table tableAnnotation = cls.getAnnotation(io.clickhandler.sql.annotations.Table.class);
+            if (tableAnnotation == null) {
+                continue;
+            }
+
+            final TableMapping mapping = TableMapping.create(
+                sqlSchema.getTable(TableMapping.tableName(cls, tableAnnotation.name(), false)),
+                sqlSchema.getTable(TableMapping.tableName(cls, tableAnnotation.name(), true)),
+                dbPlatform,
+                cls,
+                jooqMap
+            );
+
+            mappingMap.put(cls, mapping);
+        }
+
+        rebindMappings(mappingMap);
+    }
+
+    private void rebindMappings(Map<Class, TableMapping> mappings) {
+        // Add all mappings.
+        this.mappings.clear();
+        this.mappings.putAll(mappings);
+        this.tableMappingsByEntity.clear();
+        this.tableMappingsByEntity.putAll(mappings);
+        this.tableMappings.clear();
+        this.tableMappings.putAll(mappings);
+        this.tableMappingsByName.clear();
+        this.tableMappingList.clear();
+        this.tableMappingList.addAll(mappings.values());
+        final Map<String, TableMapping.Index> indexMap = new HashMap<>();
+
+        // Ensure all Table Mappings are valid.
+        for (TableMapping mapping : mappings.values()) {
+            for (TableMapping.Index index : mapping.getIndexes()) {
+                final TableMapping.Index existingIndex = indexMap.get(index.name);
+                if (existingIndex != null) {
+                    throw new PersistException("Duplicate Index name [" + index.name + "] was discovered. [" +
+                        existingIndex.mapping.entityClass.getCanonicalName() + "] and [" +
+                        index.mapping.entityClass.getCanonicalName() + "]");
+                }
+                indexMap.put(index.name, index);
+            }
+
+            if (!config.isGenerateSchema()) {
+                final Table tbl = mapping.TBL();
+
+                if (tbl != null) {
+                    tableMappings.put(tbl.getClass(), mapping);
+                    tableMappings.put(tbl.newRecord().getClass(), mapping);
+                    tableMappings.put(tbl.getRecordType(), mapping);
+                }
+            }
+
+            tableMappingsByName.put(mapping.getTableName(), mapping);
+        }
+    }
+
+    /**
+     * @return
+     */
+    private void findEntityClasses() {
+        // Find all entity classes annotated with @Table
+        for (Reflections reflections : entityReflections) {
+            final Set<Class<?>> t = reflections.getTypesAnnotatedWith(io.clickhandler.sql.annotations.Table.class);
+            if (t != null && !t.isEmpty()) {
+                entityClasses.addAll(t);
+            }
+        }
+    }
+
+    /**
+     *
+     */
+    private void findJooqSchema() {
+        if (config.isGenerateSchema()) {
+            return;
+        }
+
+        jooqMap.clear();
+
+        for (Reflections reflections : jooqReflections) {
+            final Set<Class<? extends TableImpl>> jooqTables = reflections.getSubTypesOf(TableImpl.class);
+            for (Class<? extends Table> jooqTableClass : jooqTables) {
+                try {
+                    final Table jooqTable = jooqTableClass.newInstance();
+                    jooqMap.put(Strings.nullToEmpty(jooqTable.getName()).trim().toLowerCase(), jooqTable);
+                } catch (Exception e) {
+                    throw new PersistException("Failed to instantiate an instance of jOOQ Table Class [" + jooqTableClass.getCanonicalName() + "]");
+                }
+            }
+        }
+    }
+
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Evolution
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    /**
+     * Build Evolution Plan.
+     *
+     * @return
+     */
+    private List<SchemaInspector.Change> buildEvolution() {
+        try (Connection connection = dataSource.getConnection()) {
+            this.sqlSchema = new SqlSchema(connection, config.getCatalog(), config.getSchema());
+            buildTableMappings();
+            return SchemaInspector.inspect(dbPlatform, tableMappingsByEntity);
+        } catch (Exception e) {
+            // Ignore.
+            LOG.error("EvolutionChecker.inspect failed.", e);
+            throw new PersistException(e);
+        }
+    }
+
+    /**
+     * Apply the Evolution.
+     *
+     * @param changes
+     */
+    private void applyEvolution(final List<SchemaInspector.Change> changes) {
+        final EvolutionEntity evolution = new EvolutionEntity();
+        final List<EvolutionChangeEntity> changeEntities = new ArrayList<>();
+
+        try {
+            executeResult(session -> {
+                evolution.setChanged(new Date());
+                boolean failed = false;
+
+                for (SchemaInspector.Change change : changes) {
+                    final String sql = change.ddl(dbPlatform);
+                    final String[] sqlParts = sql.trim().split(";");
+                    for (String sqlPart : sqlParts) {
+                        sqlPart = sqlPart.trim();
+                        if (sqlPart.isEmpty()) {
+                            continue;
+                        }
+                        final EvolutionChangeEntity changeEntity = new EvolutionChangeEntity();
+                        changeEntities.add(changeEntity);
+                        changeEntity.setType(change.type());
+                        changeEntity.setSql(sqlPart);
+                        try {
+                            changeEntity.setAffected((long) session.sqlUpdate(sqlPart));
+                            changeEntity.setSuccess(true);
+                        } catch (Exception e) {
+                            failed = true;
+                            LOG.error("SCHEMA CHANGE FAILED: " + sql, e);
+                            changeEntity.setMessage(e.getMessage());
+                            changeEntity.setSuccess(false);
+                        } finally {
+                            changeEntity.setEnd(new Date());
+                        }
+                    }
+                }
+
+                evolution.setEnd(new Date());
+
+                if (failed) {
+                    throw new PersistException("Failed to update schema.");
+                }
+
+                evolution.setSuccess(true);
+
+                // Insert Evolution into Db.
+                if (!config.isGenerateSchema()) {
+                    session.insert(evolution);
+                    session.insert(changeEntities);
+                }
+
+                return evolution;
+            });
+        } finally {
+            try {
+                // Save if evolution failed since the transaction rolled back.
+                if (!evolution.isSuccess()) {
+                    if (!config.isGenerateSchema()) {
+                        // We need to Insert the Evolution outside of the applier
+                        // SQL Transaction since it would be rolled back.
+                        execute(sql -> {
+                            sql.insert(evolution);
+                            sql.insert(changeEntities);
+                        });
+                    }
+                }
+            } catch (Throwable e) {
+                LOG.error("Failed to insert into EVOLUTION table.", e);
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+
+    public <T extends AbstractEntity> void saveLater(T entity) {
+        writeService.add(entity);
+    }
+
+    public <T extends AbstractEntity> void saveLater(List<T> entities) {
+        writeService.addAll(entities);
+    }
+
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Execution
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    protected DatabaseSession createSession(boolean master) {
+        final Configuration configuration = master ? this.configuration.derive() : this.readConfiguration.derive();
+
+        return new DatabaseSession(
+            this,
+            configuration
+        );
+    }
+
+
+    public void run(Runnable runnable) {
+        Preconditions.checkNotNull(runnable);
+        execute(sql -> runnable.run());
+    }
+
+    public void execute(DatabaseRunnable runnable) {
+        executeResult(session -> {
+            runnable.run(session);
+            return null;
+        });
+    }
+
+    public void transaction(DatabaseRunnable runnable) {
+        transactionResult(session -> {
+            runnable.run(session);
+            return null;
+        });
+    }
+
+    public <R extends UpdatableRecord<R>, E extends AbstractEntity> E getEntity(Class<E> entityClass, String id) {
+        return transactionResult(sql -> sql.getEntity(entityClass, id));
+    }
+
+    public <T> T transactionResult(DatabaseSessionCallable<T> callable) {
+        return transactionResult(callable, true);
+    }
+
+    public <T> T executeResult(DatabaseSessionCallable<T> callable) {
+        return transactionResult(callable, true);
+    }
+
+    public <T> T executeMaster(DatabaseSessionCallable<T> callable) {
+        return transactionResult(callable, true);
+    }
+
+    public <T> T executeRead(DatabaseSessionCallable<T> callable) {
+        return transactionResult(callable, false);
+    }
+
+    public <T> T transactionResult(DatabaseSessionCallable<T> callable, boolean master) {
+        DatabaseSession session = sessionLocal.get();
+        final boolean created;
+
+        if (session == null) {
+            session = createSession(master);
+
+            if (session == null) {
+                throw new PersistException("createSession() returned null.");
+            }
+
+            sessionLocal.set(session);
+            created = true;
+        } else {
+            created = false;
+        }
+
+        if (master) {
+            final AtomicReference<T> r = new AtomicReference<>();
+            final DatabaseSession finalSession = session;
+            try {
+                final AtomicBoolean updateCache = new AtomicBoolean(false);
+                try {
+                    return DSL.using(session.configuration()).transactionResult(configuration1 -> {
+                        finalSession.scope(configuration1);
+
+                        try {
+                            // Execute the code.
+                            final T result = callable.call(finalSession);
+
+//                            // Rollback if ActionResponse isFailure.
+//                            if (result != null && result instanceof ActionResponse) {
+//                                if (((ActionResponse) result).isFailure()) {
+//                                    r.set(result);
+//                                    throw new RollbackException(result);
+//                                }
+//                            }
+
+                            updateCache.set(true);
+
+                            return result;
+                        } finally {
+                            finalSession.unscope();
+                        }
+                    });
+                } finally {
+                    if (created) {
+                        sessionLocal.remove();
+                    }
+
+                    // Update cache.
+                    if (updateCache.get()) {
+                        Try.run(() -> finalSession.updateCache());
+                    }
+                }
+            } catch (RollbackException e) {
+                return r.get();
+            }
+        } else {
+            try {
+                return callable.call(session);
+            } finally {
+                sessionLocal.remove();
+            }
+        }
+    }
+
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Mappings
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    /**
+     * @param cls
+     * @return
+     */
+    public Mapping findMapping(Class cls) {
+        Mapping mapping = mappings.get(cls);
+
+        if (mapping == null) {
+            synchronized (Database.class) {
+                mapping = mappings.get(cls);
+
+                if (mapping == null) {
+                    try {
+                        mapping = new Mapping(cls, dbPlatform);
+                        mappings.put(cls, mapping);
+                    } catch (Throwable e) {
+                        LOG.error("Failed to create Mapping for [" + cls.getCanonicalName() + "]", e);
+                        return null;
+                    }
+                }
+            }
+        }
+
+        return mapping;
+    }
+
+    public TableMapping getMapping(Class cls) {
+        return tableMappings.get(cls);
+    }
+
+    public <E extends AbstractEntity> TableMapping getMapping(E entity) {
+        Preconditions.checkNotNull(entity);
+        return tableMappings.get(entity.getClass());
+    }
+
+    public <R extends Record> TableMapping getMapping(R record) {
+        Preconditions.checkNotNull(record);
+        return tableMappings.get(record.getClass());
+    }
+
+    public <T extends Table> TableMapping getMapping(T table) {
+        return tableMappings.get(table.getClass());
+    }
+
+    /**
+     * @param entityClass
+     * @param <E>
+     * @return
+     */
+    public <E extends AbstractEntity> E entity(Class<E> entityClass) {
+        final TableMapping mapping = getMapping(entityClass);
+        if (mapping == null) {
+            return null;
+        }
+        try {
+            return (E) mapping.fastClass.newInstance();
+        } catch (InvocationTargetException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * @param entity
+     * @param <E>
+     * @return
+     */
+    public <E extends AbstractEntity> E copy(E entity) {
+        final TableMapping mapping = getMapping(entity.getClass());
+        if (mapping == null) {
+            return null;
+        }
+        try {
+            return mapping.copy(entity);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * @param cls
+     * @return
+     */
+    public TableMapping getCheckedMapping(Class cls) {
+        Preconditions.checkNotNull(cls, "cls must be specified.");
+        final TableMapping mapping = getMapping(cls);
+        if (mapping == null) {
+            throw new PersistException("Mapping for class [" + cls.getCanonicalName() + "] was not found.");
+        }
+        return mapping;
+    }
+
+    /**
+     * @param mapping
+     * @param <R>
+     * @param <E>
+     * @return
+     */
+    public <R extends Record, E extends AbstractEntity> RecordMapper<R, E> recordMapper(TableMapping mapping) {
+        return (RecordMapper<R, E>) mapping.getRecordMapper();
+    }
+
+    /**
+     * @param mapping
+     * @return
+     */
+    public RecordMapper<UpdatableRecord, UpdatableRecord> journalMapper(TableMapping mapping) {
+        return mapping.getJournalMapper();
+    }
+
+    /**
+     * @param cls
+     * @param <R>
+     * @param <E>
+     * @return
+     */
+    public <R extends UpdatableRecord<R>, E extends AbstractEntity> RecordMapper<R, E> recordMapper(Class cls) {
+        return (RecordMapper<R, E>) getCheckedMapping(cls).getRecordMapper();
+    }
+
+    /**
+     * @param cls
+     * @param <R>
+     * @param <E>
+     * @return
+     */
+    public <R extends UpdatableRecord<R>, E extends AbstractEntity> RecordMapper<R, E> mapper(Class cls) {
+        return (RecordMapper<R, E>) getCheckedMapping(cls).getRecordMapper();
+    }
+
+    /**
+     * @param cls
+     * @param <E>
+     * @param <R>
+     * @return
+     */
+    public <E extends AbstractEntity, R extends UpdatableRecord<R>> EntityMapper<E, R> entityMapper(Class cls) {
+        return (EntityMapper<E, R>) getCheckedMapping(cls).getEntityMapper();
+    }
+
+    /**
+     * @param list
+     * @param <E>
+     * @param <R>
+     * @return
+     */
+    public <E extends AbstractEntity, R extends UpdatableRecord<R>> EntityMapper<E, R> entityMapper(List list) {
+        if (list == null || list.isEmpty()) {
+            return null;
+        }
+        return (EntityMapper<E, R>) getCheckedMapping(list.get(0).getClass()).getEntityMapper();
+    }
+
+    /**
+     * @param record
+     * @param <R>
+     * @param <E>
+     * @return
+     */
+    public <R extends UpdatableRecord<R>, E extends AbstractEntity> E map(R record) {
+        if (record == null) {
+            return null;
+        }
+        return ((RecordMapper<R, E>) mapper(record.getClass())).map(record);
+    }
+
+    /**
+     * @param entity
+     * @param <E>
+     * @param <R>
+     * @return
+     */
+    public <E extends AbstractEntity, R extends Record> R map(E entity) {
+        if (entity == null) {
+            return null;
+        }
+        return (R) entityMapper((Class<E>) entity.getClass()).map(entity);
+    }
+
+    /**
+     * @param records
+     * @param <R>
+     * @param <E>
+     * @return
+     */
+    public <R extends UpdatableRecord<R>, E extends AbstractEntity> List<E> map(R... records) {
+        if (records == null) {
+            return new ArrayList<>(0);
+        }
+        return map(Lists.newArrayList(records));
+    }
+
+    /**
+     * @param records
+     * @param <R>
+     * @param <E>
+     * @return
+     */
+    public <R extends UpdatableRecord<R>, E extends AbstractEntity> List<E> map(Collection<R> records) {
+        if (records == null || records.isEmpty()) {
+            return new ArrayList<>(0);
+        }
+
+        final List<E> entities = Lists.newArrayListWithCapacity(records.size());
+        RecordMapper<R, E> mapper = null;
+        for (R record : records) {
+            if (mapper == null) {
+                mapper = mapper((Class<R>) record.getClass());
+            }
+            entities.add(mapper.map(record));
+        }
+        return entities;
+    }
+
+    public Configuration getReadConfiguration() {
+        return readConfiguration;
+    }
+
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Helper Classes
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    public static class RollbackException extends RuntimeException {
+        private final Object result;
+
+        public RollbackException(Object result) {
+            this.result = result;
+        }
+    }
+
+    /**
+     *
+     */
+    private static class RunnableWrapper implements DatabaseSessionCallable<Void> {
+        private final Runnable runnable;
+
+        private RunnableWrapper(Runnable runnable) {
+            this.runnable = runnable;
+        }
+
+        @Override
+        public Void call(DatabaseSession session) throws PersistException {
+            try {
+                runnable.run();
+                return null;
+            } catch (Exception e) {
+                if (e instanceof PersistException) {
+                    throw (PersistException) e;
+                }
+
+                throw new PersistException("Unknown exception thrown.", e);
+            }
+        }
+    }
+
+    /**
+     * @param <T>
+     */
+    private static class SessionCallableWrapper<T> implements DatabaseSessionCallable<T> {
+        private final Callable<T> callable;
+
+        private SessionCallableWrapper(Callable<T> callable) {
+            this.callable = callable;
+        }
+
+        @Override
+        public T call(DatabaseSession session) throws PersistException {
+            try {
+                return callable.call();
+            } catch (Exception e) {
+                if (e instanceof PersistException) {
+                    throw (PersistException) e;
+                }
+
+                throw new PersistException("Unknown exception thrown.", e);
+            }
+        }
+    }
+
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    // jOOQ Impl
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    /**
+     *
+     */
+    public static class H2Server extends AbstractIdleService {
+        private final int port;
+        private Server server;
+        private TcpServer tcpServer;
+
+        public H2Server(int port) {
+            this.port = port;
+        }
+
+        @Override
+        protected void startUp() throws Exception {
+            tcpServer = new TcpServer();
+            tcpServer.init("-tcpPort", Integer.toString(port));
+            server = new Server(tcpServer);
+            server.start();
+        }
+
+        @Override
+        protected void shutDown() throws Exception {
+            try {
+                server.stop();
+            } finally {
+                try {
+                    tcpServer.stop();
+                } catch (Exception e) {
+                    // Ignore.
+                }
+            }
+        }
+    }
+
+    /**
+     *
+     */
+    private class RecordMapperProviderImpl implements RecordMapperProvider {
+        @Override
+        public <R extends Record, E> RecordMapper<R, E> provide(RecordType<R> recordType, Class<? extends E> type) {
+            final TableMapping mapping = tableMappings.get(type);
+            if (mapping == null) {
+                return null;
+            }
+            return (RecordMapper<R, E>) mapping.getRecordMapper();
+        }
+    }
+}
