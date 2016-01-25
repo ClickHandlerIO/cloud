@@ -141,6 +141,7 @@ public class SqlSchema {
 
         for (DbTable table : tables.values()) {
             try (ResultSet rs = metaData.getIndexInfo(table.catalog, table.schema, table.name, false, false)) {
+//            try (ResultSet rs = metaData.getIndexInfo(null, null, table.name.toUpperCase(), false, false)) {
                 while (rs.next()) {
                     final String cat = Strings.nullToEmpty(rs.getString(1)).trim().toLowerCase();
                     final String sch = Strings.nullToEmpty(rs.getString(2)).trim().toLowerCase();

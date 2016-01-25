@@ -1,10 +1,13 @@
 package io.clickhandler.action;
 
+import javaslang.Function1;
 import javaslang.control.Try;
 import rx.Observable;
+import rx.functions.Function;
 
 import javax.inject.Inject;
 import javax.inject.Provider;
+import java.util.concurrent.Callable;
 
 /**
  * Handles providing
@@ -122,6 +125,14 @@ public class ActionProvider<A, IN, OUT> {
             request,
             create()
         ).toBlocking().toFuture().get()).get();
+    }
+
+    protected Observable<OUT> observe(final Func.Run1<IN> callback) {
+        final IN in = inProvider.get();
+        if (callback != null) {
+            callback.run(in);
+        }
+        return observe(in);
     }
 
     /**

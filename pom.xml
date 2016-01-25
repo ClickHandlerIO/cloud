@@ -96,6 +96,8 @@ http://www.w3.org/2001/XMLSchema-instance ">
         <module>queue</module>
         <module>remoting</module>
         <module>sql</module>
+        <module>email</module>
+        <module>files</module>
     </modules>
 
 
@@ -129,6 +131,18 @@ http://www.w3.org/2001/XMLSchema-instance ">
                 <version>${project.version}</version>
             </dependency>
 
+            <dependency>
+                <groupId>io.clickhandler</groupId>
+                <artifactId>cloud-files</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.clickhandler</groupId>
+                <artifactId>cloud-email</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
             <!-- SQL -->
             <dependency>
                 <groupId>com.zaxxer</groupId>
@@ -139,7 +153,7 @@ http://www.w3.org/2001/XMLSchema-instance ">
             <dependency>
                 <groupId>com.h2database</groupId>
                 <artifactId>h2</artifactId>
-                <version>1.4.191</version>
+                <version>1.4.181</version>
             </dependency>
             <dependency>
                 <groupId>cglib</groupId>

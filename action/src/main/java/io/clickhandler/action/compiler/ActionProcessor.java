@@ -54,6 +54,7 @@ public class ActionProcessor extends AbstractProcessor {
         Set<String> annotataions = new LinkedHashSet<>();
         annotataions.add(RemoteAction.class.getCanonicalName());
         annotataions.add(QueueAction.class.getCanonicalName());
+        annotataions.add(InternalAction.class.getCanonicalName());
         annotataions.add(ActionConfig.class.getCanonicalName());
         return annotataions;
     }
@@ -61,7 +62,6 @@ public class ActionProcessor extends AbstractProcessor {
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
         try {
-
             for (Element annotatedElement : roundEnv.getElementsAnnotatedWith(RemoteAction.class)) {
                 final RemoteAction remoteAction = annotatedElement.getAnnotation(RemoteAction.class);
 
@@ -73,7 +73,6 @@ public class ActionProcessor extends AbstractProcessor {
                     holder = new ActionHolder();
                     holder.remoteAction = remoteAction;
                     holder.type = element;
-                    actionMap.put(element.getQualifiedName().toString(), holder);
                 }
 
                 // Make sure it's concrete.
@@ -97,6 +96,8 @@ public class ActionProcessor extends AbstractProcessor {
                         messager.printMessage(Diagnostic.Kind.WARNING, "OUT = " + holder.outType.varTypeElement.getQualifiedName().toString());
                     }
                 }
+
+                actionMap.put(element.getQualifiedName().toString(), holder);
             }
 
             // Build Packages.
