@@ -1,9 +1,6 @@
-package _engine.sns;
+package sns.service;
 
-import _engine.sns.json.SNSMessage;
-import _engine.sns.queueHandler.SNSQueueHandler;
-import _engine.sns.routeHandler.SNSEmailRouteHandler;
-import _engine.sns.routeHandler.SNSGeneralRouteHandler;
+
 import com.google.common.util.concurrent.AbstractIdleService;
 import io.clickhandler.queue.LocalQueueServiceFactory;
 import io.clickhandler.queue.QueueFactory;
@@ -11,6 +8,9 @@ import io.clickhandler.queue.QueueService;
 import io.clickhandler.queue.QueueServiceConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import sns.json.SNSMessage;
+import sns.routing.SNSEmailRouteHandler;
+import sns.routing.SNSGeneralRouteHandler;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -33,7 +33,7 @@ public class SNSService extends AbstractIdleService {
         // main queue and handler
         final QueueServiceConfig<SNSMessage> mainConfig = new QueueServiceConfig<>("SNSQueue", SNSMessage.class, true, 2, 10);
         // TODO how to set handler?
-        mainConfig.setHandler(mainQueueHandler);
+//        mainConfig.setHandler(mainQueueHandler);
         this.queueService = factory.build(mainConfig);
 
         this.generalRouteHandler = new SNSGeneralRouteHandler(this);

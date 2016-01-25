@@ -1,13 +1,12 @@
-package _engine.sns.routeHandler;
+package sns.routing;
 
-import _engine.sns.SNSService;
-import _engine.sns.json.SNSEmailMessage;
 import io.vertx.core.http.HttpServerRequest;
-import io.vertx.core.http.HttpServerResponse;
 import io.vertx.ext.web.RoutingContext;
 import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import sns.json.SNSEmailMessage;
+import sns.service.SNSService;
 
 /**
  * Created by admin on 1/22/16.

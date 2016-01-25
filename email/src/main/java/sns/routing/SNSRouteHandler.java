@@ -1,13 +1,13 @@
-package _engine.sns.routeHandler;
+package sns.routing;
 
-import _engine.sns.SNSService;
-import _engine.sns.json.SNSMessage;
-import _engine.util.WireFormat;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.vertx.core.Handler;
 import io.vertx.core.MultiMap;
 import io.vertx.ext.web.RoutingContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import sns.json.SNSMessage;
+import sns.service.SNSService;
 
 /**
  * Created by admin on 1/22/16.
@@ -37,8 +37,9 @@ public abstract class SNSRouteHandler<T extends SNSMessage> implements Handler<R
     public abstract void handle(RoutingContext routingContext);
 
     protected T getMessage(byte[] content) {
+        ObjectMapper mapper = new ObjectMapper();
         try {
-            return WireFormat.parse(content, messageClass);
+            return mapper.readValue(content, messageClass);
         } catch (Exception e) {
             LOG.error("Failed to process SNS Message", e);
             return null;

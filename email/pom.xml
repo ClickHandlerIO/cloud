@@ -14,10 +14,47 @@
     <packaging>jar</packaging>
 
     <dependencies>
+
+        <!--Module dependencies-->
+        <dependency>
+            <groupId>io.clickhandler</groupId>
+            <artifactId>cloud-queue</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.clickhandler</groupId>
+            <artifactId>cloud-sql</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.clickhandler</groupId>
+            <artifactId>cloud-email-schema</artifactId>
+        </dependency>
+
+        <!--External Dependencies-->
         <dependency>
             <groupId>com.amazonaws</groupId>
             <artifactId>aws-java-sdk-ses</artifactId>
             <version>1.10.20</version>
+        </dependency>
+        <dependency>
+            <groupId>io.vertx</groupId>
+            <artifactId>vertx-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.vertx</groupId>
+            <artifactId>vertx-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.vertx</groupId>
+            <artifactId>vertx-rx-java</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>javax.inject</groupId>
+            <artifactId>javax.inject</artifactId>
+            <version>1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
         </dependency>
     </dependencies>
 

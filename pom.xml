@@ -96,6 +96,7 @@ http://www.w3.org/2001/XMLSchema-instance ">
         <module>queue</module>
         <module>remoting</module>
         <module>sql</module>
+        <module>email-schema</module>
         <module>email</module>
         <module>files</module>
     </modules>
@@ -134,6 +135,12 @@ http://www.w3.org/2001/XMLSchema-instance ">
             <dependency>
                 <groupId>io.clickhandler</groupId>
                 <artifactId>cloud-files</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.clickhandler</groupId>
+                <artifactId>cloud-email-schema</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

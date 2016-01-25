@@ -1,26 +1,19 @@
-package _engine.sns.queueHandler;
+package sns.service;
 
-import _engine.sns.json.*;
-import _engine.sns.util.SNSMessageType;
-import data.Db;
-import data.schema.tables.Email;
-import data.schema.tables.EmailRecipient;
+import com.google.common.eventbus.EventBus;
+import entity.EmailRecipientEntity;
+import event.*;
 import io.clickhandler.queue.QueueHandler;
 import io.clickhandler.sql.db.Database;
 import io.clickhandler.sql.db.DatabaseSession;
-import model.entity.email.EmailEntity;
-import model.entity.email.EmailRecipientEntity;
-import model.entity.email.RecipientStatus;
-import org.jooq.Record;
-import org.jooq.Result;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import sns.json.*;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import java.net.URL;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.Scanner;
 
@@ -32,14 +25,16 @@ import java.util.Scanner;
 public class SNSQueueHandler implements QueueHandler<SNSMessage> {
 
     public static final Logger LOG = LoggerFactory.getLogger(SNSQueueHandler.class);
-    private final List<String> permanentSubscriptionTopicArns;
+    private final List<String> subscriptionArnList;
 
-    private final Database db;
+    private final DatabaseSession db;
+    private final EventBus eventBus;
 
     @Inject
-    public SNSQueueHandler(Database db) {
-        this.db = db;
-        this.permanentSubscriptionTopicArns = new ArrayList<>();
+    public SNSQueueHandler(Database db, EventBus eventBus) {
+        this.db = db.getSession();
+        this.eventBus = eventBus;
+        this.subscriptionArnList = new ArrayList<>();
         // TODO add subscriptions that should  not be unsubscribed.
     }
 
@@ -49,6 +44,7 @@ public class SNSQueueHandler implements QueueHandler<SNSMessage> {
     }
 
     private void handle(SNSMessage message) {
+
         if(message instanceof SNSGeneralMessage) {
             handleMessage((SNSGeneralMessage) message);
         }
@@ -58,7 +54,7 @@ public class SNSQueueHandler implements QueueHandler<SNSMessage> {
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Notification, Subscribe, and Unsubscribe Handling
+    // Notification, Subscribe, and Unsubscribe Handling (Overridable)
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     private void handleMessage(SNSGeneralMessage message) {
@@ -82,24 +78,25 @@ public class SNSQueueHandler implements QueueHandler<SNSMessage> {
         }
     }
 
-    private void handleSubscribe(SNSGeneralMessage message) {
+    protected void handleSubscribe(SNSGeneralMessage message) {
         try {
-            // TODO check topic ARN is one we want to be subscribed to.
-            // open subscription URL to confirm.
-            Scanner sc = new Scanner(new URL(message.getSubscribeURL()).openStream());
-            // Capture XML body returned.
-            StringBuilder sb = new StringBuilder();
-            while (sc.hasNextLine()) {
-                sb.append(sc.nextLine());
+            if(subscriptionArnList.contains(message.getTopicArn())) {
+                // open subscription URL to confirm.
+                Scanner sc = new Scanner(new URL(message.getSubscribeURL()).openStream());
+                // Capture XML body returned.
+                StringBuilder sb = new StringBuilder();
+                while (sc.hasNextLine()) {
+                    sb.append(sc.nextLine());
+                }
             }
-
+            eventBus.post(new SubscriptionEvent(message));
             // TODO ensure XML body reflects successful confirmation.
         } catch (Exception e) {
             LOG.error("Failed to confirm subscription to topic ARN: " + message.getTopicArn());
         }
     }
 
-    private void handleUnsubscribe(SNSGeneralMessage message) {
+    protected void handleUnsubscribe(SNSGeneralMessage message) {
         try {
             // make sure topic ARN is not a permanent one, if it is resubscribe to it, if not confirm unsubscribe.
             String urlString = isUnsubAllowed(message.getTopicArn()) ? message.getUnsubscribeURL():message.getSubscribeURL();
@@ -110,26 +107,26 @@ public class SNSQueueHandler implements QueueHandler<SNSMessage> {
             while (sc.hasNextLine()) {
                 sb.append(sc.nextLine());
             }
-
+            eventBus.post(new UnsubscribeEvent(message));
             // TODO ensure XML body reflects successful unsubcribe or subscribe.
         } catch (Exception e) {
-            LOG.error("Failed to confirm subscription to topic ARN: " + message.getTopicArn());
+            LOG.error("Failed to handle unsubscribe to topic ARN: " + message.getTopicArn());
         }
     }
 
-    private boolean isUnsubAllowed(String topicArn) {
-        return !permanentSubscriptionTopicArns.contains(topicArn);
+    protected boolean isUnsubAllowed(String topicArn) {
+        return !subscriptionArnList.contains(topicArn);
     }
 
-    private void handleNotification(SNSGeneralMessage message) {
-        // TODO
+    protected void handleNotification(SNSGeneralMessage message) {
+        eventBus.post(new NotificationEvent(message));
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Email Status Notification Handling
+    // Email Status Notification Handling (Overridable)
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    private void handleMessage(SNSEmailMessage message) {
+    protected void handleMessage(SNSEmailMessage message) {
         if(message == null || message.getNotificationType() == null) {
             LOG.error("Invalid SNSEmailMessage Received");
             return;
@@ -150,7 +147,7 @@ public class SNSQueueHandler implements QueueHandler<SNSMessage> {
         }
     }
 
-    private void handleDelivery(SNSEmailMessage message) {
+    protected void handleDelivery(SNSEmailMessage message) {
         final SNSMail mail = message.getMail();
         final SNSDelivery delivery = message.getDelivery();
         // TODO
@@ -165,9 +162,11 @@ public class SNSQueueHandler implements QueueHandler<SNSMessage> {
 //                sql.update(recipientEntity);
 //            });
 //        });
+
+        eventBus.post(new EmailDeliveryEvent(message));
     }
 
-    private void handleBounce(SNSEmailMessage message) {
+    protected void handleBounce(SNSEmailMessage message) {
         final SNSMail mail = message.getMail();
         final SNSBounce bounce = message.getBounce();
         final List<String> bouncedRecipients = bounce.getStringRecipients();
@@ -183,9 +182,10 @@ public class SNSQueueHandler implements QueueHandler<SNSMessage> {
 //                sql.update(recipientEntity);
 //            });
 //        });
+        eventBus.post(new EmailBounceEvent(message));
     }
 
-    private void handleComplaint(SNSEmailMessage message) {
+    protected void handleComplaint(SNSEmailMessage message) {
         final SNSMail mail = message.getMail();
         final SNSComplaint complaint = message.getComplaint();
         final List<String> complainedRecipients = complaint.getStringRecipients();
@@ -201,9 +201,10 @@ public class SNSQueueHandler implements QueueHandler<SNSMessage> {
 //                sql.update(recipientEntity);
 //            });
 //        });
+        eventBus.post(new EmailComplaintEvent(message));
     }
 
-    private List<EmailRecipientEntity> getRecipients(SNSMail mail, DatabaseSession sql) {
+    protected List<EmailRecipientEntity> getRecipients(SNSMail mail, DatabaseSession sql) {
         // TODO
 //        Result<Record> result = sql.select(Email.EMAIL.fields()).from(Email.EMAIL)
 //                .where(Email.EMAIL.SES_MESSAGE_ID.eq(mail.getMessageId()))
