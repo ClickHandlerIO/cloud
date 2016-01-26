@@ -1,19 +1,23 @@
 package io.clickhandler.action;
 
-import javaslang.Function1;
+import com.netflix.hystrix.HystrixCommand;
+import com.netflix.hystrix.HystrixCommandGroupKey;
+import com.netflix.hystrix.HystrixCommandKey;
+import com.netflix.hystrix.HystrixObservableCommand;
 import javaslang.control.Try;
 import rx.Observable;
-import rx.functions.Function;
 
 import javax.inject.Inject;
 import javax.inject.Provider;
-import java.util.concurrent.Callable;
 
 /**
  * Handles providing
  */
 public class ActionProvider<A, IN, OUT> {
     private ActionConfig actionConfig;
+
+    private HystrixCommand.Setter defaultSetter;
+    private HystrixObservableCommand.Setter defaultObservableSetter;
 
     private Provider<A> actionProvider;
     private Provider<IN> inProvider;
@@ -86,10 +90,33 @@ public class ActionProvider<A, IN, OUT> {
 
     protected void init() {
         actionConfig = actionClass.getAnnotation(ActionConfig.class);
+
+        if (ObservableAction.class.isAssignableFrom(actionClass)) {
+            // Build HystrixObservableCommand.Setter default.
+            final String groupKey = actionConfig != null ? actionConfig.groupKey() : "";
+            defaultObservableSetter =
+                HystrixObservableCommand.Setter
+                    .withGroupKey(HystrixCommandGroupKey.Factory.asKey(groupKey))
+                    .andCommandKey(HystrixCommandKey.Factory.asKey(actionClass.getName()));
+        } else if (AbstractBlockingAction.class.isAssignableFrom(actionClass)) {
+            // Build HystrixCommand.Setter default.
+            final String groupKey = actionConfig != null ? actionConfig.groupKey() : "";
+            defaultSetter =
+                HystrixCommand.Setter
+                    .withGroupKey(HystrixCommandGroupKey.Factory.asKey(groupKey))
+                    .andCommandKey(HystrixCommandKey.Factory.asKey(actionClass.getName()));
+
+        }
     }
 
     protected A create() {
-        return actionProvider.get();
+        final A action = actionProvider.get();
+        if (action instanceof AbstractBlockingAction) {
+            ((AbstractBlockingAction)action).setCommandSetter(defaultSetter);
+        } else if (action instanceof AbstractObservableAction) {
+            ((AbstractObservableAction)action).setCommandSetter(defaultObservableSetter);
+        }
+        return action;
     }
 
 
@@ -108,7 +135,7 @@ public class ActionProvider<A, IN, OUT> {
      */
     protected A create(
         final IN request) {
-        A action = actionProvider.get();
+        A action = create();
 
         final AbstractAction<IN, OUT> abstractAction = (AbstractAction<IN, OUT>) action;
         abstractAction.setRequest(request);
@@ -143,7 +170,7 @@ public class ActionProvider<A, IN, OUT> {
         final IN request) {
         return observe(
             request,
-            actionProvider.get()
+            create()
         );
     }
 
