@@ -7,7 +7,7 @@ import org.apache.commons.codec.binary.Base64;
 import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import entity.SNSGeneralMessageEntity;
+import json.SNSGeneralMessage;
 import sns.service.SNSService;
 
 import java.io.InputStream;
@@ -20,11 +20,11 @@ import java.security.cert.X509Certificate;
  * Created by admin on 1/22/16.
  */
 
-public class SNSGeneralRouteHandler extends SNSRouteHandler<SNSGeneralMessageEntity> {
+public class SNSGeneralRouteHandler extends SNSRouteHandler<SNSGeneralMessage> {
     private final static Logger LOG = LoggerFactory.getLogger(SNSGeneralRouteHandler.class);
 
     public SNSGeneralRouteHandler(SNSService snsService) {
-        super(snsService, SNSGeneralMessageEntity.class);
+        super(snsService, SNSGeneralMessage.class);
     }
 
     @Override
@@ -43,7 +43,7 @@ public class SNSGeneralRouteHandler extends SNSRouteHandler<SNSGeneralMessageEnt
         }
 
         // get message from body json
-        SNSGeneralMessageEntity message = getMessage(routingContext.getBody().toString());
+        SNSGeneralMessage message = getMessage(routingContext.getBody().toString());
         if (message == null || !isMessageSignatureValid(message)) {
             routingContext.fail(HttpStatus.SC_BAD_REQUEST);
             return;
@@ -57,7 +57,7 @@ public class SNSGeneralRouteHandler extends SNSRouteHandler<SNSGeneralMessageEnt
     // Message Validation
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    private static boolean isMessageSignatureValid(SNSGeneralMessageEntity message) {
+    private static boolean isMessageSignatureValid(SNSGeneralMessage message) {
         try {
             URL url = new URL(message.getSigningCertURL());
             InputStream inStream = url.openStream();
@@ -74,7 +74,7 @@ public class SNSGeneralRouteHandler extends SNSRouteHandler<SNSGeneralMessageEnt
         }
     }
 
-    private static byte [] getMessageBytesToSign (SNSGeneralMessageEntity message) {
+    private static byte [] getMessageBytesToSign (SNSGeneralMessage message) {
         byte [] bytesToSign = null;
         if (message.getType().equals("Notification"))
             bytesToSign = buildNotificationStringToSign(message).getBytes();
@@ -84,7 +84,7 @@ public class SNSGeneralRouteHandler extends SNSRouteHandler<SNSGeneralMessageEnt
     }
 
     //Build the string to sign for Notification messages.
-    public static String buildNotificationStringToSign(SNSGeneralMessageEntity message) {
+    public static String buildNotificationStringToSign(SNSGeneralMessage message) {
         String stringToSign = null;
 
         //Build the string to sign from the values in the message.
@@ -110,7 +110,7 @@ public class SNSGeneralRouteHandler extends SNSRouteHandler<SNSGeneralMessageEnt
 
     //Build the string to sign for SubscriptionConfirmation
     //and UnsubscribeConfirmation messages.
-    public static String buildSubscriptionStringToSign(SNSGeneralMessageEntity message) {
+    public static String buildSubscriptionStringToSign(SNSGeneralMessage message) {
         String stringToSign = null;
         //Build the string to sign from the values in the message.
         //Name and values separated by newline characters

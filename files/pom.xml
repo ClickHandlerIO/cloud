@@ -18,6 +18,14 @@
             <groupId>io.clickhandler</groupId>
             <artifactId>cloud-common</artifactId>
         </dependency>
+        <dependency>
+            <groupId>io.clickhandler</groupId>
+            <artifactId>cloud-email-schema</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>javax.inject</groupId>
+            <artifactId>javax.inject</artifactId>
+        </dependency>
     </dependencies>
 
 </project>

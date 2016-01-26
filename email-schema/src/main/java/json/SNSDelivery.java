@@ -1,4 +1,4 @@
-package entity;
+package json;
 
 import com.fasterxml.jackson.annotation.JsonGetter;
 import com.fasterxml.jackson.annotation.JsonProperty;

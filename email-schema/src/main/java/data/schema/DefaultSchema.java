@@ -14,6 +14,8 @@ import data.schema.tables.Evolution;
 import data.schema.tables.EvolutionChange;
 import data.schema.tables.File;
 import data.schema.tables.FileJnl;
+import data.schema.tables.SNSNotification;
+import data.schema.tables.SNSNotificationJnl;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -38,7 +40,7 @@ import org.jooq.impl.SchemaImpl;
 @SuppressWarnings({ "all", "unchecked", "rawtypes" })
 public class DefaultSchema extends SchemaImpl {
 
-	private static final long serialVersionUID = -73232568;
+	private static final long serialVersionUID = -2117801931;
 
 	/**
 	 * The reference instance of <code></code>
@@ -61,15 +63,17 @@ public class DefaultSchema extends SchemaImpl {
 
 	private final List<Table<?>> getTables0() {
 		return Arrays.<Table<?>>asList(
-			Evolution.EVOLUTION,
 			Email.EMAIL,
 			EmailJnl.EMAIL_JNL,
-			File.FILE,
-			FileJnl.FILE_JNL,
-			EvolutionChange.EVOLUTION_CHANGE,
 			EmailRecipient.EMAIL_RECIPIENT,
 			EmailRecipientJnl.EMAIL_RECIPIENT_JNL,
 			EmailAttachment.EMAIL_ATTACHMENT,
-			EmailAttachmentJnl.EMAIL_ATTACHMENT_JNL);
+			EmailAttachmentJnl.EMAIL_ATTACHMENT_JNL,
+			Evolution.EVOLUTION,
+			SNSNotification.S_N_S_NOTIFICATION,
+			SNSNotificationJnl.S_N_S_NOTIFICATION_JNL,
+			EvolutionChange.EVOLUTION_CHANGE,
+			File.FILE,
+			FileJnl.FILE_JNL);
 	}
 }

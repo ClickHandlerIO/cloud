@@ -14,6 +14,8 @@ import data.schema.tables.Evolution;
 import data.schema.tables.EvolutionChange;
 import data.schema.tables.File;
 import data.schema.tables.FileJnl;
+import data.schema.tables.SNSNotification;
+import data.schema.tables.SNSNotificationJnl;
 
 import javax.annotation.Generated;
 
@@ -32,11 +34,6 @@ import javax.annotation.Generated;
 public interface Tables {
 
 	/**
-	 * The table evolution
-	 */
-	public static final Evolution EVOLUTION = data.schema.tables.Evolution.EVOLUTION;
-
-	/**
 	 * The table email
 	 */
 	public static final Email EMAIL = data.schema.tables.Email.EMAIL;
@@ -45,21 +42,6 @@ public interface Tables {
 	 * The table email_jnl
 	 */
 	public static final EmailJnl EMAIL_JNL = data.schema.tables.EmailJnl.EMAIL_JNL;
-
-	/**
-	 * The table file
-	 */
-	public static final File FILE = data.schema.tables.File.FILE;
-
-	/**
-	 * The table file_jnl
-	 */
-	public static final FileJnl FILE_JNL = data.schema.tables.FileJnl.FILE_JNL;
-
-	/**
-	 * The table evolution_change
-	 */
-	public static final EvolutionChange EVOLUTION_CHANGE = data.schema.tables.EvolutionChange.EVOLUTION_CHANGE;
 
 	/**
 	 * The table email_recipient
@@ -80,4 +62,34 @@ public interface Tables {
 	 * The table email_attachment_jnl
 	 */
 	public static final EmailAttachmentJnl EMAIL_ATTACHMENT_JNL = data.schema.tables.EmailAttachmentJnl.EMAIL_ATTACHMENT_JNL;
+
+	/**
+	 * The table evolution
+	 */
+	public static final Evolution EVOLUTION = data.schema.tables.Evolution.EVOLUTION;
+
+	/**
+	 * The table s_n_s_notification
+	 */
+	public static final SNSNotification S_N_S_NOTIFICATION = data.schema.tables.SNSNotification.S_N_S_NOTIFICATION;
+
+	/**
+	 * The table s_n_s_notification_jnl
+	 */
+	public static final SNSNotificationJnl S_N_S_NOTIFICATION_JNL = data.schema.tables.SNSNotificationJnl.S_N_S_NOTIFICATION_JNL;
+
+	/**
+	 * The table evolution_change
+	 */
+	public static final EvolutionChange EVOLUTION_CHANGE = data.schema.tables.EvolutionChange.EVOLUTION_CHANGE;
+
+	/**
+	 * The table file
+	 */
+	public static final File FILE = data.schema.tables.File.FILE;
+
+	/**
+	 * The table file_jnl
+	 */
+	public static final FileJnl FILE_JNL = data.schema.tables.FileJnl.FILE_JNL;
 }

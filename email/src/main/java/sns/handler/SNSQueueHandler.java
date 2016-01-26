@@ -6,6 +6,7 @@ import entity.*;
 import io.clickhandler.queue.QueueHandler;
 import io.clickhandler.sql.db.Database;
 import io.clickhandler.sql.db.DatabaseSession;
+import json.*;
 import org.jooq.Record;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,7 +25,7 @@ import java.util.Scanner;
  * @author Brad Behnke
  */
 @Singleton
-public class SNSQueueHandler implements QueueHandler<SNSMessageEntity>, Tables {
+public class SNSQueueHandler implements QueueHandler<SNSMessage>, Tables {
 
     public static final Logger LOG = LoggerFactory.getLogger(SNSQueueHandler.class);
     private final List<String> generalSubscriptionArnList;
@@ -42,17 +43,17 @@ public class SNSQueueHandler implements QueueHandler<SNSMessageEntity>, Tables {
     }
 
     @Override
-    public void receive(List<SNSMessageEntity> messages) {
+    public void receive(List<SNSMessage> messages) {
         messages.forEach(this::handle);
     }
 
-    private void handle(SNSMessageEntity message) {
+    private void handle(SNSMessage message) {
 
-        if(message instanceof SNSGeneralMessageEntity) {
-            handleMessage((SNSGeneralMessageEntity) message);
+        if(message instanceof SNSGeneralMessage) {
+            handleMessage((SNSGeneralMessage) message);
         }
-        if(message instanceof SNSEmailMessageEntity) {
-            handleMessage((SNSEmailMessageEntity) message);
+        if(message instanceof SNSEmailMessage) {
+            handleMessage((SNSEmailMessage) message);
         }
     }
 
@@ -60,7 +61,7 @@ public class SNSQueueHandler implements QueueHandler<SNSMessageEntity>, Tables {
     // Notification, Subscribe, and Unsubscribe Handling
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    private void handleMessage(SNSGeneralMessageEntity message) {
+    private void handleMessage(SNSGeneralMessage message) {
         if(message == null || message.getType() == null) {
             LOG.error("Invalid SNSGeneralMessage Received");
             return;
@@ -68,19 +69,17 @@ public class SNSQueueHandler implements QueueHandler<SNSMessageEntity>, Tables {
         switch (SNSMessageType.getTypeEnum(message.getType())) {
             case SUB_CONFIRM:
                 if(generalSubscriptionArnList.contains(message.getTopicArn())) {
-                    db.store(message);
                     handleSubscribe(message);
                 }
                 break;
             case UNSUB_CONFIRM:
                 if(!generalSubscriptionArnList.contains(message.getTopicArn())) {
-                    db.store(message);
                     handleUnsubscribe(message);
                 }
                 break;
             case NOTIFICATION:
                 if(generalSubscriptionArnList.contains(message.getTopicArn())) {
-                    db.store(message);
+                    db.store(new SNSNotificationEntity(message));
                     handleNotification(message);
                 }
                 break;
@@ -89,7 +88,7 @@ public class SNSQueueHandler implements QueueHandler<SNSMessageEntity>, Tables {
         }
     }
 
-    protected void handleSubscribe(SNSGeneralMessageEntity message) {
+    protected void handleSubscribe(SNSGeneralMessage message) {
         try {
             // open subscription URL to confirm.
             Scanner sc = new Scanner(new URL(message.getSubscribeURL()).openStream());
@@ -105,7 +104,7 @@ public class SNSQueueHandler implements QueueHandler<SNSMessageEntity>, Tables {
         }
     }
 
-    protected void handleUnsubscribe(SNSGeneralMessageEntity message) {
+    protected void handleUnsubscribe(SNSGeneralMessage message) {
         try {
             // open subscription URL
             Scanner sc = new Scanner(new URL(message.getUnsubscribeURL()).openStream());
@@ -121,7 +120,7 @@ public class SNSQueueHandler implements QueueHandler<SNSMessageEntity>, Tables {
         }
     }
 
-    protected void handleNotification(SNSGeneralMessageEntity message) {
+    protected void handleNotification(SNSGeneralMessage message) {
         eventBus.post(new NotificationEvent(message));
     }
 
@@ -129,7 +128,7 @@ public class SNSQueueHandler implements QueueHandler<SNSMessageEntity>, Tables {
     // Email Status Notification Handling
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    protected void handleMessage(SNSEmailMessageEntity message) {
+    protected void handleMessage(SNSEmailMessage message) {
         if(message == null || message.getNotificationType() == null) {
             LOG.error("Invalid SNSEmailMessage Received");
             return;
@@ -139,15 +138,15 @@ public class SNSQueueHandler implements QueueHandler<SNSMessageEntity>, Tables {
         }
         switch (SNSMessageType.getTypeEnum(message.getNotificationType())) {
             case DELIVERY:
-                db.store(message);
+//                db.store(message);
                 handleDelivery(message);
                 break;
             case BOUNCE:
-                db.store(message);
+//                db.store(message);
                 handleBounce(message);
                 break;
             case COMPLAINT:
-                db.store(message);
+//                db.store(message);
                 handleComplaint(message);
                 break;
             default:
@@ -156,7 +155,7 @@ public class SNSQueueHandler implements QueueHandler<SNSMessageEntity>, Tables {
         }
     }
 
-    protected void handleDelivery(SNSEmailMessageEntity message) {
+    protected void handleDelivery(SNSEmailMessage message) {
         final SNSMail mail = message.getMail();
         final SNSDelivery delivery = message.getDelivery();
         List<EmailRecipientEntity> recipientEntities = getRecipients(mail);
@@ -168,7 +167,7 @@ public class SNSQueueHandler implements QueueHandler<SNSMessageEntity>, Tables {
         eventBus.post(new EmailDeliveryEvent(message));
     }
 
-    protected void handleBounce(SNSEmailMessageEntity message) {
+    protected void handleBounce(SNSEmailMessage message) {
         final SNSMail mail = message.getMail();
         final SNSBounce bounce = message.getBounce();
         final List<String> bouncedRecipients = bounce.getStringRecipients();
@@ -181,7 +180,7 @@ public class SNSQueueHandler implements QueueHandler<SNSMessageEntity>, Tables {
         eventBus.post(new EmailBounceEvent(message));
     }
 
-    protected void handleComplaint(SNSEmailMessageEntity message) {
+    protected void handleComplaint(SNSEmailMessage message) {
         final SNSMail mail = message.getMail();
         final SNSComplaint complaint = message.getComplaint();
         final List<String> complainedRecipients = complaint.getStringRecipients();
