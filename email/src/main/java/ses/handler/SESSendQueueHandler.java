@@ -6,6 +6,7 @@ import com.amazonaws.services.simpleemail.model.RawMessage;
 import com.amazonaws.services.simpleemail.model.SendRawEmailRequest;
 import com.amazonaws.services.simpleemail.model.SendRawEmailResult;
 import com.google.common.base.Strings;
+import com.google.common.eventbus.EventBus;
 import data.schema.Tables;
 import entity.EmailEntity;
 import entity.EmailRecipientEntity;
@@ -17,6 +18,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ses.config.SESConfig;
 import ses.data.SESSendRequest;
+import ses.event.EmailSendEvent;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
@@ -31,11 +33,13 @@ import java.util.List;
 public class SESSendQueueHandler implements QueueHandler<SESSendRequest>, Tables {
 
     private final static Logger LOG = LoggerFactory.getLogger(SESSendQueueHandler.class);
+    private final EventBus eventBus;
     private final DatabaseSession db;
     private final AmazonSimpleEmailServiceClient client;
     private final int ALLOWED_ATTEMPTS;
 
-    public SESSendQueueHandler(Database db){
+    public SESSendQueueHandler(EventBus eventBus, Database db){
+        this.eventBus = eventBus;
         this.db = db.getSession();
         final BasicAWSCredentials AWSCredentials = new BasicAWSCredentials(
                 Strings.nullToEmpty(SESConfig.getAwsAccessKey()),
@@ -66,12 +70,14 @@ public class SESSendQueueHandler implements QueueHandler<SESSendRequest>, Tables
                 } else {
                     updateRecords(sendRequest.getEmailEntity(), null);
                     sendRequest.getSendHandler().onFailure(new Exception("Failed to send."));
+                    eventBus.post(new EmailSendEvent(false, sendRequest.getEmailEntity()));
                 }
             }
             // send success
             else {
                 EmailEntity emailEntity = updateRecords(sendRequest.getEmailEntity(), result.getMessageId());
                 sendRequest.getSendHandler().onSuccess(emailEntity);
+                eventBus.post(new EmailSendEvent(true, emailEntity));
             }
         } catch (Exception e) {
             // send or record update failed
@@ -85,6 +91,7 @@ public class SESSendQueueHandler implements QueueHandler<SESSendRequest>, Tables
                     // record update failed
                     sendRequest.getSendHandler().onFailure(e1);
                 }
+                eventBus.post(new EmailSendEvent(false, sendRequest.getEmailEntity()));
             }
         }
     }

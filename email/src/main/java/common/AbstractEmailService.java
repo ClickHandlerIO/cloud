@@ -3,8 +3,8 @@ package common;
 import com.google.common.util.concurrent.AbstractIdleService;
 
 /**
- * Created by admin on 1/26/16.
+ * Created by Brad Behnke on 1/26/16.
  */
-public abstract class AbstractEmailService extends AbstractIdleService {
-    public abstract void send(AbstractSendRequest sendRequest);
+public abstract class AbstractEmailService<T extends AbstractSendRequest> extends AbstractIdleService {
+    public abstract void send(T sendRequest);
 }

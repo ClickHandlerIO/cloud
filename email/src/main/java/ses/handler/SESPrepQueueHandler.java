@@ -1,7 +1,9 @@
 package ses.handler;
 
 import com.google.common.base.Preconditions;
+import com.google.common.eventbus.EventBus;
 import data.schema.Tables;
+import data.schema.tables.Email;
 import entity.EmailAttachmentEntity;
 import entity.EmailEntity;
 import io.clickhandler.queue.QueueHandler;
@@ -11,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ses.data.DownloadRequest;
 import ses.data.SESSendRequest;
+import ses.event.EmailSendEvent;
 import ses.service.SESAttachmentService;
 import ses.service.SESSendService;
 
@@ -40,11 +43,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class SESPrepQueueHandler  implements QueueHandler<SESSendRequest>, Tables {
 
     private static final Logger LOG = LoggerFactory.getLogger(SESPrepQueueHandler.class);
+    private final EventBus eventBus;
     private final DatabaseSession db;
     private final SESAttachmentService SESAttachmentService;
     private final SESSendService sesSendService;
 
-    public SESPrepQueueHandler(Database db, SESAttachmentService SESAttachmentService, SESSendService sesSendService) {
+    public SESPrepQueueHandler(EventBus eventBus, Database db, SESAttachmentService SESAttachmentService, SESSendService sesSendService) {
+        this.eventBus = eventBus;
         this.db = db.getSession();
         this.SESAttachmentService = SESAttachmentService;
         this.sesSendService = sesSendService;
@@ -62,7 +67,8 @@ public class SESPrepQueueHandler  implements QueueHandler<SESSendRequest>, Table
                 request.setMimeMessage(message);
                 sesSendService.enqueue(request);
             } catch (Exception e) {
-                LOG.error(e.getMessage());
+                request.getSendHandler().onFailure(e);
+                eventBus.post(new EmailSendEvent(false, request.getEmailEntity()));
             }
         }
     }

@@ -1,5 +1,6 @@
 package ses.service;
 
+import com.google.common.eventbus.EventBus;
 import com.google.common.util.concurrent.AbstractIdleService;
 import io.clickhandler.queue.LocalQueueServiceFactory;
 import io.clickhandler.queue.QueueFactory;
@@ -24,9 +25,9 @@ public class SESSendService extends AbstractIdleService {
     private final QueueService<SESSendRequest> queueService;
     private final SESSendQueueHandler queueHandler;
 
-    public SESSendService(Database db) {
+    public SESSendService(EventBus eventBus, Database db) {
         final QueueServiceConfig<SESSendRequest> config = new QueueServiceConfig<>("SESSendQueue", SESSendRequest.class, true, 2, 10);
-        this.queueHandler = new SESSendQueueHandler(db);
+        this.queueHandler = new SESSendQueueHandler(eventBus, db);
         config.setHandler(this.queueHandler);
 
         QueueFactory factory = new LocalQueueServiceFactory();

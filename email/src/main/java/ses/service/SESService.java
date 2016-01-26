@@ -1,7 +1,8 @@
 package ses.service;
 
+import com.google.common.eventbus.EventBus;
+import com.sun.istack.internal.NotNull;
 import common.AbstractEmailService;
-import common.AbstractSendRequest;
 import io.clickhandler.sql.db.Database;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,10 +13,10 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 
 /**
- * Created by admin on 1/26/16.
+ * Created by Brad Behnke on 1/26/16.
  */
 @Singleton
-public class SESService extends AbstractEmailService {
+public class SESService extends AbstractEmailService<SESSendRequest> {
     private final static Logger LOG = LoggerFactory.getLogger(SESService.class);
 
     // ses services
@@ -24,10 +25,10 @@ public class SESService extends AbstractEmailService {
     private final SESSendService sesSendService;
 
     @Inject
-    public SESService(Database db, S3Service s3Service) {
+    public SESService(@NotNull EventBus eventBus, @NotNull Database db, @NotNull S3Service s3Service) {
         this.SESAttachmentService = new SESAttachmentService(db, s3Service);
-        this.sesSendService = new SESSendService(db);
-        this.sesSendPrepService = new SESSendPrepService(db, SESAttachmentService, sesSendService);
+        this.sesSendService = new SESSendService(eventBus, db);
+        this.sesSendPrepService = new SESSendPrepService(eventBus, db, SESAttachmentService, sesSendService);
     }
 
     @Override
@@ -47,18 +48,15 @@ public class SESService extends AbstractEmailService {
     }
 
     @Override
-    public void send(AbstractSendRequest sendRequest) {
-        if(sendRequest instanceof SESSendRequest) {
-            SESSendRequest request = (SESSendRequest) sendRequest;
-            if(sendRequest.getEmailEntity() == null) {
-                sendRequest.getSendHandler().onFailure(new Exception("Null email entity."));
-                return;
-            }
-            if(sendRequest.getEmailEntity().getId() == null || sendRequest.getEmailEntity().getId().isEmpty()) {
-                sendRequest.getSendHandler().onFailure(new Exception("Null or empty email  Id."));
-                return;
-            }
-            this.sesSendPrepService.enqueue(request);
+    public void send(@NotNull SESSendRequest sendRequest) {
+        if(sendRequest.getEmailEntity() == null) {
+            sendRequest.getSendHandler().onFailure(new Exception("Null email entity."));
+            return;
         }
+        if(sendRequest.getEmailEntity().getId() == null || sendRequest.getEmailEntity().getId().isEmpty()) {
+            sendRequest.getSendHandler().onFailure(new Exception("Null or empty email entity Id."));
+            return;
+        }
+        this.sesSendPrepService.enqueue(sendRequest);
     }
 }

@@ -7,7 +7,7 @@ import entity.EmailEntity;
 import javax.mail.internet.MimeMessage;
 
 /**
- * Created by admin on 1/26/16.
+ * Created by Brad Behnke on 1/26/16.
  */
 public class SESSendRequest extends AbstractSendRequest{
 
