@@ -1,36 +1,50 @@
-package sns.data;
+package entity;
 
 import com.fasterxml.jackson.annotation.JsonGetter;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSetter;
+import io.clickhandler.sql.annotations.Column;
+import io.clickhandler.sql.annotations.Table;
 
 /**
  * Created by admin on 1/21/16.
  */
-public class SNSGeneralMessage extends SNSMessage {
-
+@Table
+public class SNSGeneralMessageEntity extends SNSMessageEntity {
+    @Column
     @JsonProperty
     private String Type;
+    @Column
     @JsonProperty
     private String MessageId;
+    @Column
     @JsonProperty
     private String Token;
+    @Column
     @JsonProperty
     private String TopicArn;
+    @Column
     @JsonProperty
     private String Subject;
+    @Column
     @JsonProperty
     private String Message;
+    @Column
     @JsonProperty
     private String SubscribeURL;
+    @Column
     @JsonProperty
     private String UnsubscribeURL;
+    @Column
     @JsonProperty
     private String Timestamp;
+    @Column
     @JsonProperty
     private String SignatureVersion;
+    @Column
     @JsonProperty
     private String Signature;
+    @Column
     @JsonProperty
     private String SigningCertURL;
 

@@ -4,6 +4,7 @@ import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.services.simpleemail.AmazonSimpleEmailServiceClient;
 import com.amazonaws.services.simpleemail.model.RawMessage;
 import com.amazonaws.services.simpleemail.model.SendRawEmailRequest;
+import com.amazonaws.services.simpleemail.model.SendRawEmailResult;
 import com.google.common.base.Strings;
 import data.schema.Tables;
 import entity.EmailEntity;
@@ -15,7 +16,7 @@ import io.clickhandler.sql.db.DatabaseSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ses.config.SESConfig;
-import ses.service.SESSendService;
+import ses.data.SESSendRequest;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
@@ -27,7 +28,7 @@ import java.util.List;
  *
  * @author Brad Behnke
  */
-public class SESSendQueueHandler implements QueueHandler<SESSendService.Message>, Tables {
+public class SESSendQueueHandler implements QueueHandler<SESSendRequest>, Tables {
 
     private final static Logger LOG = LoggerFactory.getLogger(SESSendQueueHandler.class);
     private final DatabaseSession db;
@@ -50,38 +51,54 @@ public class SESSendQueueHandler implements QueueHandler<SESSendService.Message>
     }
 
     @Override
-    public void receive(List<SESSendService.Message> messages) {
-        messages.forEach(this::sendEmail);
+    public void receive(List<SESSendRequest> sendRequests) {
+        sendRequests.forEach(this::sendEmail);
     }
 
-    private void sendEmail(final SESSendService.Message message) {
+    private void sendEmail(final SESSendRequest sendRequest) {
         try {
-            message.incrementAttempts();
-            updateRecords(message, client.sendRawEmail(buildEmailRequest(message)).getMessageId());
+            sendRequest.incrementAttempts();
+            SendRawEmailResult result = client.sendRawEmail(buildEmailRequest(sendRequest));
+            // send failed
+            if (result == null || result.getMessageId() == null || result.getMessageId().isEmpty()) {
+                if(sendRequest.getAttempts() < ALLOWED_ATTEMPTS) {
+                    sendEmail(sendRequest);
+                } else {
+                    updateRecords(sendRequest.getEmailEntity(), null);
+                    sendRequest.getSendHandler().onFailure(new Exception("Failed to send."));
+                }
+            }
+            // send success
+            else {
+                EmailEntity emailEntity = updateRecords(sendRequest.getEmailEntity(), result.getMessageId());
+                sendRequest.getSendHandler().onSuccess(emailEntity);
+            }
         } catch (Exception e) {
-            if(message.getAttempts() < ALLOWED_ATTEMPTS) {
-                sendEmail(message);
+            // send or record update failed
+            if(sendRequest.getAttempts() < ALLOWED_ATTEMPTS) {
+                sendEmail(sendRequest);
             } else {
-                LOG.error("Email Failed to Send", e);
-                updateRecords(message, null);
+                try {
+                    updateRecords(sendRequest.getEmailEntity(), null);
+                    sendRequest.getSendHandler().onFailure(e);
+                } catch (Exception e1) {
+                    // record update failed
+                    sendRequest.getSendHandler().onFailure(e1);
+                }
             }
         }
     }
 
-    private SendRawEmailRequest buildEmailRequest(SESSendService.Message message) throws Exception{
+    private SendRawEmailRequest buildEmailRequest(SESSendRequest sendRequest) throws Exception{
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        message.getMimeMessage().writeTo(outputStream);
+        sendRequest.getMimeMessage().writeTo(outputStream);
         RawMessage rawMessage = new RawMessage(ByteBuffer.wrap(outputStream.toByteArray()));
         return new SendRawEmailRequest(rawMessage);
     }
 
-    private void updateRecords(SESSendService.Message message, final String sesMessageId) {
-        EmailEntity emailEntity = db.getEntity(EmailEntity.class, message.getEmailId());
-        if(emailEntity == null) {
-            LOG.error("Failed to Update Email Record");
-            return;
-        }
-        if(sesMessageId != null) {
+    private EmailEntity updateRecords(EmailEntity emailEntity, final String sesMessageId) throws Exception {
+        boolean success = sesMessageId != null && !sesMessageId.isEmpty();
+        if(success) {
             emailEntity.setMessageId(sesMessageId);
             db.update(emailEntity);
         }
@@ -89,14 +106,19 @@ public class SESSendQueueHandler implements QueueHandler<SESSendService.Message>
         List<EmailRecipientEntity> recipientEntities = db.select(EMAIL_RECIPIENT.fields())
                 .where(EMAIL_RECIPIENT.EMAIL_ID.eq(emailEntity.getId()))
                 .fetch().into(EMAIL_RECIPIENT).into(EmailRecipientEntity.class);
+        if(recipientEntities == null || recipientEntities.isEmpty()) {
+            throw new Exception("Email " + (success ? "sent " : "failed ") + "and recipient record(s) update failed.");
+        }
         for(EmailRecipientEntity recipientEntity:recipientEntities) {
-            if(sesMessageId == null) {
-                recipientEntity.setStatus(RecipientStatus.FAILED);
-                recipientEntity.setFailed(new Date());
-            } else {
+            if(success) {
                 recipientEntity.setStatus(RecipientStatus.SENT);
                 recipientEntity.setSent(new Date());
+            } else {
+                recipientEntity.setStatus(RecipientStatus.FAILED);
+                recipientEntity.setFailed(new Date());
             }
+            db.update(recipientEntity);
         }
+        return emailEntity;
     }
 }

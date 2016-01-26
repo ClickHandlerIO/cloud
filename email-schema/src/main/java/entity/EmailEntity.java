@@ -9,6 +9,7 @@ import io.clickhandler.sql.entity.AbstractEntity;
  */
 @Table
 public class EmailEntity extends AbstractEntity {
+    // Sending user Id
     @Column
     private String userId;
     @Column
@@ -27,6 +28,7 @@ public class EmailEntity extends AbstractEntity {
     private String htmlBody;
     @Column
     private boolean attachments;
+    // Id provided from email client on send
     @Column
     private String messageId;
 

@@ -1,4 +1,4 @@
-package sns.data;
+package entity;
 
 /**
  * Created by admin on 1/22/16.

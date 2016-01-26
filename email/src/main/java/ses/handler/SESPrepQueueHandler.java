@@ -10,7 +10,8 @@ import io.clickhandler.sql.db.DatabaseSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ses.data.DownloadRequest;
-import ses.service.AttachmentService;
+import ses.data.SESSendRequest;
+import ses.service.SESAttachmentService;
 import ses.service.SESSendService;
 
 import javax.activation.DataHandler;
@@ -36,53 +37,34 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * @author Brad Behnke
  */
-public class SESPrepQueueHandler  implements QueueHandler<String>, Tables {
+public class SESPrepQueueHandler  implements QueueHandler<SESSendRequest>, Tables {
 
     private static final Logger LOG = LoggerFactory.getLogger(SESPrepQueueHandler.class);
     private final DatabaseSession db;
-    private final AttachmentService attachmentService;
+    private final SESAttachmentService SESAttachmentService;
     private final SESSendService sesSendService;
-    private final AtomicInteger activeDownloads = new AtomicInteger(); // tracks number of current downloads and notifies completion
-    private final AtomicBoolean attachFailed = new AtomicBoolean(); // tracks if a download failed or not
 
-    public SESPrepQueueHandler(Database db, AttachmentService attachmentService, SESSendService sesSendService) {
+    public SESPrepQueueHandler(Database db, SESAttachmentService SESAttachmentService, SESSendService sesSendService) {
         this.db = db.getSession();
-        this.attachmentService = attachmentService;
+        this.SESAttachmentService = SESAttachmentService;
         this.sesSendService = sesSendService;
     }
 
     @Override
-    public void receive(List<String> emailIds) {
-        for (String emailId:emailIds) {
-            activeDownloads.set(0);
-            attachFailed.set(false);
+    public void receive(List<SESSendRequest> sendRequests) {
+        for (SESSendRequest request:sendRequests) {
             try {
-                EmailEntity emailEntity = getEmailEntity(emailId);
-                final MimeMessage message = buildMimeMessage(emailEntity);
-                // load attachments if there are any
+                EmailEntity emailEntity = request.getEmailEntity();
+                MimeMessage message = buildMimeMessage(emailEntity);
                 if(emailEntity.isAttachments()) {
-                    processAttachments(emailEntity, message);
+                    message = processAttachments(emailEntity, message);
                 }
-                // Wait for attachment downloads, will not enter if there were no attachments
-                if(activeDownloads.get() > 0 && !attachFailed.get()) {
-                    activeDownloads.wait();
-                }
-                // send email if no downloads failed
-                if(!attachFailed.get()) {
-                    sesSendService.enqueue(emailId, message);
-                }
+                request.setMimeMessage(message);
+                sesSendService.enqueue(request);
             } catch (Exception e) {
                 LOG.error(e.getMessage());
             }
         }
-    }
-
-    private EmailEntity getEmailEntity(String emailId) throws Exception {
-        final EmailEntity emailEntity = db.getEntity(EmailEntity.class, emailId);
-        if(emailEntity == null) {
-            throw new Exception("Email record not found.");
-        }
-        return emailEntity;
     }
 
     private MimeMessage buildMimeMessage(EmailEntity emailEntity) throws Exception {
@@ -107,17 +89,20 @@ public class SESPrepQueueHandler  implements QueueHandler<String>, Tables {
         return message;
     }
 
-    private void processAttachments(EmailEntity emailEntity, MimeMessage message) throws Exception {
+    private MimeMessage processAttachments(EmailEntity emailEntity, MimeMessage message) throws Exception {
+        // tracks number of current waiting downloads
+        final AtomicInteger activeDownloads = new AtomicInteger();
+        // tracks if download(s) failed or not, also used for completion notification
+        final AtomicBoolean failed = new AtomicBoolean();
+
         // get attachment info from db
         List<EmailAttachmentEntity> attachmentEntities = getEmailAttachmentEntities(emailEntity);
         final MimeMultipart content = (MimeMultipart) message.getContent();
         for (final EmailAttachmentEntity attachmentEntity : attachmentEntities) {
-            // breaks if still looping and a previous download failed.
-            if(attachFailed.get())
-                break;
             activeDownloads.incrementAndGet();
-            // get file byte[] from AttachmentService
-            attachmentService.enqueue(new DownloadRequest(attachmentEntity.getFileId(), new DownloadCallBack() {
+            if (failed.get())
+                break;
+            SESAttachmentService.enqueue(new DownloadRequest(attachmentEntity.getFileId(), new DownloadCallBack() {
                 @Override
                 public void onSuccess(byte[] data) {
                     try {
@@ -130,26 +115,39 @@ public class SESPrepQueueHandler  implements QueueHandler<String>, Tables {
                         attachmentPart.setFileName(attachmentEntity.getName());
                         content.addBodyPart(attachmentPart);
 
-                        if(activeDownloads.decrementAndGet() <=0){
-                            activeDownloads.notify();
+                        if(activeDownloads.decrementAndGet() <=0 && !failed.get()){
+                            failed.set(false);
+                            failed.notify();
                         }
                     } catch (Exception e) {
-                        LOG.error("Email Attachment Build Failed", e);
                         // break out of loop or if already out of loop stop waiting, and don't send.
-                        attachFailed.set(true);
-                        activeDownloads.notify();
+                        failed.set(true);
+                        failed.notify();
                     }
                 }
 
                 @Override
                 public void onFailure(Exception e) {
-                    LOG.error("Email Attachment S3 Download Failed", e);
                     // break out of loop or if already out of loop stop waiting, and don't send.
-                    attachFailed.set(true);
-                    activeDownloads.notify();
+                    failed.set(true);
+                    failed.notify();
                 }
             }));
         }
+
+        // quick failure, don't wait
+        if(failed.get()) {
+            throw new Exception("Failed to obtain attachments.");
+        }
+        // wait for callbacks
+        failed.wait();
+        // failure
+        if(failed.get()) {
+            throw new Exception("Failed to obtain attachments.");
+        }
+        // complete
+        message.setContent(content);
+        return message;
     }
 
     private List<EmailAttachmentEntity> getEmailAttachmentEntities(EmailEntity emailEntity) throws Exception {
@@ -157,7 +155,7 @@ public class SESPrepQueueHandler  implements QueueHandler<String>, Tables {
                 .where(EMAIL_ATTACHMENT.EMAIL_ID.eq(emailEntity.getId()))
                 .fetch().into(EMAIL_ATTACHMENT).into(EmailAttachmentEntity.class);
         if (attachmentEntities.isEmpty()) {
-            throw new Exception("Email attachment record not found.");
+            throw new Exception("Email attachment record(s) not found.");
         }
         return attachmentEntities;
     }

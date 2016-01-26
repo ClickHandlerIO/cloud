@@ -8,6 +8,7 @@ import io.clickhandler.queue.QueueServiceConfig;
 import io.clickhandler.sql.db.Database;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import ses.data.SESSendRequest;
 import ses.handler.SESSendQueueHandler;
 
 import javax.mail.internet.MimeMessage;
@@ -20,11 +21,11 @@ import javax.mail.internet.MimeMessage;
 public class SESSendService extends AbstractIdleService {
     private final static Logger LOG = LoggerFactory.getLogger(SESSendService.class);
 
-    private final QueueService<Message> queueService;
+    private final QueueService<SESSendRequest> queueService;
     private final SESSendQueueHandler queueHandler;
 
     public SESSendService(Database db) {
-        final QueueServiceConfig<Message> config = new QueueServiceConfig<>("SESSendQueue", Message.class, true, 2, 10);
+        final QueueServiceConfig<SESSendRequest> config = new QueueServiceConfig<>("SESSendQueue", SESSendRequest.class, true, 2, 10);
         this.queueHandler = new SESSendQueueHandler(db);
         config.setHandler(this.queueHandler);
 
@@ -43,50 +44,7 @@ public class SESSendService extends AbstractIdleService {
         this.queueHandler.shutdown();
     }
 
-    public void enqueue(String emailId, MimeMessage message) {
-        enqueue(new Message(emailId,message));
-    }
-
-    public void enqueue(Message message) {
-        queueService.add(message);
-    }
-
-    public class Message {
-        private String emailId;
-        private MimeMessage mimeMessage;
-        private int attempts;
-
-        public Message(String emailId, MimeMessage mimeMessage) {
-            this.emailId = emailId;
-            this.mimeMessage = mimeMessage;
-        }
-
-        public String getEmailId() {
-            return emailId;
-        }
-
-        public void setEmailId(String emailId) {
-            this.emailId = emailId;
-        }
-
-        public int getAttempts() {
-            return attempts;
-        }
-
-        public void setAttempts(int attempts) {
-            this.attempts = attempts;
-        }
-
-        public MimeMessage getMimeMessage() {
-            return mimeMessage;
-        }
-
-        public void setMimeMessage(MimeMessage mimeMessage) {
-            this.mimeMessage = mimeMessage;
-        }
-
-        public void incrementAttempts() {
-            this.attempts++;
-        }
+    public void enqueue(SESSendRequest sendRequest) {
+        queueService.add(sendRequest);
     }
 }

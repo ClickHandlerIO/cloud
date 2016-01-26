@@ -9,6 +9,7 @@ import io.clickhandler.sql.db.Database;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ses.config.SESConfig;
+import ses.data.SESSendRequest;
 import ses.handler.SESPrepQueueHandler;
 
 /**
@@ -18,11 +19,11 @@ import ses.handler.SESPrepQueueHandler;
  */
 public class SESSendPrepService extends AbstractIdleService {
     private final static Logger LOG = LoggerFactory.getLogger(SESSendPrepService.class);
-    private final QueueService<String> queueService;
+    private final QueueService<SESSendRequest> queueService;
 
-    public SESSendPrepService(Database db, AttachmentService attachmentService, SESSendService sesSendService) {
-        final QueueServiceConfig<String> config = new QueueServiceConfig<>("SESPrepQueue", String.class, true, SESConfig.getPrepParallelism(), SESConfig.getPrepBatchSize());
-        config.setHandler(new SESPrepQueueHandler(db, attachmentService, sesSendService));
+    public SESSendPrepService(Database db, SESAttachmentService SESAttachmentService, SESSendService sesSendService) {
+        final QueueServiceConfig<SESSendRequest> config = new QueueServiceConfig<>("SESPrepQueue", SESSendRequest.class, true, SESConfig.getPrepParallelism(), SESConfig.getPrepBatchSize());
+        config.setHandler(new SESPrepQueueHandler(db, SESAttachmentService, sesSendService));
 
         QueueFactory factory = new LocalQueueServiceFactory();
         this.queueService = factory.build(config);
@@ -38,7 +39,7 @@ public class SESSendPrepService extends AbstractIdleService {
         this.queueService.stopAsync();
     }
 
-    public void enqueue(String emailId) {
-        this.queueService.add(emailId);
+    public void enqueue(SESSendRequest sendRequest) {
+        this.queueService.add(sendRequest);
     }
 }

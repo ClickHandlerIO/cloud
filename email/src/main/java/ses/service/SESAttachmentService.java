@@ -15,12 +15,12 @@ import ses.handler.AttachmentQueueHandler;
 /**
  * @author Brad Behnke
  */
-public class AttachmentService extends AbstractIdleService {
+public class SESAttachmentService extends AbstractIdleService {
 
-    private final static Logger LOG = LoggerFactory.getLogger(AttachmentService.class);
+    private final static Logger LOG = LoggerFactory.getLogger(SESAttachmentService.class);
     private final QueueService<DownloadRequest> queueService;
 
-    public AttachmentService(Database db, S3Service s3Service) {
+    public SESAttachmentService(Database db, S3Service s3Service) {
         final QueueServiceConfig<DownloadRequest> config = new QueueServiceConfig<>("AttachmentDLQueue", DownloadRequest.class, true, 2, 1);
         config.setHandler(new AttachmentQueueHandler(db, s3Service));
 

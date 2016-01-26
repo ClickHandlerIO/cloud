@@ -1,21 +1,30 @@
-package sns.data;
+package entity;
 
 import com.fasterxml.jackson.annotation.JsonGetter;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSetter;
+import io.clickhandler.sql.annotations.Column;
+import io.clickhandler.sql.annotations.Table;
 
 /**
  * Created by admin on 1/20/16.
  */
-public class SNSEmailMessage  extends SNSMessage{
+@Table
+public class SNSEmailMessageEntity extends SNSMessageEntity {
+    @Column
     @JsonProperty
     private String notificationType;
+    @Column
     @JsonProperty
     private SNSBounce bounce;
+    @Column
     @JsonProperty
     private SNSComplaint complaint;
+    @Column
     @JsonProperty
     private SNSDelivery delivery;
+    @Column
     @JsonProperty
     private SNSMail mail;
 

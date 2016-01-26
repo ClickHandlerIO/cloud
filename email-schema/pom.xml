@@ -21,29 +21,11 @@
             <artifactId>cloud-sql</artifactId>
         </dependency>
 
-        <!--&lt;!&ndash;External Dependencies&ndash;&gt;-->
-        <!--<dependency>-->
-            <!--<groupId>com.amazonaws</groupId>-->
-            <!--<artifactId>aws-java-sdk-ses</artifactId>-->
-            <!--<version>1.10.20</version>-->
-        <!--</dependency>-->
-        <!--<dependency>-->
-            <!--<groupId>io.vertx</groupId>-->
-            <!--<artifactId>vertx-core</artifactId>-->
-        <!--</dependency>-->
-        <!--<dependency>-->
-            <!--<groupId>io.vertx</groupId>-->
-            <!--<artifactId>vertx-web</artifactId>-->
-        <!--</dependency>-->
-        <!--<dependency>-->
-            <!--<groupId>io.vertx</groupId>-->
-            <!--<artifactId>vertx-rx-java</artifactId>-->
-        <!--</dependency>-->
-        <!--<dependency>-->
-            <!--<groupId>javax.inject</groupId>-->
-            <!--<artifactId>javax.inject</artifactId>-->
-            <!--<version>1</version>-->
-        <!--</dependency>-->
+        <!--External Dependencies-->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+        </dependency>
     </dependencies>
 
 </project>

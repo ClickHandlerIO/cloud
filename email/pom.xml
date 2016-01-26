@@ -28,6 +28,10 @@
             <groupId>io.clickhandler</groupId>
             <artifactId>cloud-email-schema</artifactId>
         </dependency>
+        <dependency>
+            <groupId>io.clickhandler</groupId>
+            <artifactId>cloud-files</artifactId>
+        </dependency>
 
         <!--External Dependencies-->
         <dependency>

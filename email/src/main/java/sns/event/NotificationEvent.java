@@ -1,22 +1,22 @@
 package sns.event;
 
-import sns.data.SNSGeneralMessage;
+import entity.SNSGeneralMessageEntity;
 
 /**
  * Created by admin on 1/25/16.
  */
 public class NotificationEvent extends SNSEvent {
-    private SNSGeneralMessage message;
+    private SNSGeneralMessageEntity message;
 
-    public NotificationEvent(SNSGeneralMessage message) {
+    public NotificationEvent(SNSGeneralMessageEntity message) {
         this.message = message;
     }
 
-    public SNSGeneralMessage getMessage() {
+    public SNSGeneralMessageEntity getMessage() {
         return message;
     }
 
-    public void setMessage(SNSGeneralMessage message) {
+    public void setMessage(SNSGeneralMessageEntity message) {
         this.message = message;
     }
 }

@@ -1,23 +1,23 @@
 package sns.event;
 
-import sns.data.SNSEmailMessage;
+import entity.SNSEmailMessageEntity;
 
 /**
  * Created by admin on 1/25/16.
  */
 public class EmailDeliveryEvent extends SNSEvent {
 
-    private SNSEmailMessage message;
+    private SNSEmailMessageEntity message;
 
-    public EmailDeliveryEvent(SNSEmailMessage message) {
+    public EmailDeliveryEvent(SNSEmailMessageEntity message) {
         this.message = message;
     }
 
-    public SNSEmailMessage getMessage() {
+    public SNSEmailMessageEntity getMessage() {
         return message;
     }
 
-    public void setMessage(SNSEmailMessage message) {
+    public void setMessage(SNSEmailMessageEntity message) {
         this.message = message;
     }
 }

@@ -1,15 +1,17 @@
 package sns.service;
 
 
+import com.google.common.eventbus.EventBus;
 import com.google.common.util.concurrent.AbstractIdleService;
 import io.clickhandler.queue.LocalQueueServiceFactory;
 import io.clickhandler.queue.QueueFactory;
 import io.clickhandler.queue.QueueService;
 import io.clickhandler.queue.QueueServiceConfig;
+import io.clickhandler.sql.db.Database;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import sns.config.SNSConfig;
-import sns.data.SNSMessage;
+import entity.SNSMessageEntity;
 import sns.handler.SNSQueueHandler;
 import sns.routing.SNSEmailRouteHandler;
 import sns.routing.SNSGeneralRouteHandler;
@@ -25,16 +27,16 @@ public class SNSService extends AbstractIdleService {
     private final static Logger LOG = LoggerFactory.getLogger(SNSService.class);
     private SNSGeneralRouteHandler generalRouteHandler;
     private SNSEmailRouteHandler emailRouteHandler;
-    private QueueService<SNSMessage> queueService;
+    private QueueService<SNSMessageEntity> queueService;
 
     @Inject
-    public SNSService(SNSQueueHandler mainQueueHandler, SNSConfig config) {
+    public SNSService(EventBus eventBus, Database db) {
 
         // initialize sns queues
         QueueFactory factory = new LocalQueueServiceFactory();
         // main queue and handler
-        final QueueServiceConfig<SNSMessage> mainConfig = new QueueServiceConfig<>(config.getName(), SNSMessage.class, true, config.getParallelism(), config.getBatchSize());
-        mainConfig.setHandler(mainQueueHandler);
+        final QueueServiceConfig<SNSMessageEntity> mainConfig = new QueueServiceConfig<>(SNSConfig.getName(), SNSMessageEntity.class, true, SNSConfig.getParallelism(), SNSConfig.getBatchSize());
+        mainConfig.setHandler(new SNSQueueHandler(eventBus, db));
         this.queueService = factory.build(mainConfig);
 
         this.generalRouteHandler = new SNSGeneralRouteHandler(this);
@@ -55,7 +57,7 @@ public class SNSService extends AbstractIdleService {
         LOG.info("SNSService Shutdown");
     }
 
-    public void enqueueMessage(SNSMessage message) {
+    public void enqueueMessage(SNSMessageEntity message) {
         if(message == null) {
             return;
         }
