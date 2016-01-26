@@ -26,14 +26,13 @@ public class SNSService extends AbstractIdleService {
     private QueueService<SNSMessage> queueService;
 
     @Inject
-    public SNSService(SNSQueueHandler mainQueueHandler) {
+    public SNSService(SNSQueueHandler mainQueueHandler, SNSConfig config) {
 
         // initialize sns queues
         QueueFactory factory = new LocalQueueServiceFactory();
         // main queue and handler
-        final QueueServiceConfig<SNSMessage> mainConfig = new QueueServiceConfig<>("SNSQueue", SNSMessage.class, true, 2, 10);
-        // TODO how to set handler?
-//        mainConfig.setHandler(mainQueueHandler);
+        final QueueServiceConfig<SNSMessage> mainConfig = new QueueServiceConfig<>(config.getName(), SNSMessage.class, true, config.getParallelism(), config.getBatchSize());
+        mainConfig.setHandler(mainQueueHandler);
         this.queueService = factory.build(mainConfig);
 
         this.generalRouteHandler = new SNSGeneralRouteHandler(this);

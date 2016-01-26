@@ -34,7 +34,7 @@ import org.jooq.impl.TableImpl;
 @SuppressWarnings({ "all", "unchecked", "rawtypes" })
 public class EmailRecipient extends TableImpl<EmailRecipientRecord> {
 
-	private static final long serialVersionUID = -794485693;
+	private static final long serialVersionUID = -1951425200;
 
 	/**
 	 * The reference instance of <code>email_recipient</code>
@@ -63,6 +63,11 @@ public class EmailRecipient extends TableImpl<EmailRecipientRecord> {
 	 * The column <code>email_recipient.changed</code>.
 	 */
 	public final TableField<EmailRecipientRecord, Timestamp> CHANGED = createField("changed", org.jooq.impl.SQLDataType.TIMESTAMP.nullable(false), this, "");
+
+	/**
+	 * The column <code>email_recipient.email_id</code>.
+	 */
+	public final TableField<EmailRecipientRecord, String> EMAIL_ID = createField("email_id", org.jooq.impl.SQLDataType.VARCHAR.length(32), this, "");
 
 	/**
 	 * The column <code>email_recipient.type</code>.
@@ -98,6 +103,11 @@ public class EmailRecipient extends TableImpl<EmailRecipientRecord> {
 	 * The column <code>email_recipient.bounced</code>.
 	 */
 	public final TableField<EmailRecipientRecord, Timestamp> BOUNCED = createField("bounced", org.jooq.impl.SQLDataType.TIMESTAMP, this, "");
+
+	/**
+	 * The column <code>email_recipient.complaint</code>.
+	 */
+	public final TableField<EmailRecipientRecord, Timestamp> COMPLAINT = createField("complaint", org.jooq.impl.SQLDataType.TIMESTAMP, this, "");
 
 	/**
 	 * The column <code>email_recipient.failed</code>.

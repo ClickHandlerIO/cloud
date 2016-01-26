@@ -1,12 +1,20 @@
 package sns.routing;
 
+import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.ext.web.RoutingContext;
+import org.apache.commons.codec.binary.Base64;
 import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import sns.json.SNSGeneralMessage;
 import sns.service.SNSService;
+
+import java.io.InputStream;
+import java.net.URL;
+import java.security.Signature;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
 
 /**
  * Created by admin on 1/22/16.
@@ -23,6 +31,11 @@ public class SNSGeneralRouteHandler extends SNSRouteHandler<SNSGeneralMessage> {
     public void handle(RoutingContext routingContext) {
         // get header info
         HttpServerRequest request = routingContext.request();
+        if(!request.method().equals(HttpMethod.POST)) {
+            LOG.error("Invalid HttpMethod Caught: " + request.method().toString());
+            routingContext.fail(HttpStatus.SC_BAD_REQUEST);
+            return;
+        }
         HeaderInfo headerInfo = processHeaders(request.headers());
         if (!headerInfo.isComplete()) {
             routingContext.fail(HttpStatus.SC_BAD_REQUEST);
@@ -45,23 +58,20 @@ public class SNSGeneralRouteHandler extends SNSRouteHandler<SNSGeneralMessage> {
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     private static boolean isMessageSignatureValid(SNSGeneralMessage message) {
-        // TODO uncomment when connected to real SNS
-//        try {
-//            URL url = new URL(message.getSigningCertURL());
-//            InputStream inStream = url.openStream();
-//            CertificateFactory cf = CertificateFactory.getInstance("X.509");
-//            X509Certificate cert = (X509Certificate)cf.generateCertificate(inStream);
-//            inStream.close();
-//
-//            Signature sig = Signature.getInstance("SHA1withRSA");
-//            sig.initVerify(cert.getPublicKey());
-//            sig.update(getMessageBytesToSign(message));
-//            return sig.verify(Base64.decodeBase64(message.getSignature()));
-//        }
-//        catch (Exception e) {
-//            throw new SecurityException("Verify method failed.", e);
-//        }
-        return true;
+        try {
+            URL url = new URL(message.getSigningCertURL());
+            InputStream inStream = url.openStream();
+            CertificateFactory cf = CertificateFactory.getInstance("X.509");
+            X509Certificate cert = (X509Certificate)cf.generateCertificate(inStream);
+            inStream.close();
+
+            Signature sig = Signature.getInstance("SHA1withRSA");
+            sig.initVerify(cert.getPublicKey());
+            sig.update(getMessageBytesToSign(message));
+            return sig.verify(Base64.decodeBase64(message.getSignature()));
+        } catch (Exception e) {
+            throw new SecurityException("Verify method failed.", e);
+        }
     }
 
     private static byte [] getMessageBytesToSign (SNSGeneralMessage message) {

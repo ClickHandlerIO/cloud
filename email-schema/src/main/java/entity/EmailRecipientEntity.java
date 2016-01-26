@@ -12,6 +12,8 @@ import java.util.Date;
 @Table
 public class EmailRecipientEntity extends AbstractEntity {
     @Column
+    private String emailId;
+    @Column
     private RecipientType type;
     @Column
     private String name;
@@ -26,6 +28,8 @@ public class EmailRecipientEntity extends AbstractEntity {
     @Column
     private Date bounced;
     @Column
+    private Date complaint;
+    @Column
     private Date failed;
     @Column
     private Date opened;
@@ -33,6 +37,22 @@ public class EmailRecipientEntity extends AbstractEntity {
     private String contactId;
     @Column
     private String userId;
+
+    public Date getComplaint() {
+        return complaint;
+    }
+
+    public void setComplaint(Date complaint) {
+        this.complaint = complaint;
+    }
+
+    public String getEmailId() {
+        return emailId;
+    }
+
+    public void setEmailId(String emailId) {
+        this.emailId = emailId;
+    }
 
     public RecipientType getType() {
         return type;
