@@ -1,8 +1,8 @@
 package sns.routing;
 
 import io.vertx.core.http.HttpMethod;
-import io.vertx.core.http.HttpServerRequest;
-import io.vertx.ext.web.RoutingContext;
+import io.vertx.rxjava.core.http.HttpServerRequest;
+import io.vertx.rxjava.ext.web.RoutingContext;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
@@ -43,7 +43,7 @@ public class SNSGeneralRouteHandler extends SNSRouteHandler<SNSGeneralMessage> {
         }
 
         // get message from body json
-        SNSGeneralMessage message = getMessage(routingContext.getBody().getBytes());
+        SNSGeneralMessage message = getMessage(routingContext.getBody().toString());
         if (message == null || !isMessageSignatureValid(message)) {
             routingContext.fail(HttpStatus.SC_BAD_REQUEST);
             return;

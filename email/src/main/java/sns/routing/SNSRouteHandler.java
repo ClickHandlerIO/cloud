@@ -2,8 +2,9 @@ package sns.routing;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.vertx.core.Handler;
-import io.vertx.core.MultiMap;
-import io.vertx.ext.web.RoutingContext;
+
+import io.vertx.rxjava.core.MultiMap;
+import io.vertx.rxjava.ext.web.RoutingContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import sns.json.SNSMessage;
@@ -36,7 +37,7 @@ public abstract class SNSRouteHandler<T extends SNSMessage> implements Handler<R
     @Override
     public abstract void handle(RoutingContext routingContext);
 
-    protected T getMessage(byte[] content) {
+    protected T getMessage(String content) {
         ObjectMapper mapper = new ObjectMapper();
         try {
             return mapper.readValue(content, messageClass);
