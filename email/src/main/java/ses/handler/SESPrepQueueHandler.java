@@ -1,13 +1,13 @@
 package ses.handler;
 
 import com.google.common.base.Preconditions;
-import com.google.common.eventbus.EventBus;
 import data.schema.Tables;
 import entity.EmailAttachmentEntity;
 import entity.EmailEntity;
 import io.clickhandler.queue.QueueHandler;
 import io.clickhandler.sql.db.Database;
 import io.clickhandler.sql.db.DatabaseSession;
+import io.vertx.rxjava.core.eventbus.EventBus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ses.data.DownloadRequest;
@@ -67,7 +67,7 @@ public class SESPrepQueueHandler  implements QueueHandler<SESSendRequest>, Table
                 sesSendService.enqueue(request);
             } catch (Exception e) {
                 request.getSendHandler().onFailure(e);
-                eventBus.post(new SESSendEvent(request.getEmailEntity(), false));
+                eventBus.publish(SESSendEvent.ADDRESS, new SESSendEvent(request.getEmailEntity(), false));
             }
         }
     }

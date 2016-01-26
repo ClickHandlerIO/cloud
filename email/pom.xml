@@ -32,6 +32,10 @@
             <groupId>io.clickhandler</groupId>
             <artifactId>cloud-files</artifactId>
         </dependency>
+        <dependency>
+            <groupId>io.clickhandler</groupId>
+            <artifactId>cloud-common</artifactId>
+        </dependency>
 
         <!--External Dependencies-->
         <dependency>

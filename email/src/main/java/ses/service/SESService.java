@@ -1,9 +1,9 @@
 package ses.service;
 
-import com.google.common.eventbus.EventBus;
 import com.sun.istack.internal.NotNull;
 import common.AbstractEmailService;
 import io.clickhandler.sql.db.Database;
+import io.vertx.rxjava.core.eventbus.EventBus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import s3.service.S3Service;

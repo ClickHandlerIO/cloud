@@ -6,7 +6,6 @@ import com.amazonaws.services.simpleemail.model.RawMessage;
 import com.amazonaws.services.simpleemail.model.SendRawEmailRequest;
 import com.amazonaws.services.simpleemail.model.SendRawEmailResult;
 import com.google.common.base.Strings;
-import com.google.common.eventbus.EventBus;
 import data.schema.Tables;
 import entity.EmailEntity;
 import entity.EmailRecipientEntity;
@@ -14,6 +13,7 @@ import entity.RecipientStatus;
 import io.clickhandler.queue.QueueHandler;
 import io.clickhandler.sql.db.Database;
 import io.clickhandler.sql.db.DatabaseSession;
+import io.vertx.rxjava.core.eventbus.EventBus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ses.config.SESConfig;
@@ -70,14 +70,14 @@ public class SESSendQueueHandler implements QueueHandler<SESSendRequest>, Tables
                 } else {
                     updateRecords(sendRequest.getEmailEntity(), null);
                     sendRequest.getSendHandler().onFailure(new Exception("Failed to send."));
-                    eventBus.post(new SESSendEvent(sendRequest.getEmailEntity(), false));
+                    publishEvent(sendRequest.getEmailEntity(), false);
                 }
             }
             // send success
             else {
                 EmailEntity emailEntity = updateRecords(sendRequest.getEmailEntity(), result.getMessageId());
                 sendRequest.getSendHandler().onSuccess(emailEntity);
-                eventBus.post(new SESSendEvent(emailEntity, true));
+                publishEvent(emailEntity, true);
             }
         } catch (Exception e) {
             // send or record update failed
@@ -91,7 +91,7 @@ public class SESSendQueueHandler implements QueueHandler<SESSendRequest>, Tables
                     // record update failed
                     sendRequest.getSendHandler().onFailure(e1);
                 }
-                eventBus.post(new SESSendEvent(sendRequest.getEmailEntity(), false));
+                publishEvent(sendRequest.getEmailEntity(), false);
             }
         }
     }
@@ -127,5 +127,9 @@ public class SESSendQueueHandler implements QueueHandler<SESSendRequest>, Tables
             db.update(recipientEntity);
         }
         return emailEntity;
+    }
+
+    private void publishEvent(EmailEntity emailEntity, boolean success) {
+        eventBus.publish(SESSendEvent.ADDRESS, new SESSendEvent(emailEntity, success));
     }
 }
