@@ -96,8 +96,8 @@ http://www.w3.org/2001/XMLSchema-instance ">
         <module>queue</module>
         <module>remoting</module>
         <module>sql</module>
-        <module>email-schema</module>
-        <module>email</module>
+        <module>aws-schema</module>
+        <module>aws</module>
         <module>files</module>
     </modules>
 
@@ -140,13 +140,13 @@ http://www.w3.org/2001/XMLSchema-instance ">
 
             <dependency>
                 <groupId>io.clickhandler</groupId>
-                <artifactId>cloud-email-schema</artifactId>
+                <artifactId>cloud-aws-schema</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <dependency>
                 <groupId>io.clickhandler</groupId>
-                <artifactId>cloud-email</artifactId>
+                <artifactId>cloud-aws</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
@@ -225,6 +225,11 @@ http://www.w3.org/2001/XMLSchema-instance ">
                 <groupId>javax.inject</groupId>
                 <artifactId>javax.inject</artifactId>
                 <version>1</version>
+            </dependency>
+            <dependency>
+                <groupId>javax.mail</groupId>
+                <artifactId>mail</artifactId>
+                <version>1.4.7</version>
             </dependency>
             <dependency>
                 <groupId>com.google.guava</groupId>
