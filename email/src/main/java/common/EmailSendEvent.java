@@ -1,17 +1,17 @@
-package ses.event;
+package common;
 
 import entity.EmailEntity;
 
 /**
  * Created by admin on 1/26/16.
  */
-public class EmailSendEvent extends SESEvent {
-    private boolean success;
+public abstract class EmailSendEvent {
+    private boolean successful;
     private EmailEntity emailEntity;
 
-    public EmailSendEvent(boolean success,EmailEntity emailEntity) {
-        this.success = success;
+    public EmailSendEvent(EmailEntity emailEntity, boolean successful) {
         this.emailEntity = emailEntity;
+        this.successful = successful;
     }
 
     public EmailEntity getEmailEntity() {
@@ -22,11 +22,11 @@ public class EmailSendEvent extends SESEvent {
         this.emailEntity = emailEntity;
     }
 
-    public boolean isSuccess() {
-        return success;
+    public boolean isSuccessful() {
+        return successful;
     }
 
-    public void setSuccess(boolean success) {
-        this.success = success;
+    public void setSuccessful(boolean successful) {
+        this.successful = successful;
     }
 }
