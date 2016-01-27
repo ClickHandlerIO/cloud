@@ -34,7 +34,7 @@ import org.jooq.impl.TableImpl;
 @SuppressWarnings({ "all", "unchecked", "rawtypes" })
 public class EmailAttachmentJnl extends TableImpl<EmailAttachmentJnlRecord> {
 
-	private static final long serialVersionUID = 14353671;
+	private static final long serialVersionUID = -1414587532;
 
 	/**
 	 * The reference instance of <code>email_attachment_jnl</code>
@@ -55,14 +55,14 @@ public class EmailAttachmentJnl extends TableImpl<EmailAttachmentJnlRecord> {
 	public final TableField<EmailAttachmentJnlRecord, String> ID = createField("id", org.jooq.impl.SQLDataType.VARCHAR.length(32).nullable(false), this, "");
 
 	/**
-	 * The column <code>email_attachment_jnl.version</code>.
+	 * The column <code>email_attachment_jnl.v</code>.
 	 */
-	public final TableField<EmailAttachmentJnlRecord, Long> VERSION = createField("version", org.jooq.impl.SQLDataType.BIGINT.nullable(false), this, "");
+	public final TableField<EmailAttachmentJnlRecord, Long> V = createField("v", org.jooq.impl.SQLDataType.BIGINT.nullable(false), this, "");
 
 	/**
-	 * The column <code>email_attachment_jnl.changed</code>.
+	 * The column <code>email_attachment_jnl.c</code>.
 	 */
-	public final TableField<EmailAttachmentJnlRecord, Timestamp> CHANGED = createField("changed", org.jooq.impl.SQLDataType.TIMESTAMP.nullable(false), this, "");
+	public final TableField<EmailAttachmentJnlRecord, Timestamp> C = createField("c", org.jooq.impl.SQLDataType.TIMESTAMP.nullable(false), this, "");
 
 	/**
 	 * The column <code>email_attachment_jnl.name</code>.
@@ -125,22 +125,6 @@ public class EmailAttachmentJnl extends TableImpl<EmailAttachmentJnlRecord> {
 	@Override
 	public List<UniqueKey<EmailAttachmentJnlRecord>> getKeys() {
 		return Arrays.<UniqueKey<EmailAttachmentJnlRecord>>asList(Keys.PK_EMAIL_ATTACHMENT_JNL);
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public TableField<EmailAttachmentJnlRecord, Long> getRecordVersion() {
-		return VERSION;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public TableField<EmailAttachmentJnlRecord, Timestamp> getRecordTimestamp() {
-		return CHANGED;
 	}
 
 	/**

@@ -34,7 +34,7 @@ import org.jooq.impl.TableImpl;
 @SuppressWarnings({ "all", "unchecked", "rawtypes" })
 public class FileJnl extends TableImpl<FileJnlRecord> {
 
-	private static final long serialVersionUID = -1714135107;
+	private static final long serialVersionUID = 406627208;
 
 	/**
 	 * The reference instance of <code>file_jnl</code>
@@ -55,14 +55,14 @@ public class FileJnl extends TableImpl<FileJnlRecord> {
 	public final TableField<FileJnlRecord, String> ID = createField("id", org.jooq.impl.SQLDataType.VARCHAR.length(32).nullable(false), this, "");
 
 	/**
-	 * The column <code>file_jnl.version</code>.
+	 * The column <code>file_jnl.v</code>.
 	 */
-	public final TableField<FileJnlRecord, Long> VERSION = createField("version", org.jooq.impl.SQLDataType.BIGINT.nullable(false), this, "");
+	public final TableField<FileJnlRecord, Long> V = createField("v", org.jooq.impl.SQLDataType.BIGINT.nullable(false), this, "");
 
 	/**
-	 * The column <code>file_jnl.changed</code>.
+	 * The column <code>file_jnl.c</code>.
 	 */
-	public final TableField<FileJnlRecord, Timestamp> CHANGED = createField("changed", org.jooq.impl.SQLDataType.TIMESTAMP.nullable(false), this, "");
+	public final TableField<FileJnlRecord, Timestamp> C = createField("c", org.jooq.impl.SQLDataType.TIMESTAMP.nullable(false), this, "");
 
 	/**
 	 * The column <code>file_jnl.name</code>.
@@ -165,22 +165,6 @@ public class FileJnl extends TableImpl<FileJnlRecord> {
 	@Override
 	public List<UniqueKey<FileJnlRecord>> getKeys() {
 		return Arrays.<UniqueKey<FileJnlRecord>>asList(Keys.PK_FILE_JNL);
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public TableField<FileJnlRecord, Long> getRecordVersion() {
-		return VERSION;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public TableField<FileJnlRecord, Timestamp> getRecordTimestamp() {
-		return CHANGED;
 	}
 
 	/**

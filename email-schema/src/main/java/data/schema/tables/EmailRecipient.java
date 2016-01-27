@@ -34,7 +34,7 @@ import org.jooq.impl.TableImpl;
 @SuppressWarnings({ "all", "unchecked", "rawtypes" })
 public class EmailRecipient extends TableImpl<EmailRecipientRecord> {
 
-	private static final long serialVersionUID = -1951425200;
+	private static final long serialVersionUID = -289853449;
 
 	/**
 	 * The reference instance of <code>email_recipient</code>
@@ -55,14 +55,14 @@ public class EmailRecipient extends TableImpl<EmailRecipientRecord> {
 	public final TableField<EmailRecipientRecord, String> ID = createField("id", org.jooq.impl.SQLDataType.VARCHAR.length(32).nullable(false), this, "");
 
 	/**
-	 * The column <code>email_recipient.version</code>.
+	 * The column <code>email_recipient.v</code>.
 	 */
-	public final TableField<EmailRecipientRecord, Long> VERSION = createField("version", org.jooq.impl.SQLDataType.BIGINT.nullable(false), this, "");
+	public final TableField<EmailRecipientRecord, Long> V = createField("v", org.jooq.impl.SQLDataType.BIGINT.nullable(false), this, "");
 
 	/**
-	 * The column <code>email_recipient.changed</code>.
+	 * The column <code>email_recipient.c</code>.
 	 */
-	public final TableField<EmailRecipientRecord, Timestamp> CHANGED = createField("changed", org.jooq.impl.SQLDataType.TIMESTAMP.nullable(false), this, "");
+	public final TableField<EmailRecipientRecord, Timestamp> C = createField("c", org.jooq.impl.SQLDataType.TIMESTAMP.nullable(false), this, "");
 
 	/**
 	 * The column <code>email_recipient.email_id</code>.
@@ -165,22 +165,6 @@ public class EmailRecipient extends TableImpl<EmailRecipientRecord> {
 	@Override
 	public List<UniqueKey<EmailRecipientRecord>> getKeys() {
 		return Arrays.<UniqueKey<EmailRecipientRecord>>asList(Keys.PK_EMAIL_RECIPIENT);
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public TableField<EmailRecipientRecord, Long> getRecordVersion() {
-		return VERSION;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public TableField<EmailRecipientRecord, Timestamp> getRecordTimestamp() {
-		return CHANGED;
 	}
 
 	/**

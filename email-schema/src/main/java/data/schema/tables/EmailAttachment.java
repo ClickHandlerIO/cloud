@@ -34,7 +34,7 @@ import org.jooq.impl.TableImpl;
 @SuppressWarnings({ "all", "unchecked", "rawtypes" })
 public class EmailAttachment extends TableImpl<EmailAttachmentRecord> {
 
-	private static final long serialVersionUID = 170277973;
+	private static final long serialVersionUID = -74617502;
 
 	/**
 	 * The reference instance of <code>email_attachment</code>
@@ -55,14 +55,14 @@ public class EmailAttachment extends TableImpl<EmailAttachmentRecord> {
 	public final TableField<EmailAttachmentRecord, String> ID = createField("id", org.jooq.impl.SQLDataType.VARCHAR.length(32).nullable(false), this, "");
 
 	/**
-	 * The column <code>email_attachment.version</code>.
+	 * The column <code>email_attachment.v</code>.
 	 */
-	public final TableField<EmailAttachmentRecord, Long> VERSION = createField("version", org.jooq.impl.SQLDataType.BIGINT.nullable(false), this, "");
+	public final TableField<EmailAttachmentRecord, Long> V = createField("v", org.jooq.impl.SQLDataType.BIGINT.nullable(false), this, "");
 
 	/**
-	 * The column <code>email_attachment.changed</code>.
+	 * The column <code>email_attachment.c</code>.
 	 */
-	public final TableField<EmailAttachmentRecord, Timestamp> CHANGED = createField("changed", org.jooq.impl.SQLDataType.TIMESTAMP.nullable(false), this, "");
+	public final TableField<EmailAttachmentRecord, Timestamp> C = createField("c", org.jooq.impl.SQLDataType.TIMESTAMP.nullable(false), this, "");
 
 	/**
 	 * The column <code>email_attachment.name</code>.
@@ -125,22 +125,6 @@ public class EmailAttachment extends TableImpl<EmailAttachmentRecord> {
 	@Override
 	public List<UniqueKey<EmailAttachmentRecord>> getKeys() {
 		return Arrays.<UniqueKey<EmailAttachmentRecord>>asList(Keys.PK_EMAIL_ATTACHMENT);
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public TableField<EmailAttachmentRecord, Long> getRecordVersion() {
-		return VERSION;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public TableField<EmailAttachmentRecord, Timestamp> getRecordTimestamp() {
-		return CHANGED;
 	}
 
 	/**

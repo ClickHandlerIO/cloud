@@ -34,7 +34,7 @@ import org.jooq.impl.TableImpl;
 @SuppressWarnings({ "all", "unchecked", "rawtypes" })
 public class Evolution extends TableImpl<EvolutionRecord> {
 
-	private static final long serialVersionUID = -463759400;
+	private static final long serialVersionUID = -359850781;
 
 	/**
 	 * The reference instance of <code>evolution</code>
@@ -55,14 +55,14 @@ public class Evolution extends TableImpl<EvolutionRecord> {
 	public final TableField<EvolutionRecord, String> ID = createField("id", org.jooq.impl.SQLDataType.VARCHAR.length(32).nullable(false), this, "");
 
 	/**
-	 * The column <code>evolution.version</code>.
+	 * The column <code>evolution.v</code>.
 	 */
-	public final TableField<EvolutionRecord, Long> VERSION = createField("version", org.jooq.impl.SQLDataType.BIGINT.nullable(false), this, "");
+	public final TableField<EvolutionRecord, Long> V = createField("v", org.jooq.impl.SQLDataType.BIGINT.nullable(false), this, "");
 
 	/**
-	 * The column <code>evolution.changed</code>.
+	 * The column <code>evolution.c</code>.
 	 */
-	public final TableField<EvolutionRecord, Timestamp> CHANGED = createField("changed", org.jooq.impl.SQLDataType.TIMESTAMP.nullable(false), this, "");
+	public final TableField<EvolutionRecord, Timestamp> C = createField("c", org.jooq.impl.SQLDataType.TIMESTAMP.nullable(false), this, "");
 
 	/**
 	 * The column <code>evolution.success</code>.
@@ -110,22 +110,6 @@ public class Evolution extends TableImpl<EvolutionRecord> {
 	@Override
 	public List<UniqueKey<EvolutionRecord>> getKeys() {
 		return Arrays.<UniqueKey<EvolutionRecord>>asList(Keys.PK_EVOLUTION);
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public TableField<EvolutionRecord, Long> getRecordVersion() {
-		return VERSION;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public TableField<EvolutionRecord, Timestamp> getRecordTimestamp() {
-		return CHANGED;
 	}
 
 	/**

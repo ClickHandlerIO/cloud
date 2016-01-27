@@ -30,7 +30,7 @@ import org.jooq.impl.UpdatableRecordImpl;
 @SuppressWarnings({ "all", "unchecked", "rawtypes" })
 public class EmailRecipientJnlRecord extends UpdatableRecordImpl<EmailRecipientJnlRecord> implements Record16<String, Long, Timestamp, String, String, String, String, String, Timestamp, Timestamp, Timestamp, Timestamp, Timestamp, Timestamp, String, String> {
 
-	private static final long serialVersionUID = -1918673238;
+	private static final long serialVersionUID = 1152972475;
 
 	/**
 	 * Setter for <code>email_recipient_jnl.id</code>.
@@ -48,32 +48,32 @@ public class EmailRecipientJnlRecord extends UpdatableRecordImpl<EmailRecipientJ
 	}
 
 	/**
-	 * Setter for <code>email_recipient_jnl.version</code>.
+	 * Setter for <code>email_recipient_jnl.v</code>.
 	 */
-	public EmailRecipientJnlRecord setVersion(Long value) {
+	public EmailRecipientJnlRecord setV(Long value) {
 		setValue(1, value);
 		return this;
 	}
 
 	/**
-	 * Getter for <code>email_recipient_jnl.version</code>.
+	 * Getter for <code>email_recipient_jnl.v</code>.
 	 */
-	public Long getVersion() {
+	public Long getV() {
 		return (Long) getValue(1);
 	}
 
 	/**
-	 * Setter for <code>email_recipient_jnl.changed</code>.
+	 * Setter for <code>email_recipient_jnl.c</code>.
 	 */
-	public EmailRecipientJnlRecord setChanged(Timestamp value) {
+	public EmailRecipientJnlRecord setC(Timestamp value) {
 		setValue(2, value);
 		return this;
 	}
 
 	/**
-	 * Getter for <code>email_recipient_jnl.changed</code>.
+	 * Getter for <code>email_recipient_jnl.c</code>.
 	 */
-	public Timestamp getChanged() {
+	public Timestamp getC() {
 		return (Timestamp) getValue(2);
 	}
 
@@ -317,7 +317,7 @@ public class EmailRecipientJnlRecord extends UpdatableRecordImpl<EmailRecipientJ
 	 */
 	@Override
 	public Field<Long> field2() {
-		return EmailRecipientJnl.EMAIL_RECIPIENT_JNL.VERSION;
+		return EmailRecipientJnl.EMAIL_RECIPIENT_JNL.V;
 	}
 
 	/**
@@ -325,7 +325,7 @@ public class EmailRecipientJnlRecord extends UpdatableRecordImpl<EmailRecipientJ
 	 */
 	@Override
 	public Field<Timestamp> field3() {
-		return EmailRecipientJnl.EMAIL_RECIPIENT_JNL.CHANGED;
+		return EmailRecipientJnl.EMAIL_RECIPIENT_JNL.C;
 	}
 
 	/**
@@ -445,7 +445,7 @@ public class EmailRecipientJnlRecord extends UpdatableRecordImpl<EmailRecipientJ
 	 */
 	@Override
 	public Long value2() {
-		return getVersion();
+		return getV();
 	}
 
 	/**
@@ -453,7 +453,7 @@ public class EmailRecipientJnlRecord extends UpdatableRecordImpl<EmailRecipientJ
 	 */
 	@Override
 	public Timestamp value3() {
-		return getChanged();
+		return getC();
 	}
 
 	/**
@@ -574,7 +574,7 @@ public class EmailRecipientJnlRecord extends UpdatableRecordImpl<EmailRecipientJ
 	 */
 	@Override
 	public EmailRecipientJnlRecord value2(Long value) {
-		setVersion(value);
+		setV(value);
 		return this;
 	}
 
@@ -583,7 +583,7 @@ public class EmailRecipientJnlRecord extends UpdatableRecordImpl<EmailRecipientJ
 	 */
 	@Override
 	public EmailRecipientJnlRecord value3(Timestamp value) {
-		setChanged(value);
+		setC(value);
 		return this;
 	}
 
@@ -742,12 +742,12 @@ public class EmailRecipientJnlRecord extends UpdatableRecordImpl<EmailRecipientJ
 	/**
 	 * Create a detached, initialised EmailRecipientJnlRecord
 	 */
-	public EmailRecipientJnlRecord(String id, Long version, Timestamp changed, String emailId, String type, String name, String address, String status, Timestamp sent, Timestamp delivered, Timestamp bounced, Timestamp complaint, Timestamp failed, Timestamp opened, String contactId, String userId) {
+	public EmailRecipientJnlRecord(String id, Long v, Timestamp c, String emailId, String type, String name, String address, String status, Timestamp sent, Timestamp delivered, Timestamp bounced, Timestamp complaint, Timestamp failed, Timestamp opened, String contactId, String userId) {
 		super(EmailRecipientJnl.EMAIL_RECIPIENT_JNL);
 
 		setValue(0, id);
-		setValue(1, version);
-		setValue(2, changed);
+		setValue(1, v);
+		setValue(2, c);
 		setValue(3, emailId);
 		setValue(4, type);
 		setValue(5, name);

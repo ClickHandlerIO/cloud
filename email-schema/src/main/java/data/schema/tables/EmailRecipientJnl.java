@@ -34,7 +34,7 @@ import org.jooq.impl.TableImpl;
 @SuppressWarnings({ "all", "unchecked", "rawtypes" })
 public class EmailRecipientJnl extends TableImpl<EmailRecipientJnlRecord> {
 
-	private static final long serialVersionUID = 1334651780;
+	private static final long serialVersionUID = 2086121943;
 
 	/**
 	 * The reference instance of <code>email_recipient_jnl</code>
@@ -55,14 +55,14 @@ public class EmailRecipientJnl extends TableImpl<EmailRecipientJnlRecord> {
 	public final TableField<EmailRecipientJnlRecord, String> ID = createField("id", org.jooq.impl.SQLDataType.VARCHAR.length(32).nullable(false), this, "");
 
 	/**
-	 * The column <code>email_recipient_jnl.version</code>.
+	 * The column <code>email_recipient_jnl.v</code>.
 	 */
-	public final TableField<EmailRecipientJnlRecord, Long> VERSION = createField("version", org.jooq.impl.SQLDataType.BIGINT.nullable(false), this, "");
+	public final TableField<EmailRecipientJnlRecord, Long> V = createField("v", org.jooq.impl.SQLDataType.BIGINT.nullable(false), this, "");
 
 	/**
-	 * The column <code>email_recipient_jnl.changed</code>.
+	 * The column <code>email_recipient_jnl.c</code>.
 	 */
-	public final TableField<EmailRecipientJnlRecord, Timestamp> CHANGED = createField("changed", org.jooq.impl.SQLDataType.TIMESTAMP.nullable(false), this, "");
+	public final TableField<EmailRecipientJnlRecord, Timestamp> C = createField("c", org.jooq.impl.SQLDataType.TIMESTAMP.nullable(false), this, "");
 
 	/**
 	 * The column <code>email_recipient_jnl.email_id</code>.
@@ -165,22 +165,6 @@ public class EmailRecipientJnl extends TableImpl<EmailRecipientJnlRecord> {
 	@Override
 	public List<UniqueKey<EmailRecipientJnlRecord>> getKeys() {
 		return Arrays.<UniqueKey<EmailRecipientJnlRecord>>asList(Keys.PK_EMAIL_RECIPIENT_JNL);
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public TableField<EmailRecipientJnlRecord, Long> getRecordVersion() {
-		return VERSION;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public TableField<EmailRecipientJnlRecord, Timestamp> getRecordTimestamp() {
-		return CHANGED;
 	}
 
 	/**

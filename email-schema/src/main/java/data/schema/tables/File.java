@@ -34,7 +34,7 @@ import org.jooq.impl.TableImpl;
 @SuppressWarnings({ "all", "unchecked", "rawtypes" })
 public class File extends TableImpl<FileRecord> {
 
-	private static final long serialVersionUID = -190033323;
+	private static final long serialVersionUID = 1990673338;
 
 	/**
 	 * The reference instance of <code>file</code>
@@ -55,14 +55,14 @@ public class File extends TableImpl<FileRecord> {
 	public final TableField<FileRecord, String> ID = createField("id", org.jooq.impl.SQLDataType.VARCHAR.length(32).nullable(false), this, "");
 
 	/**
-	 * The column <code>file.version</code>.
+	 * The column <code>file.v</code>.
 	 */
-	public final TableField<FileRecord, Long> VERSION = createField("version", org.jooq.impl.SQLDataType.BIGINT.nullable(false), this, "");
+	public final TableField<FileRecord, Long> V = createField("v", org.jooq.impl.SQLDataType.BIGINT.nullable(false), this, "");
 
 	/**
-	 * The column <code>file.changed</code>.
+	 * The column <code>file.c</code>.
 	 */
-	public final TableField<FileRecord, Timestamp> CHANGED = createField("changed", org.jooq.impl.SQLDataType.TIMESTAMP.nullable(false), this, "");
+	public final TableField<FileRecord, Timestamp> C = createField("c", org.jooq.impl.SQLDataType.TIMESTAMP.nullable(false), this, "");
 
 	/**
 	 * The column <code>file.name</code>.
@@ -165,22 +165,6 @@ public class File extends TableImpl<FileRecord> {
 	@Override
 	public List<UniqueKey<FileRecord>> getKeys() {
 		return Arrays.<UniqueKey<FileRecord>>asList(Keys.PK_FILE);
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public TableField<FileRecord, Long> getRecordVersion() {
-		return VERSION;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public TableField<FileRecord, Timestamp> getRecordTimestamp() {
-		return CHANGED;
 	}
 
 	/**

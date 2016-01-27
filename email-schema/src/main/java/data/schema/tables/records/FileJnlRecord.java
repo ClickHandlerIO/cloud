@@ -30,7 +30,7 @@ import org.jooq.impl.UpdatableRecordImpl;
 @SuppressWarnings({ "all", "unchecked", "rawtypes" })
 public class FileJnlRecord extends UpdatableRecordImpl<FileJnlRecord> implements Record16<String, Long, Timestamp, String, String, String, String, String, Integer, Long, String, String, String, String, String, String> {
 
-	private static final long serialVersionUID = 1831918233;
+	private static final long serialVersionUID = 998564964;
 
 	/**
 	 * Setter for <code>file_jnl.id</code>.
@@ -48,32 +48,32 @@ public class FileJnlRecord extends UpdatableRecordImpl<FileJnlRecord> implements
 	}
 
 	/**
-	 * Setter for <code>file_jnl.version</code>.
+	 * Setter for <code>file_jnl.v</code>.
 	 */
-	public FileJnlRecord setVersion(Long value) {
+	public FileJnlRecord setV(Long value) {
 		setValue(1, value);
 		return this;
 	}
 
 	/**
-	 * Getter for <code>file_jnl.version</code>.
+	 * Getter for <code>file_jnl.v</code>.
 	 */
-	public Long getVersion() {
+	public Long getV() {
 		return (Long) getValue(1);
 	}
 
 	/**
-	 * Setter for <code>file_jnl.changed</code>.
+	 * Setter for <code>file_jnl.c</code>.
 	 */
-	public FileJnlRecord setChanged(Timestamp value) {
+	public FileJnlRecord setC(Timestamp value) {
 		setValue(2, value);
 		return this;
 	}
 
 	/**
-	 * Getter for <code>file_jnl.changed</code>.
+	 * Getter for <code>file_jnl.c</code>.
 	 */
-	public Timestamp getChanged() {
+	public Timestamp getC() {
 		return (Timestamp) getValue(2);
 	}
 
@@ -317,7 +317,7 @@ public class FileJnlRecord extends UpdatableRecordImpl<FileJnlRecord> implements
 	 */
 	@Override
 	public Field<Long> field2() {
-		return FileJnl.FILE_JNL.VERSION;
+		return FileJnl.FILE_JNL.V;
 	}
 
 	/**
@@ -325,7 +325,7 @@ public class FileJnlRecord extends UpdatableRecordImpl<FileJnlRecord> implements
 	 */
 	@Override
 	public Field<Timestamp> field3() {
-		return FileJnl.FILE_JNL.CHANGED;
+		return FileJnl.FILE_JNL.C;
 	}
 
 	/**
@@ -445,7 +445,7 @@ public class FileJnlRecord extends UpdatableRecordImpl<FileJnlRecord> implements
 	 */
 	@Override
 	public Long value2() {
-		return getVersion();
+		return getV();
 	}
 
 	/**
@@ -453,7 +453,7 @@ public class FileJnlRecord extends UpdatableRecordImpl<FileJnlRecord> implements
 	 */
 	@Override
 	public Timestamp value3() {
-		return getChanged();
+		return getC();
 	}
 
 	/**
@@ -574,7 +574,7 @@ public class FileJnlRecord extends UpdatableRecordImpl<FileJnlRecord> implements
 	 */
 	@Override
 	public FileJnlRecord value2(Long value) {
-		setVersion(value);
+		setV(value);
 		return this;
 	}
 
@@ -583,7 +583,7 @@ public class FileJnlRecord extends UpdatableRecordImpl<FileJnlRecord> implements
 	 */
 	@Override
 	public FileJnlRecord value3(Timestamp value) {
-		setChanged(value);
+		setC(value);
 		return this;
 	}
 
@@ -742,12 +742,12 @@ public class FileJnlRecord extends UpdatableRecordImpl<FileJnlRecord> implements
 	/**
 	 * Create a detached, initialised FileJnlRecord
 	 */
-	public FileJnlRecord(String id, Long version, Timestamp changed, String name, String description, String contentType, String md5, String etag, Integer compression, Long size, String storeBucket, String storeId, String keyAlgorithm, String keyKey, String keyMd5, String storageClass) {
+	public FileJnlRecord(String id, Long v, Timestamp c, String name, String description, String contentType, String md5, String etag, Integer compression, Long size, String storeBucket, String storeId, String keyAlgorithm, String keyKey, String keyMd5, String storageClass) {
 		super(FileJnl.FILE_JNL);
 
 		setValue(0, id);
-		setValue(1, version);
-		setValue(2, changed);
+		setValue(1, v);
+		setValue(2, c);
 		setValue(3, name);
 		setValue(4, description);
 		setValue(5, contentType);

@@ -30,7 +30,7 @@ import org.jooq.impl.UpdatableRecordImpl;
 @SuppressWarnings({ "all", "unchecked", "rawtypes" })
 public class EmailRecord extends UpdatableRecordImpl<EmailRecord> implements Record13<String, Long, Timestamp, String, String, String, String, String, String, String, String, Boolean, String> {
 
-	private static final long serialVersionUID = 500915271;
+	private static final long serialVersionUID = -290710630;
 
 	/**
 	 * Setter for <code>email.id</code>.
@@ -48,32 +48,32 @@ public class EmailRecord extends UpdatableRecordImpl<EmailRecord> implements Rec
 	}
 
 	/**
-	 * Setter for <code>email.version</code>.
+	 * Setter for <code>email.v</code>.
 	 */
-	public EmailRecord setVersion(Long value) {
+	public EmailRecord setV(Long value) {
 		setValue(1, value);
 		return this;
 	}
 
 	/**
-	 * Getter for <code>email.version</code>.
+	 * Getter for <code>email.v</code>.
 	 */
-	public Long getVersion() {
+	public Long getV() {
 		return (Long) getValue(1);
 	}
 
 	/**
-	 * Setter for <code>email.changed</code>.
+	 * Setter for <code>email.c</code>.
 	 */
-	public EmailRecord setChanged(Timestamp value) {
+	public EmailRecord setC(Timestamp value) {
 		setValue(2, value);
 		return this;
 	}
 
 	/**
-	 * Getter for <code>email.changed</code>.
+	 * Getter for <code>email.c</code>.
 	 */
-	public Timestamp getChanged() {
+	public Timestamp getC() {
 		return (Timestamp) getValue(2);
 	}
 
@@ -272,7 +272,7 @@ public class EmailRecord extends UpdatableRecordImpl<EmailRecord> implements Rec
 	 */
 	@Override
 	public Field<Long> field2() {
-		return Email.EMAIL.VERSION;
+		return Email.EMAIL.V;
 	}
 
 	/**
@@ -280,7 +280,7 @@ public class EmailRecord extends UpdatableRecordImpl<EmailRecord> implements Rec
 	 */
 	@Override
 	public Field<Timestamp> field3() {
-		return Email.EMAIL.CHANGED;
+		return Email.EMAIL.C;
 	}
 
 	/**
@@ -376,7 +376,7 @@ public class EmailRecord extends UpdatableRecordImpl<EmailRecord> implements Rec
 	 */
 	@Override
 	public Long value2() {
-		return getVersion();
+		return getV();
 	}
 
 	/**
@@ -384,7 +384,7 @@ public class EmailRecord extends UpdatableRecordImpl<EmailRecord> implements Rec
 	 */
 	@Override
 	public Timestamp value3() {
-		return getChanged();
+		return getC();
 	}
 
 	/**
@@ -481,7 +481,7 @@ public class EmailRecord extends UpdatableRecordImpl<EmailRecord> implements Rec
 	 */
 	@Override
 	public EmailRecord value2(Long value) {
-		setVersion(value);
+		setV(value);
 		return this;
 	}
 
@@ -490,7 +490,7 @@ public class EmailRecord extends UpdatableRecordImpl<EmailRecord> implements Rec
 	 */
 	@Override
 	public EmailRecord value3(Timestamp value) {
-		setChanged(value);
+		setC(value);
 		return this;
 	}
 
@@ -619,12 +619,12 @@ public class EmailRecord extends UpdatableRecordImpl<EmailRecord> implements Rec
 	/**
 	 * Create a detached, initialised EmailRecord
 	 */
-	public EmailRecord(String id, Long version, Timestamp changed, String userId, String to, String cc, String from, String replyTo, String subject, String textBody, String htmlBody, Boolean attachments, String messageId) {
+	public EmailRecord(String id, Long v, Timestamp c, String userId, String to, String cc, String from, String replyTo, String subject, String textBody, String htmlBody, Boolean attachments, String messageId) {
 		super(Email.EMAIL);
 
 		setValue(0, id);
-		setValue(1, version);
-		setValue(2, changed);
+		setValue(1, v);
+		setValue(2, c);
 		setValue(3, userId);
 		setValue(4, to);
 		setValue(5, cc);

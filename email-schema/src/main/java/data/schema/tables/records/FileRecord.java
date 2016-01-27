@@ -30,7 +30,7 @@ import org.jooq.impl.UpdatableRecordImpl;
 @SuppressWarnings({ "all", "unchecked", "rawtypes" })
 public class FileRecord extends UpdatableRecordImpl<FileRecord> implements Record16<String, Long, Timestamp, String, String, String, String, String, Integer, Long, String, String, String, String, String, String> {
 
-	private static final long serialVersionUID = 1578782610;
+	private static final long serialVersionUID = -56355165;
 
 	/**
 	 * Setter for <code>file.id</code>.
@@ -48,32 +48,32 @@ public class FileRecord extends UpdatableRecordImpl<FileRecord> implements Recor
 	}
 
 	/**
-	 * Setter for <code>file.version</code>.
+	 * Setter for <code>file.v</code>.
 	 */
-	public FileRecord setVersion(Long value) {
+	public FileRecord setV(Long value) {
 		setValue(1, value);
 		return this;
 	}
 
 	/**
-	 * Getter for <code>file.version</code>.
+	 * Getter for <code>file.v</code>.
 	 */
-	public Long getVersion() {
+	public Long getV() {
 		return (Long) getValue(1);
 	}
 
 	/**
-	 * Setter for <code>file.changed</code>.
+	 * Setter for <code>file.c</code>.
 	 */
-	public FileRecord setChanged(Timestamp value) {
+	public FileRecord setC(Timestamp value) {
 		setValue(2, value);
 		return this;
 	}
 
 	/**
-	 * Getter for <code>file.changed</code>.
+	 * Getter for <code>file.c</code>.
 	 */
-	public Timestamp getChanged() {
+	public Timestamp getC() {
 		return (Timestamp) getValue(2);
 	}
 
@@ -317,7 +317,7 @@ public class FileRecord extends UpdatableRecordImpl<FileRecord> implements Recor
 	 */
 	@Override
 	public Field<Long> field2() {
-		return File.FILE.VERSION;
+		return File.FILE.V;
 	}
 
 	/**
@@ -325,7 +325,7 @@ public class FileRecord extends UpdatableRecordImpl<FileRecord> implements Recor
 	 */
 	@Override
 	public Field<Timestamp> field3() {
-		return File.FILE.CHANGED;
+		return File.FILE.C;
 	}
 
 	/**
@@ -445,7 +445,7 @@ public class FileRecord extends UpdatableRecordImpl<FileRecord> implements Recor
 	 */
 	@Override
 	public Long value2() {
-		return getVersion();
+		return getV();
 	}
 
 	/**
@@ -453,7 +453,7 @@ public class FileRecord extends UpdatableRecordImpl<FileRecord> implements Recor
 	 */
 	@Override
 	public Timestamp value3() {
-		return getChanged();
+		return getC();
 	}
 
 	/**
@@ -574,7 +574,7 @@ public class FileRecord extends UpdatableRecordImpl<FileRecord> implements Recor
 	 */
 	@Override
 	public FileRecord value2(Long value) {
-		setVersion(value);
+		setV(value);
 		return this;
 	}
 
@@ -583,7 +583,7 @@ public class FileRecord extends UpdatableRecordImpl<FileRecord> implements Recor
 	 */
 	@Override
 	public FileRecord value3(Timestamp value) {
-		setChanged(value);
+		setC(value);
 		return this;
 	}
 
@@ -742,12 +742,12 @@ public class FileRecord extends UpdatableRecordImpl<FileRecord> implements Recor
 	/**
 	 * Create a detached, initialised FileRecord
 	 */
-	public FileRecord(String id, Long version, Timestamp changed, String name, String description, String contentType, String md5, String etag, Integer compression, Long size, String storeBucket, String storeId, String keyAlgorithm, String keyKey, String keyMd5, String storageClass) {
+	public FileRecord(String id, Long v, Timestamp c, String name, String description, String contentType, String md5, String etag, Integer compression, Long size, String storeBucket, String storeId, String keyAlgorithm, String keyKey, String keyMd5, String storageClass) {
 		super(File.FILE);
 
 		setValue(0, id);
-		setValue(1, version);
-		setValue(2, changed);
+		setValue(1, v);
+		setValue(2, c);
 		setValue(3, name);
 		setValue(4, description);
 		setValue(5, contentType);

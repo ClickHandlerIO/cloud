@@ -30,7 +30,7 @@ import org.jooq.impl.UpdatableRecordImpl;
 @SuppressWarnings({ "all", "unchecked", "rawtypes" })
 public class EvolutionRecord extends UpdatableRecordImpl<EvolutionRecord> implements Record5<String, Long, Timestamp, Boolean, Timestamp> {
 
-	private static final long serialVersionUID = 1256809340;
+	private static final long serialVersionUID = -1325102587;
 
 	/**
 	 * Setter for <code>evolution.id</code>.
@@ -48,32 +48,32 @@ public class EvolutionRecord extends UpdatableRecordImpl<EvolutionRecord> implem
 	}
 
 	/**
-	 * Setter for <code>evolution.version</code>.
+	 * Setter for <code>evolution.v</code>.
 	 */
-	public EvolutionRecord setVersion(Long value) {
+	public EvolutionRecord setV(Long value) {
 		setValue(1, value);
 		return this;
 	}
 
 	/**
-	 * Getter for <code>evolution.version</code>.
+	 * Getter for <code>evolution.v</code>.
 	 */
-	public Long getVersion() {
+	public Long getV() {
 		return (Long) getValue(1);
 	}
 
 	/**
-	 * Setter for <code>evolution.changed</code>.
+	 * Setter for <code>evolution.c</code>.
 	 */
-	public EvolutionRecord setChanged(Timestamp value) {
+	public EvolutionRecord setC(Timestamp value) {
 		setValue(2, value);
 		return this;
 	}
 
 	/**
-	 * Getter for <code>evolution.changed</code>.
+	 * Getter for <code>evolution.c</code>.
 	 */
-	public Timestamp getChanged() {
+	public Timestamp getC() {
 		return (Timestamp) getValue(2);
 	}
 
@@ -152,7 +152,7 @@ public class EvolutionRecord extends UpdatableRecordImpl<EvolutionRecord> implem
 	 */
 	@Override
 	public Field<Long> field2() {
-		return Evolution.EVOLUTION.VERSION;
+		return Evolution.EVOLUTION.V;
 	}
 
 	/**
@@ -160,7 +160,7 @@ public class EvolutionRecord extends UpdatableRecordImpl<EvolutionRecord> implem
 	 */
 	@Override
 	public Field<Timestamp> field3() {
-		return Evolution.EVOLUTION.CHANGED;
+		return Evolution.EVOLUTION.C;
 	}
 
 	/**
@@ -192,7 +192,7 @@ public class EvolutionRecord extends UpdatableRecordImpl<EvolutionRecord> implem
 	 */
 	@Override
 	public Long value2() {
-		return getVersion();
+		return getV();
 	}
 
 	/**
@@ -200,7 +200,7 @@ public class EvolutionRecord extends UpdatableRecordImpl<EvolutionRecord> implem
 	 */
 	@Override
 	public Timestamp value3() {
-		return getChanged();
+		return getC();
 	}
 
 	/**
@@ -233,7 +233,7 @@ public class EvolutionRecord extends UpdatableRecordImpl<EvolutionRecord> implem
 	 */
 	@Override
 	public EvolutionRecord value2(Long value) {
-		setVersion(value);
+		setV(value);
 		return this;
 	}
 
@@ -242,7 +242,7 @@ public class EvolutionRecord extends UpdatableRecordImpl<EvolutionRecord> implem
 	 */
 	@Override
 	public EvolutionRecord value3(Timestamp value) {
-		setChanged(value);
+		setC(value);
 		return this;
 	}
 
@@ -291,12 +291,12 @@ public class EvolutionRecord extends UpdatableRecordImpl<EvolutionRecord> implem
 	/**
 	 * Create a detached, initialised EvolutionRecord
 	 */
-	public EvolutionRecord(String id, Long version, Timestamp changed, Boolean success, Timestamp end) {
+	public EvolutionRecord(String id, Long v, Timestamp c, Boolean success, Timestamp end) {
 		super(Evolution.EVOLUTION);
 
 		setValue(0, id);
-		setValue(1, version);
-		setValue(2, changed);
+		setValue(1, v);
+		setValue(2, c);
 		setValue(3, success);
 		setValue(4, end);
 	}

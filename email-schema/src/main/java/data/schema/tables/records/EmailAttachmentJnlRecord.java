@@ -30,7 +30,7 @@ import org.jooq.impl.UpdatableRecordImpl;
 @SuppressWarnings({ "all", "unchecked", "rawtypes" })
 public class EmailAttachmentJnlRecord extends UpdatableRecordImpl<EmailAttachmentJnlRecord> implements Record8<String, Long, Timestamp, String, String, String, String, String> {
 
-	private static final long serialVersionUID = 1538530461;
+	private static final long serialVersionUID = -1216261518;
 
 	/**
 	 * Setter for <code>email_attachment_jnl.id</code>.
@@ -48,32 +48,32 @@ public class EmailAttachmentJnlRecord extends UpdatableRecordImpl<EmailAttachmen
 	}
 
 	/**
-	 * Setter for <code>email_attachment_jnl.version</code>.
+	 * Setter for <code>email_attachment_jnl.v</code>.
 	 */
-	public EmailAttachmentJnlRecord setVersion(Long value) {
+	public EmailAttachmentJnlRecord setV(Long value) {
 		setValue(1, value);
 		return this;
 	}
 
 	/**
-	 * Getter for <code>email_attachment_jnl.version</code>.
+	 * Getter for <code>email_attachment_jnl.v</code>.
 	 */
-	public Long getVersion() {
+	public Long getV() {
 		return (Long) getValue(1);
 	}
 
 	/**
-	 * Setter for <code>email_attachment_jnl.changed</code>.
+	 * Setter for <code>email_attachment_jnl.c</code>.
 	 */
-	public EmailAttachmentJnlRecord setChanged(Timestamp value) {
+	public EmailAttachmentJnlRecord setC(Timestamp value) {
 		setValue(2, value);
 		return this;
 	}
 
 	/**
-	 * Getter for <code>email_attachment_jnl.changed</code>.
+	 * Getter for <code>email_attachment_jnl.c</code>.
 	 */
-	public Timestamp getChanged() {
+	public Timestamp getC() {
 		return (Timestamp) getValue(2);
 	}
 
@@ -197,7 +197,7 @@ public class EmailAttachmentJnlRecord extends UpdatableRecordImpl<EmailAttachmen
 	 */
 	@Override
 	public Field<Long> field2() {
-		return EmailAttachmentJnl.EMAIL_ATTACHMENT_JNL.VERSION;
+		return EmailAttachmentJnl.EMAIL_ATTACHMENT_JNL.V;
 	}
 
 	/**
@@ -205,7 +205,7 @@ public class EmailAttachmentJnlRecord extends UpdatableRecordImpl<EmailAttachmen
 	 */
 	@Override
 	public Field<Timestamp> field3() {
-		return EmailAttachmentJnl.EMAIL_ATTACHMENT_JNL.CHANGED;
+		return EmailAttachmentJnl.EMAIL_ATTACHMENT_JNL.C;
 	}
 
 	/**
@@ -261,7 +261,7 @@ public class EmailAttachmentJnlRecord extends UpdatableRecordImpl<EmailAttachmen
 	 */
 	@Override
 	public Long value2() {
-		return getVersion();
+		return getV();
 	}
 
 	/**
@@ -269,7 +269,7 @@ public class EmailAttachmentJnlRecord extends UpdatableRecordImpl<EmailAttachmen
 	 */
 	@Override
 	public Timestamp value3() {
-		return getChanged();
+		return getC();
 	}
 
 	/**
@@ -326,7 +326,7 @@ public class EmailAttachmentJnlRecord extends UpdatableRecordImpl<EmailAttachmen
 	 */
 	@Override
 	public EmailAttachmentJnlRecord value2(Long value) {
-		setVersion(value);
+		setV(value);
 		return this;
 	}
 
@@ -335,7 +335,7 @@ public class EmailAttachmentJnlRecord extends UpdatableRecordImpl<EmailAttachmen
 	 */
 	@Override
 	public EmailAttachmentJnlRecord value3(Timestamp value) {
-		setChanged(value);
+		setC(value);
 		return this;
 	}
 
@@ -414,12 +414,12 @@ public class EmailAttachmentJnlRecord extends UpdatableRecordImpl<EmailAttachmen
 	/**
 	 * Create a detached, initialised EmailAttachmentJnlRecord
 	 */
-	public EmailAttachmentJnlRecord(String id, Long version, Timestamp changed, String name, String description, String mimeType, String fileId, String emailId) {
+	public EmailAttachmentJnlRecord(String id, Long v, Timestamp c, String name, String description, String mimeType, String fileId, String emailId) {
 		super(EmailAttachmentJnl.EMAIL_ATTACHMENT_JNL);
 
 		setValue(0, id);
-		setValue(1, version);
-		setValue(2, changed);
+		setValue(1, v);
+		setValue(2, c);
 		setValue(3, name);
 		setValue(4, description);
 		setValue(5, mimeType);

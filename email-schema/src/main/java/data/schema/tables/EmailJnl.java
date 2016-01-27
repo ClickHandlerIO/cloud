@@ -34,7 +34,7 @@ import org.jooq.impl.TableImpl;
 @SuppressWarnings({ "all", "unchecked", "rawtypes" })
 public class EmailJnl extends TableImpl<EmailJnlRecord> {
 
-	private static final long serialVersionUID = 1582325186;
+	private static final long serialVersionUID = 709019243;
 
 	/**
 	 * The reference instance of <code>email_jnl</code>
@@ -55,14 +55,14 @@ public class EmailJnl extends TableImpl<EmailJnlRecord> {
 	public final TableField<EmailJnlRecord, String> ID = createField("id", org.jooq.impl.SQLDataType.VARCHAR.length(32).nullable(false), this, "");
 
 	/**
-	 * The column <code>email_jnl.version</code>.
+	 * The column <code>email_jnl.v</code>.
 	 */
-	public final TableField<EmailJnlRecord, Long> VERSION = createField("version", org.jooq.impl.SQLDataType.BIGINT.nullable(false), this, "");
+	public final TableField<EmailJnlRecord, Long> V = createField("v", org.jooq.impl.SQLDataType.BIGINT.nullable(false), this, "");
 
 	/**
-	 * The column <code>email_jnl.changed</code>.
+	 * The column <code>email_jnl.c</code>.
 	 */
-	public final TableField<EmailJnlRecord, Timestamp> CHANGED = createField("changed", org.jooq.impl.SQLDataType.TIMESTAMP.nullable(false), this, "");
+	public final TableField<EmailJnlRecord, Timestamp> C = createField("c", org.jooq.impl.SQLDataType.TIMESTAMP.nullable(false), this, "");
 
 	/**
 	 * The column <code>email_jnl.user_id</code>.
@@ -150,22 +150,6 @@ public class EmailJnl extends TableImpl<EmailJnlRecord> {
 	@Override
 	public List<UniqueKey<EmailJnlRecord>> getKeys() {
 		return Arrays.<UniqueKey<EmailJnlRecord>>asList(Keys.PK_EMAIL_JNL);
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public TableField<EmailJnlRecord, Long> getRecordVersion() {
-		return VERSION;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public TableField<EmailJnlRecord, Timestamp> getRecordTimestamp() {
-		return CHANGED;
 	}
 
 	/**
