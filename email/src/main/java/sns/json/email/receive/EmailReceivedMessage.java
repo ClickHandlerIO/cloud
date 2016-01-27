@@ -3,17 +3,20 @@ package sns.json.email.receive;
 import com.fasterxml.jackson.annotation.JsonGetter;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSetter;
+import sns.json.common.Message;
 
 /**
  * Created by admin on 1/26/16.
  */
-public class EmailReceiveMessage {
+public class EmailReceivedMessage extends Message {
     @JsonProperty
     private String notificationType;
     @JsonProperty
     private Receipt receipt;
     @JsonProperty
     private ReceiveMail mail;
+    @JsonProperty
+    private String content;
 
     @JsonGetter
     public ReceiveMail getMail() {
@@ -43,5 +46,15 @@ public class EmailReceiveMessage {
     @JsonSetter
     public void setReceipt(Receipt receipt) {
         this.receipt = receipt;
+    }
+
+    @JsonGetter
+    public String getContent() {
+        return content;
+    }
+
+    @JsonSetter
+    public void setContent(String content) {
+        this.content = content;
     }
 }

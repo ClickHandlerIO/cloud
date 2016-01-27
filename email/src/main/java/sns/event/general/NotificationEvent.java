@@ -1,6 +1,7 @@
-package sns.event;
+package sns.event.general;
 
-import sns.json.GeneralMessage;
+import sns.event.common.SNSEvent;
+import sns.json.general.GeneralMessage;
 
 /**
  * Created by admin on 1/25/16.

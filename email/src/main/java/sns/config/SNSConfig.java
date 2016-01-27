@@ -11,10 +11,13 @@ public class SNSConfig {
     private static int parallelism = 2;
     private static int batchSize = 10;
     private static List<String> generalSubscriptionArnList;
-    private static List<String> emailSubscriptionArnList;
+    private static List<String> emailNotifySubscriptionArnList;
+    private static List<String> emailReceivedSubscriptionArnList;
 
     public SNSConfig() {
         generalSubscriptionArnList = new ArrayList<>();
+        emailNotifySubscriptionArnList = new ArrayList<>();
+        emailReceivedSubscriptionArnList = new ArrayList<>();
         // add subscriptions
     }
 
@@ -26,16 +29,24 @@ public class SNSConfig {
         SNSConfig.batchSize = batchSize;
     }
 
-    public static List<String> getEmailSubscriptionArnList() {
-        return emailSubscriptionArnList;
+    public static List<String> getEmailNotifySubscriptionArnList() {
+        return emailNotifySubscriptionArnList;
     }
 
-    public static void setEmailSubscriptionArnList(List<String> emailSubscriptionArnList) {
-        SNSConfig.emailSubscriptionArnList = emailSubscriptionArnList;
+    public static void setEmailNotifySubscriptionArnList(List<String> emailNotifySubscriptionArnList) {
+        SNSConfig.emailNotifySubscriptionArnList = emailNotifySubscriptionArnList;
+    }
+
+    public static List<String> getEmailReceivedSubscriptionArnList() {
+        return emailReceivedSubscriptionArnList;
+    }
+
+    public static void setEmailReceivedSubscriptionArnList(List<String> emailReceivedSubscriptionArnList) {
+        SNSConfig.emailReceivedSubscriptionArnList = emailReceivedSubscriptionArnList;
     }
 
     public static void addEmailSubcriptionArn(String arn) {
-        SNSConfig.emailSubscriptionArnList.add(arn);
+        SNSConfig.emailNotifySubscriptionArnList.add(arn);
     }
 
     public static List<String> getGeneralSubscriptionArnList() {

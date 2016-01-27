@@ -1,4 +1,4 @@
-package sns.routing;
+package sns.routing.general;
 
 import io.vertx.core.http.HttpMethod;
 import io.vertx.rxjava.core.http.HttpServerRequest;
@@ -7,7 +7,8 @@ import org.apache.commons.codec.binary.Base64;
 import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import sns.json.GeneralMessage;
+import sns.json.general.GeneralMessage;
+import sns.routing.common.SNSRouteHandler;
 import sns.service.SNSService;
 
 import java.io.InputStream;

@@ -12,9 +12,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import sns.config.SNSConfig;
 import sns.handler.SNSQueueHandler;
-import sns.json.Message;
-import sns.routing.SNSEmailRouteHandler;
-import sns.routing.SNSGeneralRouteHandler;
+import sns.json.common.Message;
+import sns.routing.email.SNSEmailNotifyRouteHandler;
+import sns.routing.email.SNSEmailReceiveRouteHandler;
+import sns.routing.general.SNSGeneralRouteHandler;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -26,7 +27,8 @@ import javax.inject.Singleton;
 public class SNSService extends AbstractIdleService {
     private final static Logger LOG = LoggerFactory.getLogger(SNSService.class);
     private SNSGeneralRouteHandler generalRouteHandler;
-    private SNSEmailRouteHandler emailRouteHandler;
+    private SNSEmailNotifyRouteHandler emailNotifyRouteHandler;
+    private SNSEmailReceiveRouteHandler emailReceiveRouteHandler;
     private QueueService<Message> queueService;
 
     @Inject
@@ -40,7 +42,8 @@ public class SNSService extends AbstractIdleService {
         this.queueService = factory.build(mainConfig);
 
         this.generalRouteHandler = new SNSGeneralRouteHandler(this);
-        this.emailRouteHandler = new SNSEmailRouteHandler(this);
+        this.emailNotifyRouteHandler = new SNSEmailNotifyRouteHandler(this);
+        this.emailReceiveRouteHandler = new SNSEmailReceiveRouteHandler(this);
     }
 
     @Override
@@ -64,8 +67,12 @@ public class SNSService extends AbstractIdleService {
         this.queueService.add(message);
     }
 
-    public SNSEmailRouteHandler getEmailRouteHandler() {
-        return emailRouteHandler;
+    public SNSEmailNotifyRouteHandler getEmailNotifyRouteHandler() {
+        return emailNotifyRouteHandler;
+    }
+
+    public SNSEmailReceiveRouteHandler getEmailReceiveRouteHandler() {
+        return emailReceiveRouteHandler;
     }
 
     public SNSGeneralRouteHandler getGeneralRouteHandler() {

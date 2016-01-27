@@ -1,4 +1,4 @@
-package sns.event;
+package sns.event.common;
 
 import event.AbstractVertxEvent;
 

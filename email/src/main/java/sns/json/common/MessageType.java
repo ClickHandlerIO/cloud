@@ -1,4 +1,4 @@
-package sns.json;
+package sns.json.common;
 
 /**
  * Created by admin on 1/22/16.
@@ -11,6 +11,7 @@ public class MessageType {
     public final static String BOUNCE = "Bounce";
     public final static String COMPLAINT = "Complaint";
     public final static String UNKNOWN = "Unknown";
+    public final static String RECEIVED = "Received";
     
     public static Type getTypeEnum(String in) {
         switch (in) {
@@ -26,6 +27,8 @@ public class MessageType {
                 return Type.BOUNCE;
             case COMPLAINT:
                 return Type.COMPLAINT;
+            case RECEIVED:
+                return Type.RECEIVED;
             default:
                 return Type.UNKNOWN;
         }
@@ -45,6 +48,8 @@ public class MessageType {
                 return BOUNCE;
             case COMPLAINT:
                 return COMPLAINT;
+            case RECEIVED:
+                return RECEIVED;
             default:
                 return UNKNOWN;
         }
@@ -57,6 +62,7 @@ public class MessageType {
         DELIVERY,
         BOUNCE,
         COMPLAINT,
+        RECEIVED,
         UNKNOWN
     }
 }

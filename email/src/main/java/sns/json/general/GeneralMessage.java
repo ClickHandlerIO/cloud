@@ -1,4 +1,4 @@
-package sns.json;
+package sns.json.general;
 
 import com.fasterxml.jackson.annotation.JsonGetter;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -7,7 +7,7 @@ import com.fasterxml.jackson.annotation.JsonSetter;
 /**
  * Created by admin on 1/21/16.
  */
-public class GeneralMessage extends sns.json.Message {
+public class GeneralMessage extends sns.json.common.Message {
     
     @JsonProperty
     private String Type;

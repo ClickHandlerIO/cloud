@@ -1,22 +1,23 @@
-package sns.routing;
+package sns.routing.email;
 
 import io.vertx.rxjava.core.http.HttpServerRequest;
+import io.vertx.rxjava.ext.web.RoutingContext;
 import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
-import io.vertx.rxjava.ext.web.RoutingContext;
 import org.slf4j.LoggerFactory;
-import sns.json.email.notify.EmailNotifyMessage;
+import sns.json.email.receive.EmailReceivedMessage;
+import sns.routing.common.SNSRouteHandler;
 import sns.service.SNSService;
 
 /**
  * Created by admin on 1/22/16.
  */
 
-public class SNSEmailRouteHandler extends SNSRouteHandler<EmailNotifyMessage> {
-    private final static Logger LOG = LoggerFactory.getLogger(SNSEmailRouteHandler.class);
+public class SNSEmailReceiveRouteHandler extends SNSRouteHandler<EmailReceivedMessage> {
+    private final static Logger LOG = LoggerFactory.getLogger(SNSEmailReceiveRouteHandler.class);
 
-    public SNSEmailRouteHandler(SNSService snsService) {
-        super(snsService, EmailNotifyMessage.class);
+    public SNSEmailReceiveRouteHandler(SNSService snsService) {
+        super(snsService, EmailReceivedMessage.class);
     }
 
     @Override
@@ -31,7 +32,7 @@ public class SNSEmailRouteHandler extends SNSRouteHandler<EmailNotifyMessage> {
         }
 
         // get message from body json
-        EmailNotifyMessage message = getMessage(routingContext.getBody().toString());
+        EmailReceivedMessage message = getMessage(routingContext.getBody().toString());
         if (message == null /*|| !isMessageSignatureValid(message)*/) {
             routingContext.fail(HttpStatus.SC_BAD_REQUEST);
             return;

@@ -6,13 +6,22 @@ import io.clickhandler.queue.QueueHandler;
 import io.clickhandler.sql.db.Database;
 import io.clickhandler.sql.db.DatabaseSession;
 import io.vertx.rxjava.core.eventbus.EventBus;
-import sns.json.*;
+import sns.event.email.EmailBounceEvent;
+import sns.event.email.EmailComplaintEvent;
+import sns.event.email.EmailDeliveryEvent;
+import sns.event.email.EmailReceivedEvent;
+import sns.event.general.NotificationEvent;
+import sns.event.general.SubscriptionConfirmEvent;
+import sns.event.general.UnsubscribeConfirmEvent;
 import org.jooq.Record;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import sns.config.SNSConfig;
-import sns.event.*;
+import sns.json.common.Message;
+import sns.json.common.MessageType;
 import sns.json.email.notify.*;
+import sns.json.email.receive.EmailReceivedMessage;
+import sns.json.general.GeneralMessage;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -30,7 +39,8 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
 
     public static final Logger LOG = LoggerFactory.getLogger(SNSQueueHandler.class);
     private final List<String> generalSubscriptionArnList;
-    private final List<String> emailSubscriptionArnList;
+    private final List<String> emailNotifySubscriptionArnList;
+    private final List<String> emailReceivedSubscriptionArnList;
 
     private final DatabaseSession db;
     private final EventBus eventBus;
@@ -40,7 +50,8 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
         this.db = db.getSession();
         this.eventBus = eventBus;
         this.generalSubscriptionArnList = SNSConfig.getGeneralSubscriptionArnList();
-        this.emailSubscriptionArnList = SNSConfig.getEmailSubscriptionArnList();
+        this.emailNotifySubscriptionArnList = SNSConfig.getEmailNotifySubscriptionArnList();
+        this.emailReceivedSubscriptionArnList = SNSConfig.getEmailReceivedSubscriptionArnList();
     }
 
     @Override
@@ -48,13 +59,18 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
         messages.forEach(this::handle);
     }
 
-    private void handle(Message message) {
-
+    public void handle(Message message) {
+        if(message == null) {
+            return;
+        }
         if(message instanceof GeneralMessage) {
             handleMessage((GeneralMessage) message);
         }
         if(message instanceof EmailNotifyMessage) {
             handleMessage((EmailNotifyMessage) message);
+        }
+        if (message instanceof EmailReceivedMessage) {
+            handleMessage((EmailReceivedMessage) message);
         }
     }
 
@@ -88,7 +104,7 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
         }
     }
 
-    protected void handleSubscribe(GeneralMessage message) {
+    private void handleSubscribe(GeneralMessage message) {
         try {
             // open subscription URL to confirm.
             Scanner sc = new Scanner(new URL(message.getSubscribeURL()).openStream());
@@ -101,9 +117,10 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
         } catch (Exception e) {
             LOG.error("Failed to confirm subscription to topic ARN: " + message.getTopicArn());
         }
+        eventBus.publish(SubscriptionConfirmEvent.ADDRESS, new SubscriptionConfirmEvent(message));
     }
 
-    protected void handleUnsubscribe(GeneralMessage message) {
+    private void handleUnsubscribe(GeneralMessage message) {
         try {
             // open subscription URL
             Scanner sc = new Scanner(new URL(message.getUnsubscribeURL()).openStream());
@@ -116,9 +133,10 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
         } catch (Exception e) {
             LOG.error("Failed to handle unsubscribe to topic ARN: " + message.getTopicArn());
         }
+        eventBus.publish(UnsubscribeConfirmEvent.ADDRESS, new UnsubscribeConfirmEvent(message));
     }
 
-    protected void handleNotification(GeneralMessage message) {
+    private void handleNotification(GeneralMessage message) {
         eventBus.publish(NotificationEvent.ADDRESS, new NotificationEvent(message));
     }
 
@@ -126,12 +144,12 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
     // Email Status Notification Handling
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    protected void handleMessage(EmailNotifyMessage message) {
+    private void handleMessage(EmailNotifyMessage message) {
         if(message == null || message.getNotificationType() == null) {
             LOG.error("Invalid EmailNotifyMessage Received");
             return;
         }
-        if(!emailSubscriptionArnList.contains(message.getMail().getSourceArn())) {
+        if(!emailNotifySubscriptionArnList.contains(message.getMail().getSourceArn())) {
             return;
         }
         switch (MessageType.getTypeEnum(message.getNotificationType())) {
@@ -150,45 +168,51 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
         }
     }
 
-    protected void handleDelivery(EmailNotifyMessage message) {
+    private void handleDelivery(EmailNotifyMessage message) {
         final NotifyMail mail = message.getMail();
         final Delivery delivery = message.getDelivery();
         List<EmailRecipientEntity> recipientEntities = getRecipients(mail);
-        recipientEntities.stream().filter(recipientEntity -> delivery.getRecipients().contains(recipientEntity.getAddress())).forEach(recipientEntity -> {
-            recipientEntity.setStatus(RecipientStatus.DELIVERED);
-            recipientEntity.setDelivered(new Date());
-            db.update(recipientEntity);
-        });
+        if(recipientEntities != null) {
+            recipientEntities.stream().filter(recipientEntity -> delivery.getRecipients().contains(recipientEntity.getAddress())).forEach(recipientEntity -> {
+                recipientEntity.setStatus(RecipientStatus.DELIVERED);
+                recipientEntity.setDelivered(new Date());
+                db.update(recipientEntity);
+            });
+        }
         eventBus.publish(EmailDeliveryEvent.ADDRESS, new EmailDeliveryEvent(message));
     }
 
-    protected void handleBounce(EmailNotifyMessage message) {
+    private void handleBounce(EmailNotifyMessage message) {
         final NotifyMail mail = message.getMail();
         final Bounce bounce = message.getBounce();
         final List<String> bouncedRecipients = bounce.getStringRecipients();
         List<EmailRecipientEntity> recipientEntities = getRecipients(mail);
-        recipientEntities.stream().filter(recipientEntity -> bouncedRecipients.contains(recipientEntity.getAddress())).forEach(recipientEntity -> {
-            recipientEntity.setStatus(RecipientStatus.BOUNCED);
-            recipientEntity.setBounced(new Date());
-            db.update(recipientEntity);
-        });
+        if(recipientEntities != null) {
+            recipientEntities.stream().filter(recipientEntity -> bouncedRecipients.contains(recipientEntity.getAddress())).forEach(recipientEntity -> {
+                recipientEntity.setStatus(RecipientStatus.BOUNCED);
+                recipientEntity.setBounced(new Date());
+                db.update(recipientEntity);
+            });
+        }
         eventBus.publish(EmailBounceEvent.ADDRESS, new EmailBounceEvent(message));
     }
 
-    protected void handleComplaint(EmailNotifyMessage message) {
+    private void handleComplaint(EmailNotifyMessage message) {
         final NotifyMail mail = message.getMail();
         final Complaint complaint = message.getComplaint();
         final List<String> complainedRecipients = complaint.getStringRecipients();
         List<EmailRecipientEntity> recipientEntities = getRecipients(mail);
-        recipientEntities.stream().filter(recipientEntity -> complainedRecipients.contains(recipientEntity.getAddress())).forEach(recipientEntity -> {
-            recipientEntity.setStatus(RecipientStatus.COMPLAINT);
-            recipientEntity.setComplaint(new Date());
-            db.update(recipientEntity);
-        });
+        if(recipientEntities != null) {
+            recipientEntities.stream().filter(recipientEntity -> complainedRecipients.contains(recipientEntity.getAddress())).forEach(recipientEntity -> {
+                recipientEntity.setStatus(RecipientStatus.COMPLAINT);
+                recipientEntity.setComplaint(new Date());
+                db.update(recipientEntity);
+            });
+        }
         eventBus.publish(EmailComplaintEvent.ADDRESS, new EmailComplaintEvent(message));
     }
 
-    protected List<EmailRecipientEntity> getRecipients(NotifyMail mail) {
+    private List<EmailRecipientEntity> getRecipients(NotifyMail mail) {
         Record record = db.select(EMAIL.fields()).from(EMAIL).where(EMAIL.MESSAGE_ID.eq(mail.getMessageId())).fetchAny();
         if(record == null) {
             LOG.error("Email Record Not Found for MessageId: " + mail.getMessageId());
@@ -207,4 +231,31 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
         }
         return recipientEntities;
     }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Email Status Notification Handling
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    private void handleMessage(EmailReceivedMessage message) {
+        if(message == null || message.getNotificationType() == null) {
+            LOG.error("Invalid EmailReceivedMessage Received");
+            return;
+        }
+        if(!emailReceivedSubscriptionArnList.contains(message.getReceipt().getAction().getTopicArn())) {
+            return;
+        }
+        switch (MessageType.getTypeEnum(message.getNotificationType())) {
+            case RECEIVED:
+                handleReceived(message);
+                break;
+            default:
+                LOG.error("Invalid EmailReceivedMessage Received with Type: " + message.getNotificationType());
+                break;
+        }
+    }
+
+    private void handleReceived(EmailReceivedMessage message) {
+        eventBus.publish(EmailReceivedEvent.ADDRESS, new EmailReceivedEvent(message));
+    }
+
 }

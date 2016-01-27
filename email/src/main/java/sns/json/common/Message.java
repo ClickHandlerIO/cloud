@@ -1,4 +1,4 @@
-package sns.json;
+package sns.json.common;
 
 /**
  * Created by admin on 1/26/16.

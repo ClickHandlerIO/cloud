@@ -1,19 +1,20 @@
-package sns.event;
+package sns.event.email;
 
+import sns.event.common.SNSEvent;
 import sns.json.email.notify.EmailNotifyMessage;
 
 /**
  * Created by admin on 1/25/16.
  */
-public class EmailComplaintEvent extends SNSEvent {
-    public static final String ADDRESS = "sns-email-complaint";
+public class EmailBounceEvent extends SNSEvent {
+    public static final String ADDRESS = "sns-email-bounce";
     private EmailNotifyMessage message;
 
-    public EmailComplaintEvent() {
+    public EmailBounceEvent() {
         super(ADDRESS);
     }
 
-    public EmailComplaintEvent(EmailNotifyMessage message) {
+    public EmailBounceEvent(EmailNotifyMessage message) {
         super(ADDRESS);
         this.message = message;
     }

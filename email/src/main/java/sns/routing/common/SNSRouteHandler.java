@@ -1,4 +1,4 @@
-package sns.routing;
+package sns.routing.common;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.vertx.core.Handler;
@@ -7,7 +7,7 @@ import io.vertx.rxjava.core.MultiMap;
 import io.vertx.rxjava.ext.web.RoutingContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import sns.json.Message;
+import sns.json.common.Message;
 import sns.service.SNSService;
 
 /**
