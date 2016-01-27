@@ -61,7 +61,7 @@ public class TableMapping extends Mapping {
 
     protected TableMapping(final SqlSchema.DbTable schemaTable,
                            final SqlSchema.DbTable schemaJournalTable,
-                           final DatabasePlatform dbPlatform,
+                           final SqlPlatform dbPlatform,
                            final Class objectClass,
                            final Map<String, Table> jooqMap) {
         super(objectClass, dbPlatform);
@@ -366,7 +366,7 @@ public class TableMapping extends Mapping {
 
     public static TableMapping create(final SqlSchema.DbTable schemaTable,
                                       final SqlSchema.DbTable schemaJournalTable,
-                                      final DatabasePlatform dbPlatform,
+                                      final SqlPlatform dbPlatform,
                                       final Class entityClass,
                                       final Map<String, Table> jooqMap) {
         return new TableMapping(schemaTable, schemaJournalTable, dbPlatform, entityClass, jooqMap);

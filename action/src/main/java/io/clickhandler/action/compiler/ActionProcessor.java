@@ -60,7 +60,7 @@ public class ActionProcessor extends AbstractProcessor {
         annotataions.add(RemoteAction.class.getCanonicalName());
         annotataions.add(QueueAction.class.getCanonicalName());
         annotataions.add(InternalAction.class.getCanonicalName());
-        annotataions.add(ActionConfig.class.getCanonicalName());
+//        annotataions.add(ActionConfig.class.getCanonicalName());
         return annotataions;
     }
 
@@ -92,9 +92,15 @@ public class ActionProcessor extends AbstractProcessor {
                 final RemoteAction remoteAction = annotatedElement.getAnnotation(RemoteAction.class);
                 final QueueAction queueAction = annotatedElement.getAnnotation(QueueAction.class);
                 final InternalAction internalAction = annotatedElement.getAnnotation(InternalAction.class);
-                final ActionConfig actionConfig = annotatedElement.getAnnotation(ActionConfig.class);
 
                 final TypeElement element = elementUtils.getTypeElement(annotatedElement.toString());
+
+//                ActionConfig actionConfig;
+//                try {
+//                    actionConfig = annotatedElement.getAnnotation(ActionConfig.class);
+//                } catch (Throwable e) {
+//                    actionConfig = null;
+//                }
 
                 ActionHolder holder = actionMap.get(element.getQualifiedName().toString());
 
@@ -103,7 +109,7 @@ public class ActionProcessor extends AbstractProcessor {
                     holder.type = element;
                 }
 
-                holder.config = actionConfig;
+//                holder.config = actionConfig;
 
                 if (holder.remoteAction == null) {
                     holder.remoteAction = remoteAction;
@@ -248,7 +254,7 @@ public class ActionProcessor extends AbstractProcessor {
 
             // Build empty @Inject constructor.
             final MethodSpec ctor = MethodSpec.constructorBuilder()
-                .addAnnotation(AnnotationSpec.builder(Inject.class).build())
+                .addAnnotation(Inject.class)
                 .addModifiers(Modifier.PUBLIC)
                 .build();
 

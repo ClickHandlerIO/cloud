@@ -12,8 +12,8 @@ import java.util.Date;
  */
 public class AbstractEntity implements HasId, HasVersion, Serializable {
     public static final String ID = "id";
-    public static final String VERSION = "version";
-    public static final String CHANGED = "changed";
+    public static final String VERSION = "v";
+    public static final String CHANGED = "c";
 
     @Column(name = ID, length = 32, nullable = false)
     protected String id;

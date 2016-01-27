@@ -31,9 +31,9 @@ public class Mapping {
     public final Property[] properties;
     public final Property[] embeddedProperties;
     public final Map<String, Property> columnsMap = new LinkedHashMap<>();
-    public final DatabasePlatform dbPlatform;
+    public final SqlPlatform dbPlatform;
 
-    public Mapping(Class entityClass, DatabasePlatform dbPlatform) {
+    public Mapping(Class entityClass, SqlPlatform dbPlatform) {
         this.entityClass = entityClass;
         this.nativeType = SqlUtils.isNativeType(entityClass);
         this.fastClass = FastClass.create(entityClass);

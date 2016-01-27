@@ -6,8 +6,6 @@ import dagger.Provides;
 import io.Action_LocatorRoot;
 import io.Io_Locator;
 import rx.Observable;
-import rx.Subscriber;
-import rx.functions.Action1;
 
 import javax.inject.Singleton;
 
@@ -21,7 +19,9 @@ public class Main {
             System.err.println("Another Subscriber: " + result);
         });
 
-        actions().myAsyncAction().observe("Bye").subscribe(System.err::println);
+        actions().myAsyncAction()
+            .observe("Bye")
+            .subscribe(System.err::println);
     }
 
     public static Action_Locator actions() {
@@ -40,7 +40,8 @@ public class Main {
 
     @Module
     public static class M {
-        @Provides String string() {
+        @Provides
+        String string() {
             return "";
         }
     }

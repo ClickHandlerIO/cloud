@@ -8,8 +8,8 @@ import org.jooq.util.jaxb.Database;
  *
  */
 public class SchemaGenerator {
-    public static Configuration buildConfiguration(DbConfig dbConfig, String packageName, String directory) {
-        final String url = Strings.nullToEmpty(dbConfig.getUrl()).trim();
+    public static Configuration buildConfiguration(SqlConfig sqlConfig, String packageName, String directory) {
+        final String url = Strings.nullToEmpty(sqlConfig.getUrl()).trim();
 
         String jdbcDriver = "";
         String jooqDatabase = "";
@@ -22,19 +22,19 @@ public class SchemaGenerator {
         } else if (url.startsWith("jdbc:mysql")) {
             jdbcDriver = "com.mysql.jdbc.Driver";
             jooqDatabase = "org.jooq.util.mysql.MySQLDatabase";
-            inputSchema = dbConfig.getSchema();
+            inputSchema = sqlConfig.getSchema();
         } else if (url.startsWith("jdbc:postgres")) {
             jdbcDriver = "org.postgresql.Driver";
             jooqDatabase = "org.jooq.util.postgres.PostgresDatabase";
-            inputSchema = dbConfig.getSchema();
+            inputSchema = sqlConfig.getSchema();
         }
 
         return new Configuration()
             .withJdbc(new Jdbc()
                 .withDriver(jdbcDriver)
                 .withUrl(url)
-                .withUser(dbConfig.getUser())
-                .withPassword(dbConfig.getPassword()))
+                .withUser(sqlConfig.getUser())
+                .withPassword(sqlConfig.getPassword()))
             .withGenerator(new org.jooq.util.jaxb.Generator()
                 .withName("org.jooq.util.DefaultGenerator")
                 .withGenerate(new Generate()

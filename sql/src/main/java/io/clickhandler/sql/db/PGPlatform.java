@@ -6,8 +6,8 @@ import org.jooq.SQLDialect;
 /**
  *
  */
-public class PGPlatform extends DatabasePlatform {
-    public PGPlatform(Configuration configuration, DbConfig configEntity) {
+public class PGPlatform extends SqlPlatform {
+    public PGPlatform(Configuration configuration, SqlConfig configEntity) {
         super(configuration, configEntity);
     }
 

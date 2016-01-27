@@ -1,5 +1,7 @@
 package io.clickhandler.action;
 
+import com.netflix.hystrix.HystrixCommandProperties;
+
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -39,7 +41,7 @@ public @interface ActionConfig {
     /**
      * @return
      */
-    int maxExecutionMillis() default 0;
+    int maxExecutionMillis() default 5000;
 
     /**
      * @return
@@ -50,4 +52,6 @@ public @interface ActionConfig {
      * @return
      */
     Class<? extends ActionProvider> provider() default ActionProvider.class;
+
+    ExecutionIsolationStrategy isolationStrategy() default ExecutionIsolationStrategy.SEMAPHORE;
 }
