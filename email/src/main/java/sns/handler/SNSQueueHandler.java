@@ -17,11 +17,11 @@ import org.jooq.Record;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import sns.config.SNSConfig;
-import sns.json.common.Message;
-import sns.json.common.MessageType;
-import sns.json.email.notify.*;
-import sns.json.email.receive.EmailReceivedMessage;
-import sns.json.general.GeneralMessage;
+import sns.data.json.common.Message;
+import sns.data.json.common.MessageType;
+import sns.data.json.email.notify.*;
+import sns.data.json.email.receive.EmailReceivedMessage;
+import sns.data.json.general.GeneralMessage;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;

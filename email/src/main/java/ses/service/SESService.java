@@ -1,7 +1,7 @@
 package ses.service;
 
 import com.sun.istack.internal.NotNull;
-import common.AbstractEmailService;
+import common.service.AbstractEmailService;
 import io.clickhandler.sql.db.Database;
 import io.vertx.rxjava.core.eventbus.EventBus;
 import org.slf4j.Logger;

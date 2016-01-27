@@ -1,7 +1,7 @@
 package sns.event.email;
 
 import common.event.AbstractEmailNotificationEvent;
-import sns.json.email.receive.EmailReceivedMessage;
+import sns.data.json.email.receive.EmailReceivedMessage;
 
 /**
  * Created by admin on 1/25/16.

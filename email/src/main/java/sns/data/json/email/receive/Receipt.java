@@ -1,4 +1,4 @@
-package sns.json.email.receive;
+package sns.data.json.email.receive;
 
 import com.fasterxml.jackson.annotation.JsonGetter;
 import com.fasterxml.jackson.annotation.JsonProperty;

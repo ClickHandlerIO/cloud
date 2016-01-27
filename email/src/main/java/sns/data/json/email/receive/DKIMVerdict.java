@@ -1,4 +1,4 @@
-package sns.json.email.receive;
+package sns.data.json.email.receive;
 
 import com.fasterxml.jackson.annotation.JsonGetter;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -7,7 +7,7 @@ import com.fasterxml.jackson.annotation.JsonSetter;
 /**
  * Created by admin on 1/26/16.
  */
-public class SPFVerdict {
+public class DKIMVerdict {
     @JsonProperty
     private String status;
 

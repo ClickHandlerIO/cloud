@@ -1,9 +1,9 @@
-package sns.json.email.notify;
+package sns.data.json.email.notify;
 
 import com.fasterxml.jackson.annotation.JsonGetter;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSetter;
-import sns.json.common.Message;
+import sns.data.json.common.Message;
 
 /**
  * Created by admin on 1/20/16.

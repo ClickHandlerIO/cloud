@@ -1,6 +1,7 @@
-package common;
+package common.data;
 
 import com.sun.istack.internal.NotNull;
+import common.handler.SendHandler;
 import entity.EmailEntity;
 
 /**

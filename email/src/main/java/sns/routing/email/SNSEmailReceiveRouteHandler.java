@@ -5,7 +5,7 @@ import io.vertx.rxjava.ext.web.RoutingContext;
 import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import sns.json.email.receive.EmailReceivedMessage;
+import sns.data.json.email.receive.EmailReceivedMessage;
 import sns.routing.common.SNSRouteHandler;
 import sns.service.SNSService;
 

@@ -1,7 +1,7 @@
 package sns.event.general;
 
 import common.event.AbstractNotificationEvent;
-import sns.json.general.GeneralMessage;
+import sns.data.json.general.GeneralMessage;
 
 /**
  * Created by admin on 1/25/16.

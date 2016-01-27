@@ -12,7 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import sns.config.SNSConfig;
 import sns.handler.SNSQueueHandler;
-import sns.json.common.Message;
+import sns.data.json.common.Message;
 import sns.routing.email.SNSEmailNotifyRouteHandler;
 import sns.routing.email.SNSEmailReceiveRouteHandler;
 import sns.routing.general.SNSGeneralRouteHandler;

@@ -7,7 +7,7 @@ import org.apache.commons.codec.binary.Base64;
 import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import sns.json.general.GeneralMessage;
+import sns.data.json.general.GeneralMessage;
 import sns.routing.common.SNSRouteHandler;
 import sns.service.SNSService;
 
@@ -43,7 +43,7 @@ public class SNSGeneralRouteHandler extends SNSRouteHandler<GeneralMessage> {
             return;
         }
 
-        // get message from body sns.json
+        // get message from body sns.data.json
         GeneralMessage message = getMessage(routingContext.getBody().toString());
         if (message == null || !isMessageSignatureValid(message)) {
             routingContext.fail(HttpStatus.SC_BAD_REQUEST);
