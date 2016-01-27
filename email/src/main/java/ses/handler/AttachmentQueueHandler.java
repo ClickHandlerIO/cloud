@@ -1,6 +1,5 @@
 package ses.handler;
 
-import com.amazonaws.util.IOUtils;
 import entity.FileEntity;
 import io.clickhandler.queue.QueueHandler;
 import io.clickhandler.sql.db.Database;
@@ -41,7 +40,7 @@ public class AttachmentQueueHandler implements QueueHandler<DownloadRequest> {
                 throw new Exception("FileEntity Not Found");
             }
             // get file data from S3
-            final byte[] data = IOUtils.toByteArray(s3Service.get(file));
+            final byte[] data = s3Service.get(file).get().getBytes();
             if(data == null) {
                 throw new Exception("Failed to Get S3 File Data");
             }
