@@ -1,6 +1,6 @@
 package s3.service;
 
-import common.AbstractFileService;
+import common.service.AbstractFileService;
 import entity.FileEntity;
 import io.vertx.core.Handler;
 import io.vertx.core.buffer.Buffer;
@@ -9,7 +9,6 @@ import io.vertx.core.http.HttpServerFileUpload;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import s3.config.S3Config;
-import s3.superS3t.S3Client;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;

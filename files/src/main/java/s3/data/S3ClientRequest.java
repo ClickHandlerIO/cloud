@@ -1,4 +1,4 @@
-package s3.superS3t;
+package s3.data;
 
 import io.vertx.core.Handler;
 import io.vertx.core.MultiMap;
@@ -18,7 +18,7 @@ import java.util.Base64;
 import java.util.Date;
 
 /**
- * Created by Brad Behnke on 1/27/16.
+ *  Code from https://github.com/spartango/SuperS3t
  */
 
 public class S3ClientRequest implements HttpClientRequest {
