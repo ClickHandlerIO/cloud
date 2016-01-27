@@ -1,4 +1,4 @@
-package sns.json;
+package sns.json.email.notify;
 
 import com.fasterxml.jackson.annotation.JsonGetter;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -7,7 +7,7 @@ import com.fasterxml.jackson.annotation.JsonSetter;
 /**
  * Created by admin on 1/20/16.
  */
-public class SNSRecipient {
+public class Recipient {
     @JsonProperty
     private String emailAddress;
     @JsonProperty

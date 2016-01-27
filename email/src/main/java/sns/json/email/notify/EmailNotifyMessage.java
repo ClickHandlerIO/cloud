@@ -1,54 +1,55 @@
-package sns.json;
+package sns.json.email.notify;
 
 import com.fasterxml.jackson.annotation.JsonGetter;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSetter;
+import sns.json.Message;
 
 /**
  * Created by admin on 1/20/16.
  */
-public class SNSEmailMessage extends SNSMessage{
+public class EmailNotifyMessage extends Message {
     @JsonProperty
     private String notificationType;
     @JsonProperty
-    private SNSBounce bounce;
+    private Bounce bounce;
     @JsonProperty
-    private SNSComplaint complaint;
+    private Complaint complaint;
     @JsonProperty
-    private SNSDelivery delivery;
+    private Delivery delivery;
     @JsonProperty
-    private SNSMail mail;
+    private NotifyMail mail;
 
     @JsonGetter
-    public SNSBounce getBounce() {
+    public Bounce getBounce() {
         return bounce;
     }
     @JsonSetter
-    public void setBounce(SNSBounce bounce) {
+    public void setBounce(Bounce bounce) {
         this.bounce = bounce;
     }
     @JsonGetter
-    public SNSComplaint getComplaint() {
+    public Complaint getComplaint() {
         return complaint;
     }
     @JsonSetter
-    public void setComplaint(SNSComplaint complaint) {
+    public void setComplaint(Complaint complaint) {
         this.complaint = complaint;
     }
     @JsonGetter
-    public SNSDelivery getDelivery() {
+    public Delivery getDelivery() {
         return delivery;
     }
     @JsonSetter
-    public void setDelivery(SNSDelivery delivery) {
+    public void setDelivery(Delivery delivery) {
         this.delivery = delivery;
     }
     @JsonGetter
-    public SNSMail getMail() {
+    public NotifyMail getMail() {
         return mail;
     }
     @JsonSetter
-    public void setMail(SNSMail mail) {
+    public void setMail(NotifyMail mail) {
         this.mail = mail;
     }
     @JsonGetter

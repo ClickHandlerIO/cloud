@@ -1,28 +1,28 @@
 package sns.event;
 
-import sns.json.SNSEmailMessage;
+import sns.json.email.notify.EmailNotifyMessage;
 
 /**
  * Created by admin on 1/25/16.
  */
 public class EmailDeliveryEvent extends SNSEvent {
     public static final String ADDRESS = "sns-email-delivery";
-    private SNSEmailMessage message;
+    private EmailNotifyMessage message;
 
     public EmailDeliveryEvent() {
         super(ADDRESS);
     }
 
-    public EmailDeliveryEvent(SNSEmailMessage message) {
+    public EmailDeliveryEvent(EmailNotifyMessage message) {
         super(ADDRESS);
         this.message = message;
     }
 
-    public SNSEmailMessage getMessage() {
+    public EmailNotifyMessage getMessage() {
         return message;
     }
 
-    public void setMessage(SNSEmailMessage message) {
+    public void setMessage(EmailNotifyMessage message) {
         this.message = message;
     }
 }

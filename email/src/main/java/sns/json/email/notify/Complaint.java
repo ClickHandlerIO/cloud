@@ -1,4 +1,4 @@
-package sns.json;
+package sns.json.email.notify;
 
 import com.fasterxml.jackson.annotation.JsonGetter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -11,11 +11,11 @@ import java.util.stream.Collectors;
 /**
  * Created by admin on 1/20/16.
  */
-public class SNSComplaint {
+public class Complaint {
     @JsonProperty
     private String userAgent;
     @JsonProperty
-    private List<SNSRecipient> complainedRecipients;
+    private List<Recipient> complainedRecipients;
     @JsonProperty
     private String complaintFeedbackType;
     @JsonProperty
@@ -34,11 +34,11 @@ public class SNSComplaint {
         this.arrivalDate = arrivalDate;
     }
     @JsonGetter
-    public List<SNSRecipient> getComplainedRecipients() {
+    public List<Recipient> getComplainedRecipients() {
         return complainedRecipients;
     }
     @JsonSetter
-    public void setComplainedRecipients(List<SNSRecipient> complainedRecipients) {
+    public void setComplainedRecipients(List<Recipient> complainedRecipients) {
         this.complainedRecipients = complainedRecipients;
     }
     @JsonGetter
@@ -76,6 +76,6 @@ public class SNSComplaint {
 
     @JsonIgnore
     public List<String> getStringRecipients(){
-        return complainedRecipients.stream().map(SNSRecipient::getEmailAddress).collect(Collectors.toList());
+        return complainedRecipients.stream().map(Recipient::getEmailAddress).collect(Collectors.toList());
     }
 }

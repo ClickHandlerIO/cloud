@@ -5,18 +5,18 @@ import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import io.vertx.rxjava.ext.web.RoutingContext;
 import org.slf4j.LoggerFactory;
-import sns.json.SNSEmailMessage;
+import sns.json.email.notify.EmailNotifyMessage;
 import sns.service.SNSService;
 
 /**
  * Created by admin on 1/22/16.
  */
 
-public class SNSEmailRouteHandler extends SNSRouteHandler<SNSEmailMessage> {
+public class SNSEmailRouteHandler extends SNSRouteHandler<EmailNotifyMessage> {
     private final static Logger LOG = LoggerFactory.getLogger(SNSEmailRouteHandler.class);
 
     public SNSEmailRouteHandler(SNSService snsService) {
-        super(snsService, SNSEmailMessage.class);
+        super(snsService, EmailNotifyMessage.class);
     }
 
     @Override
@@ -31,7 +31,7 @@ public class SNSEmailRouteHandler extends SNSRouteHandler<SNSEmailMessage> {
         }
 
         // get message from body json
-        SNSEmailMessage message = getMessage(routingContext.getBody().toString());
+        EmailNotifyMessage message = getMessage(routingContext.getBody().toString());
         if (message == null /*|| !isMessageSignatureValid(message)*/) {
             routingContext.fail(HttpStatus.SC_BAD_REQUEST);
             return;

@@ -1,28 +1,28 @@
 package sns.event;
 
-import sns.json.SNSGeneralMessage;
+import sns.json.GeneralMessage;
 
 /**
  * Created by admin on 1/25/16.
  */
 public class NotificationEvent extends SNSEvent {
     public static final String ADDRESS = "sns-notification";
-    private SNSGeneralMessage message;
+    private GeneralMessage message;
 
     public NotificationEvent() {
         super(ADDRESS);
     }
 
-    public NotificationEvent(SNSGeneralMessage message) {
+    public NotificationEvent(GeneralMessage message) {
         super(ADDRESS);
         this.message = message;
     }
 
-    public SNSGeneralMessage getMessage() {
+    public GeneralMessage getMessage() {
         return message;
     }
 
-    public void setMessage(SNSGeneralMessage message) {
+    public void setMessage(GeneralMessage message) {
         this.message = message;
     }
 }

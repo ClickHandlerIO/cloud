@@ -12,7 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import sns.config.SNSConfig;
 import sns.handler.SNSQueueHandler;
-import sns.json.SNSMessage;
+import sns.json.Message;
 import sns.routing.SNSEmailRouteHandler;
 import sns.routing.SNSGeneralRouteHandler;
 
@@ -27,7 +27,7 @@ public class SNSService extends AbstractIdleService {
     private final static Logger LOG = LoggerFactory.getLogger(SNSService.class);
     private SNSGeneralRouteHandler generalRouteHandler;
     private SNSEmailRouteHandler emailRouteHandler;
-    private QueueService<SNSMessage> queueService;
+    private QueueService<Message> queueService;
 
     @Inject
     public SNSService(EventBus eventBus, Database db) {
@@ -35,7 +35,7 @@ public class SNSService extends AbstractIdleService {
         // initialize sns queues
         QueueFactory factory = new LocalQueueServiceFactory();
         // main queue and handler
-        final QueueServiceConfig<SNSMessage> mainConfig = new QueueServiceConfig<>(SNSConfig.getName(), SNSMessage.class, true, SNSConfig.getParallelism(), SNSConfig.getBatchSize());
+        final QueueServiceConfig<Message> mainConfig = new QueueServiceConfig<>(SNSConfig.getName(), Message.class, true, SNSConfig.getParallelism(), SNSConfig.getBatchSize());
         mainConfig.setHandler(new SNSQueueHandler(eventBus, db));
         this.queueService = factory.build(mainConfig);
 
@@ -57,7 +57,7 @@ public class SNSService extends AbstractIdleService {
         LOG.info("SNSService Shutdown");
     }
 
-    public void enqueueMessage(SNSMessage message) {
+    public void enqueueMessage(Message message) {
         if(message == null) {
             return;
         }

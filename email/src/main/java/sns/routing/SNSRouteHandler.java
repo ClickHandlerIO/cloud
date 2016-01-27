@@ -7,13 +7,13 @@ import io.vertx.rxjava.core.MultiMap;
 import io.vertx.rxjava.ext.web.RoutingContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import sns.json.SNSMessage;
+import sns.json.Message;
 import sns.service.SNSService;
 
 /**
  * Created by admin on 1/22/16.
  */
-public abstract class SNSRouteHandler<T extends SNSMessage> implements Handler<RoutingContext> {
+public abstract class SNSRouteHandler<T extends Message> implements Handler<RoutingContext> {
 
     private final static Logger LOG = LoggerFactory.getLogger(SNSRouteHandler.class);
     protected final SNSService snsService;
@@ -63,7 +63,7 @@ public abstract class SNSRouteHandler<T extends SNSMessage> implements Handler<R
         return info;
     }
 
-    protected void passToService(SNSMessage message) {
+    protected void passToService(Message message) {
         snsService.enqueueMessage(message);
     }
 

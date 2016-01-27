@@ -1,4 +1,4 @@
-package sns.json;
+package sns.json.email.notify;
 
 import com.fasterxml.jackson.annotation.JsonGetter;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -9,7 +9,7 @@ import java.util.List;
 /**
  * Created by admin on 1/20/16.
  */
-public class SNSDelivery {
+public class Delivery {
     @JsonProperty
     private String timestamp;
     @JsonProperty

@@ -3,7 +3,7 @@ package sns.json;
 /**
  * Created by admin on 1/22/16.
  */
-public class SNSMessageType {
+public class MessageType {
     public final static String SUB_CONFIRM = "SubscriptionConfirmation";
     public final static String UNSUB_CONFIRM = "UnsubscribeConfirmation";
     public final static String NOTIFICATION = "Notification";
