@@ -12,7 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ses.data.DownloadRequest;
 import ses.data.SESSendRequest;
-import ses.event.SESSendEvent;
+import ses.event.SESEmailSentEvent;
 import ses.service.SESAttachmentService;
 import ses.service.SESSendService;
 
@@ -67,7 +67,7 @@ public class SESPrepQueueHandler  implements QueueHandler<SESSendRequest>, Table
                 sesSendService.enqueue(request);
             } catch (Exception e) {
                 request.getSendHandler().onFailure(e);
-                eventBus.publish(SESSendEvent.ADDRESS, new SESSendEvent(request.getEmailEntity(), false));
+                eventBus.publish(SESEmailSentEvent.ADDRESS, new SESEmailSentEvent(request.getEmailEntity(), false));
             }
         }
     }

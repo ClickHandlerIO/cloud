@@ -18,7 +18,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ses.config.SESConfig;
 import ses.data.SESSendRequest;
-import ses.event.SESSendEvent;
+import ses.event.SESEmailSentEvent;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
@@ -130,6 +130,6 @@ public class SESSendQueueHandler implements QueueHandler<SESSendRequest>, Tables
     }
 
     private void publishEvent(EmailEntity emailEntity, boolean success) {
-        eventBus.publish(SESSendEvent.ADDRESS, new SESSendEvent(emailEntity, success));
+        eventBus.publish(SESEmailSentEvent.ADDRESS, new SESEmailSentEvent(emailEntity, success));
     }
 }

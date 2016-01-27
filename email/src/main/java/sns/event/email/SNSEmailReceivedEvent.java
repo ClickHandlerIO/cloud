@@ -1,20 +1,20 @@
 package sns.event.email;
 
-import sns.event.common.SNSEvent;
+import common.event.AbstractEmailNotificationEvent;
 import sns.json.email.receive.EmailReceivedMessage;
 
 /**
  * Created by admin on 1/25/16.
  */
-public class EmailReceivedEvent extends SNSEvent {
+public class SNSEmailReceivedEvent extends AbstractEmailNotificationEvent {
     public static final String ADDRESS = "sns-email-received";
     private EmailReceivedMessage message;
 
-    public EmailReceivedEvent() {
+    public SNSEmailReceivedEvent() {
         super(ADDRESS);
     }
 
-    public EmailReceivedEvent(EmailReceivedMessage message) {
+    public SNSEmailReceivedEvent(EmailReceivedMessage message) {
         super(ADDRESS);
         this.message = message;
     }

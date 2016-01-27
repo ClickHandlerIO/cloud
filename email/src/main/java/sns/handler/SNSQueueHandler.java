@@ -6,13 +6,13 @@ import io.clickhandler.queue.QueueHandler;
 import io.clickhandler.sql.db.Database;
 import io.clickhandler.sql.db.DatabaseSession;
 import io.vertx.rxjava.core.eventbus.EventBus;
-import sns.event.email.EmailBounceEvent;
-import sns.event.email.EmailComplaintEvent;
-import sns.event.email.EmailDeliveryEvent;
-import sns.event.email.EmailReceivedEvent;
-import sns.event.general.NotificationEvent;
-import sns.event.general.SubscriptionConfirmEvent;
-import sns.event.general.UnsubscribeConfirmEvent;
+import sns.event.email.SNSEmailBounceEvent;
+import sns.event.email.SNSEmailComplaintEvent;
+import sns.event.email.SNSEmailDeliveryEvent;
+import sns.event.email.SNSEmailReceivedEvent;
+import sns.event.general.SNSNotificationEvent;
+import sns.event.general.SNSSubscriptionConfirmEvent;
+import sns.event.general.SNSUnsubscribeConfirmEvent;
 import org.jooq.Record;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -117,7 +117,7 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
         } catch (Exception e) {
             LOG.error("Failed to confirm subscription to topic ARN: " + message.getTopicArn());
         }
-        eventBus.publish(SubscriptionConfirmEvent.ADDRESS, new SubscriptionConfirmEvent(message));
+        eventBus.publish(SNSSubscriptionConfirmEvent.ADDRESS, new SNSSubscriptionConfirmEvent(message));
     }
 
     private void handleUnsubscribe(GeneralMessage message) {
@@ -133,11 +133,11 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
         } catch (Exception e) {
             LOG.error("Failed to handle unsubscribe to topic ARN: " + message.getTopicArn());
         }
-        eventBus.publish(UnsubscribeConfirmEvent.ADDRESS, new UnsubscribeConfirmEvent(message));
+        eventBus.publish(SNSUnsubscribeConfirmEvent.ADDRESS, new SNSUnsubscribeConfirmEvent(message));
     }
 
     private void handleNotification(GeneralMessage message) {
-        eventBus.publish(NotificationEvent.ADDRESS, new NotificationEvent(message));
+        eventBus.publish(SNSNotificationEvent.ADDRESS, new SNSNotificationEvent(message));
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -179,7 +179,7 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
                 db.update(recipientEntity);
             });
         }
-        eventBus.publish(EmailDeliveryEvent.ADDRESS, new EmailDeliveryEvent(message));
+        eventBus.publish(SNSEmailDeliveryEvent.ADDRESS, new SNSEmailDeliveryEvent(message));
     }
 
     private void handleBounce(EmailNotifyMessage message) {
@@ -194,7 +194,7 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
                 db.update(recipientEntity);
             });
         }
-        eventBus.publish(EmailBounceEvent.ADDRESS, new EmailBounceEvent(message));
+        eventBus.publish(SNSEmailBounceEvent.ADDRESS, new SNSEmailBounceEvent(message));
     }
 
     private void handleComplaint(EmailNotifyMessage message) {
@@ -209,7 +209,7 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
                 db.update(recipientEntity);
             });
         }
-        eventBus.publish(EmailComplaintEvent.ADDRESS, new EmailComplaintEvent(message));
+        eventBus.publish(SNSEmailComplaintEvent.ADDRESS, new SNSEmailComplaintEvent(message));
     }
 
     private List<EmailRecipientEntity> getRecipients(NotifyMail mail) {
@@ -255,7 +255,7 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
     }
 
     private void handleReceived(EmailReceivedMessage message) {
-        eventBus.publish(EmailReceivedEvent.ADDRESS, new EmailReceivedEvent(message));
+        eventBus.publish(SNSEmailReceivedEvent.ADDRESS, new SNSEmailReceivedEvent(message));
     }
 
 }

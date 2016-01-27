@@ -1,20 +1,20 @@
 package sns.event.general;
 
-import sns.event.common.SNSEvent;
+import common.event.AbstractNotificationEvent;
 import sns.json.general.GeneralMessage;
 
 /**
  * Created by admin on 1/25/16.
  */
-public class NotificationEvent extends SNSEvent {
-    public static final String ADDRESS = "sns-notification";
+public class SNSUnsubscribeConfirmEvent extends AbstractNotificationEvent {
+    public static final String ADDRESS = "sns-unsubscribe";
     private GeneralMessage message;
 
-    public NotificationEvent() {
+    public SNSUnsubscribeConfirmEvent() {
         super(ADDRESS);
     }
 
-    public NotificationEvent(GeneralMessage message) {
+    public SNSUnsubscribeConfirmEvent(GeneralMessage message) {
         super(ADDRESS);
         this.message = message;
     }
