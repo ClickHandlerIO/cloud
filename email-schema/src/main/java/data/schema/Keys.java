@@ -14,8 +14,6 @@ import data.schema.tables.Evolution;
 import data.schema.tables.EvolutionChange;
 import data.schema.tables.File;
 import data.schema.tables.FileJnl;
-import data.schema.tables.SNSNotification;
-import data.schema.tables.SNSNotificationJnl;
 import data.schema.tables.records.EmailAttachmentJnlRecord;
 import data.schema.tables.records.EmailAttachmentRecord;
 import data.schema.tables.records.EmailJnlRecord;
@@ -26,8 +24,6 @@ import data.schema.tables.records.EvolutionChangeRecord;
 import data.schema.tables.records.EvolutionRecord;
 import data.schema.tables.records.FileJnlRecord;
 import data.schema.tables.records.FileRecord;
-import data.schema.tables.records.SNSNotificationJnlRecord;
-import data.schema.tables.records.SNSNotificationRecord;
 
 import javax.annotation.Generated;
 
@@ -64,12 +60,10 @@ public class Keys {
 	public static final UniqueKey<EmailRecipientJnlRecord> PK_EMAIL_RECIPIENT_JNL = UniqueKeys0.PK_EMAIL_RECIPIENT_JNL;
 	public static final UniqueKey<EmailAttachmentRecord> PK_EMAIL_ATTACHMENT = UniqueKeys0.PK_EMAIL_ATTACHMENT;
 	public static final UniqueKey<EmailAttachmentJnlRecord> PK_EMAIL_ATTACHMENT_JNL = UniqueKeys0.PK_EMAIL_ATTACHMENT_JNL;
-	public static final UniqueKey<EvolutionRecord> PK_EVOLUTION = UniqueKeys0.PK_EVOLUTION;
-	public static final UniqueKey<SNSNotificationRecord> PK_S_N_S_NOTIFICATION = UniqueKeys0.PK_S_N_S_NOTIFICATION;
-	public static final UniqueKey<SNSNotificationJnlRecord> PK_S_N_S_NOTIFICATION_JNL = UniqueKeys0.PK_S_N_S_NOTIFICATION_JNL;
 	public static final UniqueKey<EvolutionChangeRecord> PK_EVOLUTION_CHANGE = UniqueKeys0.PK_EVOLUTION_CHANGE;
 	public static final UniqueKey<FileRecord> PK_FILE = UniqueKeys0.PK_FILE;
 	public static final UniqueKey<FileJnlRecord> PK_FILE_JNL = UniqueKeys0.PK_FILE_JNL;
+	public static final UniqueKey<EvolutionRecord> PK_EVOLUTION = UniqueKeys0.PK_EVOLUTION;
 
 	// -------------------------------------------------------------------------
 	// FOREIGN KEY definitions
@@ -87,11 +81,9 @@ public class Keys {
 		public static final UniqueKey<EmailRecipientJnlRecord> PK_EMAIL_RECIPIENT_JNL = createUniqueKey(EmailRecipientJnl.EMAIL_RECIPIENT_JNL, EmailRecipientJnl.EMAIL_RECIPIENT_JNL.ID, EmailRecipientJnl.EMAIL_RECIPIENT_JNL.VERSION);
 		public static final UniqueKey<EmailAttachmentRecord> PK_EMAIL_ATTACHMENT = createUniqueKey(EmailAttachment.EMAIL_ATTACHMENT, EmailAttachment.EMAIL_ATTACHMENT.ID);
 		public static final UniqueKey<EmailAttachmentJnlRecord> PK_EMAIL_ATTACHMENT_JNL = createUniqueKey(EmailAttachmentJnl.EMAIL_ATTACHMENT_JNL, EmailAttachmentJnl.EMAIL_ATTACHMENT_JNL.ID, EmailAttachmentJnl.EMAIL_ATTACHMENT_JNL.VERSION);
-		public static final UniqueKey<EvolutionRecord> PK_EVOLUTION = createUniqueKey(Evolution.EVOLUTION, Evolution.EVOLUTION.ID);
-		public static final UniqueKey<SNSNotificationRecord> PK_S_N_S_NOTIFICATION = createUniqueKey(SNSNotification.S_N_S_NOTIFICATION, SNSNotification.S_N_S_NOTIFICATION.ID);
-		public static final UniqueKey<SNSNotificationJnlRecord> PK_S_N_S_NOTIFICATION_JNL = createUniqueKey(SNSNotificationJnl.S_N_S_NOTIFICATION_JNL, SNSNotificationJnl.S_N_S_NOTIFICATION_JNL.ID, SNSNotificationJnl.S_N_S_NOTIFICATION_JNL.VERSION);
 		public static final UniqueKey<EvolutionChangeRecord> PK_EVOLUTION_CHANGE = createUniqueKey(EvolutionChange.EVOLUTION_CHANGE, EvolutionChange.EVOLUTION_CHANGE.ID);
 		public static final UniqueKey<FileRecord> PK_FILE = createUniqueKey(File.FILE, File.FILE.ID);
 		public static final UniqueKey<FileJnlRecord> PK_FILE_JNL = createUniqueKey(FileJnl.FILE_JNL, FileJnl.FILE_JNL.ID, FileJnl.FILE_JNL.VERSION);
+		public static final UniqueKey<EvolutionRecord> PK_EVOLUTION = createUniqueKey(Evolution.EVOLUTION, Evolution.EVOLUTION.ID);
 	}
 }

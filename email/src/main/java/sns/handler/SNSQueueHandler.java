@@ -1,12 +1,12 @@
 package sns.handler;
 
-import com.google.common.eventbus.EventBus;
 import data.schema.Tables;
 import entity.*;
 import io.clickhandler.queue.QueueHandler;
 import io.clickhandler.sql.db.Database;
 import io.clickhandler.sql.db.DatabaseSession;
-import json.*;
+import io.vertx.rxjava.core.eventbus.EventBus;
+import sns.json.*;
 import org.jooq.Record;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -79,7 +79,6 @@ public class SNSQueueHandler implements QueueHandler<SNSMessage>, Tables {
                 break;
             case NOTIFICATION:
                 if(generalSubscriptionArnList.contains(message.getTopicArn())) {
-                    db.store(new SNSNotificationEntity(message));
                     handleNotification(message);
                 }
                 break;
@@ -97,7 +96,6 @@ public class SNSQueueHandler implements QueueHandler<SNSMessage>, Tables {
             while (sc.hasNextLine()) {
                 sb.append(sc.nextLine());
             }
-            eventBus.post(new SubscriptionEvent(message));
             // TODO ensure XML body reflects successful confirmation.
         } catch (Exception e) {
             LOG.error("Failed to confirm subscription to topic ARN: " + message.getTopicArn());
@@ -113,7 +111,6 @@ public class SNSQueueHandler implements QueueHandler<SNSMessage>, Tables {
             while (sc.hasNextLine()) {
                 sb.append(sc.nextLine());
             }
-            eventBus.post(new UnsubscribeEvent(message));
             // TODO ensure XML body reflects successful unsubcribe or subscribe.
         } catch (Exception e) {
             LOG.error("Failed to handle unsubscribe to topic ARN: " + message.getTopicArn());
@@ -121,7 +118,7 @@ public class SNSQueueHandler implements QueueHandler<SNSMessage>, Tables {
     }
 
     protected void handleNotification(SNSGeneralMessage message) {
-        eventBus.post(new NotificationEvent(message));
+        eventBus.publish(NotificationEvent.ADDRESS, new NotificationEvent(message));
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -138,15 +135,12 @@ public class SNSQueueHandler implements QueueHandler<SNSMessage>, Tables {
         }
         switch (SNSMessageType.getTypeEnum(message.getNotificationType())) {
             case DELIVERY:
-//                db.store(message);
                 handleDelivery(message);
                 break;
             case BOUNCE:
-//                db.store(message);
                 handleBounce(message);
                 break;
             case COMPLAINT:
-//                db.store(message);
                 handleComplaint(message);
                 break;
             default:
@@ -164,7 +158,7 @@ public class SNSQueueHandler implements QueueHandler<SNSMessage>, Tables {
             recipientEntity.setDelivered(new Date());
             db.update(recipientEntity);
         });
-        eventBus.post(new EmailDeliveryEvent(message));
+        eventBus.publish(EmailDeliveryEvent.ADDRESS, new EmailDeliveryEvent(message));
     }
 
     protected void handleBounce(SNSEmailMessage message) {
@@ -177,7 +171,7 @@ public class SNSQueueHandler implements QueueHandler<SNSMessage>, Tables {
             recipientEntity.setBounced(new Date());
             db.update(recipientEntity);
         });
-        eventBus.post(new EmailBounceEvent(message));
+        eventBus.publish(EmailBounceEvent.ADDRESS, new EmailBounceEvent(message));
     }
 
     protected void handleComplaint(SNSEmailMessage message) {
@@ -190,7 +184,7 @@ public class SNSQueueHandler implements QueueHandler<SNSMessage>, Tables {
             recipientEntity.setComplaint(new Date());
             db.update(recipientEntity);
         });
-        eventBus.post(new EmailComplaintEvent(message));
+        eventBus.publish(EmailComplaintEvent.ADDRESS, new EmailComplaintEvent(message));
     }
 
     protected List<EmailRecipientEntity> getRecipients(SNSMail mail) {

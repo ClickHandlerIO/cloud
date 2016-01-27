@@ -1,18 +1,18 @@
 package sns.service;
 
 
-import com.google.common.eventbus.EventBus;
 import com.google.common.util.concurrent.AbstractIdleService;
 import io.clickhandler.queue.LocalQueueServiceFactory;
 import io.clickhandler.queue.QueueFactory;
 import io.clickhandler.queue.QueueService;
 import io.clickhandler.queue.QueueServiceConfig;
 import io.clickhandler.sql.db.Database;
+import io.vertx.rxjava.core.eventbus.EventBus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import sns.config.SNSConfig;
 import sns.handler.SNSQueueHandler;
-import json.SNSMessage;
+import sns.json.SNSMessage;
 import sns.routing.SNSEmailRouteHandler;
 import sns.routing.SNSGeneralRouteHandler;
 

@@ -5,7 +5,7 @@ import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import io.vertx.rxjava.ext.web.RoutingContext;
 import org.slf4j.LoggerFactory;
-import json.SNSEmailMessage;
+import sns.json.SNSEmailMessage;
 import sns.service.SNSService;
 
 /**

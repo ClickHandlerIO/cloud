@@ -7,7 +7,7 @@ import io.vertx.rxjava.core.MultiMap;
 import io.vertx.rxjava.ext.web.RoutingContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import json.SNSMessage;
+import sns.json.SNSMessage;
 import sns.service.SNSService;
 
 /**
