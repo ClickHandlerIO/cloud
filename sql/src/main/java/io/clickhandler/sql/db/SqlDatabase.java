@@ -27,13 +27,13 @@ import org.jooq.tools.jdbc.JDBCUtils;
 import org.reflections.Reflections;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import rx.*;
+import rx.Observable;
+import rx.Scheduler;
 
 import java.lang.reflect.InvocationTargetException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.util.*;
-import java.util.Observable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -83,6 +83,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     private H2Server h2Server;
     private ExecutorService writeExecutor;
     private ExecutorService readExecutor;
+    private Scheduler observableScheduler;
 
     public SqlDatabase(
         Vertx vertx,
@@ -96,6 +97,8 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         this.name = Strings.nullToEmpty(config.getName()).trim();
         this.entityPackageNames = entityPackageNames;
         this.jooqPackageNames = jooqPackageNames;
+
+        observableScheduler = io.vertx.rxjava.core.RxHelper.blockingScheduler(vertx);
 
         final List<Reflections> entityReflections = new ArrayList<>();
         final List<Reflections> jooqReflections = new ArrayList<>();
@@ -679,6 +682,17 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         write(task, null);
     }
 
+    public <T> Observable<SqlResult<T>> writeObservable(SqlCallable<T> task) {
+        return Observable.create(
+            (Observable.OnSubscribe<SqlResult<T>>) subscriber ->
+                write(task, result -> {
+                    if (!subscriber.isUnsubscribed()) {
+                        subscriber.onNext(result.result());
+                        subscriber.onCompleted();
+                    }
+                })).observeOn(observableScheduler);
+    }
+
     /**
      * @param task
      * @param handler
@@ -706,6 +720,17 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 }
             }
         });
+    }
+
+    public <T> Observable<T> readObservable(SqlReadCallable<T> task) {
+        return Observable.create(
+            (Observable.OnSubscribe<T>) subscriber ->
+                read(task, result -> {
+                    if (!subscriber.isUnsubscribed()) {
+                        subscriber.onNext(result.result());
+                        subscriber.onCompleted();
+                    }
+                })).observeOn(observableScheduler);
     }
 
     /**
@@ -806,7 +831,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     }
 
     /**
-     *
      * @param callable
      * @param <T>
      * @return
@@ -832,7 +856,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     }
 
     /**
-     *
      * @param callable
      * @param <T>
      * @return

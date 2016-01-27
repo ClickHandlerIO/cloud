@@ -2,6 +2,7 @@ package io.clickhandler.sql.db;
 
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Handler;
+import rx.Observable;
 
 import java.util.concurrent.ExecutionException;
 
@@ -44,4 +45,18 @@ public interface SqlExecutor {
      * @throws InterruptedException
      */
     <T> SqlResult<T> writeBlocking(SqlCallable<T> task);
+
+    /**
+     * @param task
+     * @param <T>
+     * @return
+     */
+    <T> Observable<T> readObservable(SqlReadCallable<T> task);
+
+    /**
+     * @param task
+     * @param <T>
+     * @return
+     */
+    <T> Observable<SqlResult<T>> writeObservable(SqlCallable<T> task);
 }
