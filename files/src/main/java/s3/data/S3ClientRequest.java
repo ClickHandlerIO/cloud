@@ -19,6 +19,8 @@ import java.util.Date;
 
 /**
  *  Code from https://github.com/spartango/SuperS3t
+ *
+ *  Request object for S3 http communication.
  */
 
 public class S3ClientRequest implements HttpClientRequest {

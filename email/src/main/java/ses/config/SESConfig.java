@@ -4,7 +4,9 @@ import com.amazonaws.regions.Region;
 import com.amazonaws.regions.Regions;
 
 /**
- * Created by admin on 1/25/16.
+ *  Configuration settings for SES email service.
+ *
+ *  @author Brad Behnke
  */
 public class SESConfig {
     private static String name = "SES";

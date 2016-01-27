@@ -16,6 +16,8 @@ import s3.data.S3ClientRequest;
 
 /**
  *  Code from https://github.com/spartango/SuperS3t
+ *
+ *  Http client for S3 http communications.
  */
 
 public class S3Client {

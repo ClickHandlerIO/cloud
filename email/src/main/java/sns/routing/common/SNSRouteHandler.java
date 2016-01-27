@@ -11,7 +11,10 @@ import sns.data.json.common.Message;
 import sns.service.SNSService;
 
 /**
- * Created by admin on 1/22/16.
+ * Abstract Vertx route for capturing Amazon SNS messages.
+ *
+ * @see io.vertx.rxjava.ext.web.Route
+ * @author Brad Behnke
  */
 public abstract class SNSRouteHandler<T extends Message> implements Handler<RoutingContext> {
 

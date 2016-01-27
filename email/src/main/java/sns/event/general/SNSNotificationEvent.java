@@ -4,7 +4,9 @@ import common.event.AbstractNotificationEvent;
 import sns.data.json.general.GeneralMessage;
 
 /**
- * Created by admin on 1/25/16.
+ * Vertx Notification Event from SNS
+ *
+ * @author Brad Behnke
  */
 public class SNSNotificationEvent extends AbstractNotificationEvent {
     public static final String ADDRESS = "sns-notification";

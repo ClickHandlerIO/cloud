@@ -21,7 +21,9 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 
 /**
- * Created by Brad on 1/20/16.
+ * Queue manager for all incoming SNS message processing.
+ *
+ * @author Brad Behnke
  */
 @Singleton
 public class SNSService extends AbstractIdleService {

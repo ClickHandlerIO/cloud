@@ -5,7 +5,9 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSetter;
 
 /**
- * Created by admin on 1/21/16.
+ * SNS Top-Level JSON Notification Object
+ *
+ * @author Brad Behnke
  */
 public class GeneralMessage extends sns.data.json.common.Message {
     

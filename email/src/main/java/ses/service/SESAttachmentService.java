@@ -13,6 +13,8 @@ import ses.data.DownloadRequest;
 import ses.handler.AttachmentQueueHandler;
 
 /**
+ * SES Attachment download queue manager.
+ *
  * @author Brad Behnke
  */
 public class SESAttachmentService extends AbstractIdleService {

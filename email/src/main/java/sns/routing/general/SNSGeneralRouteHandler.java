@@ -18,7 +18,10 @@ import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 
 /**
- * Created by admin on 1/22/16.
+ * Vertx route for all SNS topics excluding email notification and reciepts.
+ *
+ * @see io.vertx.rxjava.ext.web.Route
+ * @author Brad Behnke
  */
 
 public class SNSGeneralRouteHandler extends SNSRouteHandler<GeneralMessage> {

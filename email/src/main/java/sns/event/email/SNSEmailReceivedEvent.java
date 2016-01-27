@@ -4,7 +4,9 @@ import common.event.AbstractEmailNotificationEvent;
 import sns.data.json.email.receive.EmailReceivedMessage;
 
 /**
- * Created by admin on 1/25/16.
+ * Vertx Email Received Event
+ *
+ * @author Brad Behnke
  */
 public class SNSEmailReceivedEvent extends AbstractEmailNotificationEvent {
     public static final String ADDRESS = "sns-email-received";

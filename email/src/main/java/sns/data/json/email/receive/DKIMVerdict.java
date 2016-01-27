@@ -5,7 +5,9 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSetter;
 
 /**
- * Created by admin on 1/26/16.
+ * SNS JSON Object
+ *
+ * @author Brad Behnke
  */
 public class DKIMVerdict {
     @JsonProperty

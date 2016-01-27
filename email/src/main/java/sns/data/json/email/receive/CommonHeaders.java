@@ -7,7 +7,9 @@ import com.fasterxml.jackson.annotation.JsonSetter;
 import java.util.List;
 
 /**
- * Created by admin on 1/26/16.
+ * SNS JSON CommonHeaders Object
+ *
+ * @author Brad Behnke
  */
 public class CommonHeaders {
     @JsonProperty

@@ -9,7 +9,9 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Created by admin on 1/20/16.
+ * SNS JSON Complaint Object
+ *
+ * @author Brad Behnke
  */
 public class Complaint {
     @JsonProperty

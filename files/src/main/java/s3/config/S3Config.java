@@ -1,7 +1,9 @@
 package s3.config;
 
 /**
- * Created by admin on 1/27/16.
+ * Configuration settings for S3 file service.
+ *
+ * @author Brad Behnke
  */
 public class S3Config {
     private static String name = "SES";

@@ -5,7 +5,9 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSetter;
 
 /**
- * Created by admin on 1/20/16.
+ * SNS JSON Recipient Object
+ *
+ * @author Brad Behnke
  */
 public class Recipient {
     @JsonProperty

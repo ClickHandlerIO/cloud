@@ -1,7 +1,9 @@
 package event;
 
 /**
- * Created by admin on 1/26/16.
+ * Abstract object for standardizing creating and receiving events over the Vert.x EventBus
+ *
+ * @author Brad Behnke
  */
 public abstract class AbstractVertxEvent {
     public final String eventAddress;

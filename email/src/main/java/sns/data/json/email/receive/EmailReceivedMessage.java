@@ -6,7 +6,9 @@ import com.fasterxml.jackson.annotation.JsonSetter;
 import sns.data.json.common.Message;
 
 /**
- * Created by admin on 1/26/16.
+ * SNS Top-Level JSON Email Receive Object
+ *
+ * @author Brad Behnke
  */
 public class EmailReceivedMessage extends Message {
     @JsonProperty

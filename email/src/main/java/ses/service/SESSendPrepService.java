@@ -14,7 +14,7 @@ import ses.data.SESSendRequest;
 import ses.handler.SESPrepQueueHandler;
 
 /**
- * Initializes/Stops queue and handler for email send requests
+ * SES email sending prep queue manager.
  *
  * @author Brad Behnke
  */

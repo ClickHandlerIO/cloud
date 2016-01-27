@@ -19,7 +19,9 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Created by admin on 1/26/16.
+ * File service using Amazon S3 for storage. Allows for uploading, downloading, and deleting of remote files.
+ *
+ * @author Brad Behnke
  */
 @Singleton
 public class S3Service extends AbstractFileService {

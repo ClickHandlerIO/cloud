@@ -5,7 +5,9 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSetter;
 
 /**
- * Created by admin on 1/27/16.
+ * SNS JSON Header Object
+ *
+ * @author Brad Behnke
  */
 public class Header {
     @JsonProperty

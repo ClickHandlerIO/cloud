@@ -7,7 +7,9 @@ import com.fasterxml.jackson.annotation.JsonSetter;
 import java.util.List;
 
 /**
- * Created by admin on 1/20/16.
+ * SNS JSON Delivery Object
+ *
+ * @author Brad Behnke
  */
 public class Delivery {
     @JsonProperty

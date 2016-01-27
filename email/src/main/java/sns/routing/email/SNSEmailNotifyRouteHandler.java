@@ -10,7 +10,10 @@ import sns.routing.common.SNSRouteHandler;
 import sns.service.SNSService;
 
 /**
- * Created by admin on 1/22/16.
+ * Vertx route for all email notifications
+ *
+ * @see io.vertx.rxjava.ext.web.Route
+ * @author Brad Behnke
  */
 
 public class SNSEmailNotifyRouteHandler extends SNSRouteHandler<EmailNotifyMessage> {

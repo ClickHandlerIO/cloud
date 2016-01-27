@@ -4,7 +4,9 @@ import common.event.AbstractEmailNotificationEvent;
 import entity.EmailEntity;
 
 /**
- * Created by admin on 1/26/16.
+ *  Vertx event for email send notification.
+ *
+ *  @author Brad Behnke
  */
 public class SESEmailSentEvent extends AbstractEmailNotificationEvent {
     public static final String ADDRESS = "sns-email-sent";

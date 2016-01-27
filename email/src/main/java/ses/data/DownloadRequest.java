@@ -4,7 +4,9 @@ import com.google.common.base.Preconditions;
 import ses.handler.DownloadCallBack;
 
 /**
- * Created by Brad on 1/19/16.
+ *  Request object for ses email attachment downloads.
+ *
+ *  @author Brad Behnke
  */
 public class  DownloadRequest {
     private String fileId;

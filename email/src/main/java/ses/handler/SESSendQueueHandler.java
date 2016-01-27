@@ -26,7 +26,7 @@ import java.util.Date;
 import java.util.List;
 
 /**
- * Sends email messages given
+ * Sends email messages queued through Amazon SES.
  *
  * @author Brad Behnke
  */

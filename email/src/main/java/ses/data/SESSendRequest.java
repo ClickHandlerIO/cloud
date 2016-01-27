@@ -7,7 +7,9 @@ import entity.EmailEntity;
 import javax.mail.internet.MimeMessage;
 
 /**
- * Created by Brad Behnke on 1/26/16.
+ *  Request wrapper object for sending an email through ses email service.
+ *
+ *  @author Brad Behnke
  */
 public class SESSendRequest extends AbstractSendRequest {
 

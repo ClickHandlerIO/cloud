@@ -1,7 +1,9 @@
 package sns.data.json.common;
 
 /**
- * Created by admin on 1/22/16.
+ * SNS JSON object types
+ *
+ * @author Brad Behnke
  */
 public class MessageType {
     public final static String SUB_CONFIRM = "SubscriptionConfirmation";

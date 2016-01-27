@@ -5,7 +5,16 @@ import common.handler.SendHandler;
 import entity.EmailEntity;
 
 /**
- * Created by Brad Behnke on 1/26/16.
+ *  Abstract for request to be passed to cloud-email services.
+ *  <p>
+ *  Required
+ *
+ *  EmailEntity: Object containing email database record information. Related records for recipients and attachments
+ *  must exist in database prior to passing to a email sending service.
+ *
+ *  SendHandler: Callback to allow for ASync processing.
+ *  </p>
+ *  @author Brad behnke
  */
 public abstract class AbstractSendRequest {
     private EmailEntity emailEntity;

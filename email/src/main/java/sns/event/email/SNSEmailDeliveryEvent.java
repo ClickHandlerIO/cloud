@@ -4,7 +4,9 @@ import common.event.AbstractEmailNotificationEvent;
 import sns.data.json.email.notify.EmailNotifyMessage;
 
 /**
- * Created by admin on 1/25/16.
+ * Vertx Email Delivery Event
+ *
+ * @author Brad Behnke
  */
 public class SNSEmailDeliveryEvent extends AbstractEmailNotificationEvent {
     public static final String ADDRESS = "sns-email-delivery";

@@ -7,7 +7,9 @@ import io.vertx.core.http.HttpServerFileUpload;
 import java.util.concurrent.Future;
 
 /**
- * Created by admin on 1/27/16.
+ * Abstraction for all cloud file services
+ *
+ * @author Brad Behnke
  */
 public abstract class AbstractFileService {
     public abstract Future<Buffer> get(final FileEntity fileEntity);

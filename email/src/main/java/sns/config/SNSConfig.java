@@ -4,7 +4,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Created by admin on 1/25/16.
+ * Configuration settings for SNS service.
+ *
+ * @author Brad Behnke
  */
 public class SNSConfig {
     private static String name = "SNS";

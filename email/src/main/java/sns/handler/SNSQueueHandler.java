@@ -31,6 +31,12 @@ import java.util.List;
 import java.util.Scanner;
 
 /**
+ * Filters SNS Messages to configured list's topic ARNs, and fires Vertx EventBus events for accepted messages.
+ *
+ * Auto confirms subscriptions found in generalSubscription list.
+ * Auto confirms unsubscribes for topics not found in generalSubscription list.
+ *
+ * Updates email records on: Bounce, Complaint, Delivery.
  *
  * @author Brad Behnke
  */

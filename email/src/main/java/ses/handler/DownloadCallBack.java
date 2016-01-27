@@ -1,7 +1,9 @@
 package ses.handler;
 
 /**
- * Created by admin on 1/19/16.
+ *  Callback for ASync attachment file downloads.
+ *
+ *  @author Brad Behnke
  */
 public interface DownloadCallBack {
     void onSuccess(byte[] data);

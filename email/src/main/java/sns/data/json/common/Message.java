@@ -1,7 +1,9 @@
 package sns.data.json.common;
 
 /**
- * Created by admin on 1/26/16.
+ * Abstract SNS JSON object
+ *
+ * @author Brad Behnke
  */
 public abstract class Message {
 }

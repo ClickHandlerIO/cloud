@@ -4,7 +4,9 @@ import common.event.AbstractNotificationEvent;
 import sns.data.json.general.GeneralMessage;
 
 /**
- * Created by admin on 1/25/16.
+ * Vertx SNS Unsubscribe Confirmation Event
+ *
+ * @author Brad Behnke
  */
 public class SNSUnsubscribeConfirmEvent extends AbstractNotificationEvent {
     public static final String ADDRESS = "sns-unsubscribe";

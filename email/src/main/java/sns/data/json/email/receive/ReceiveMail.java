@@ -7,7 +7,9 @@ import com.fasterxml.jackson.annotation.JsonSetter;
 import java.util.List;
 
 /**
- * Created by admin on 1/26/16.
+ * SNS JSON Mail Object for Email Receive
+ *
+ * @author Brad Behnke
  */
 public class ReceiveMail {
     @JsonProperty

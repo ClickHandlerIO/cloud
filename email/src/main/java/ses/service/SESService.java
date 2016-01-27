@@ -13,7 +13,9 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 
 /**
- * Created by Brad Behnke on 1/26/16.
+ * SES Email services manager.
+ *
+ * @author
  */
 @Singleton
 public class SESService extends AbstractEmailService<SESSendRequest> {

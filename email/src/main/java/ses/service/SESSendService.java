@@ -15,7 +15,7 @@ import ses.handler.SESSendQueueHandler;
 import javax.mail.internet.MimeMessage;
 
 /**
- * Initializes/Kills queue and handler for emails to be sent using SES.
+ * SES email sending queue manager.
  *
  * @author Brad Behnke
  */
