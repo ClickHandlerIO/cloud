@@ -10,6 +10,10 @@ import com.zaxxer.hikari.HikariDataSource;
 import io.clickhandler.sql.entity.AbstractEntity;
 import io.clickhandler.sql.evolution.EvolutionChangeEntity;
 import io.clickhandler.sql.evolution.EvolutionEntity;
+import io.vertx.core.AsyncResult;
+import io.vertx.core.Future;
+import io.vertx.core.Handler;
+import io.vertx.rxjava.core.Vertx;
 import javaslang.control.Try;
 import org.h2.server.TcpServer;
 import org.h2.tools.Server;
@@ -23,19 +27,24 @@ import org.jooq.tools.jdbc.JDBCUtils;
 import org.reflections.Reflections;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import rx.Observable;
+import rx.Scheduler;
 
 import java.lang.reflect.InvocationTargetException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.util.*;
-import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * @author Clay Molocznik
  */
-public class Database extends AbstractIdleService {
+public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
+    private static final int SANE_MAX = 2000;
     private static final int DEV_POOL_SIZE = 15;
     private static final int TEST_POOL_SIZE = 15;
     private static final int PROD_POOL_SIZE = 100;
@@ -45,11 +54,11 @@ public class Database extends AbstractIdleService {
     private static final int PROD_MYSQL_PREPARE_STMT_CACHE_SQL_LIMIT = 4096;
     private static final int DEV_MYSQL_PREPARE_STMT_CACHE_SQL_LIMIT = 2048;
     private static final String ENTITY_PACKAGE = "io.clickhandler.sql.evolution";
-    private static final Logger LOG = LoggerFactory.getLogger(Database.class);
+    private static final Logger LOG = LoggerFactory.getLogger(SqlDatabase.class);
 
-    private final DbConfig config;
+    private final SqlConfig config;
     private final String name;
-    private final ThreadLocal<DatabaseSession> sessionLocal = new ThreadLocal<>();
+    private final ThreadLocal<SqlSession> sessionLocal = new ThreadLocal<>();
     private final Map<Class, Mapping> mappings = new HashMap<>();
     private final Map<String, TableMapping> tableMappingsByName = Maps.newHashMap();
     private final Map<Class, TableMapping> tableMappings = Maps.newHashMap();
@@ -63,27 +72,33 @@ public class Database extends AbstractIdleService {
     private final HikariConfig hikariConfig;
     private final HikariConfig hikariReadConfig;
     private final Set<Class<?>> entityClasses = new HashSet<>();
-
+    private final Vertx vertx;
     private Configuration configuration;
     private Configuration readConfiguration;
     private HikariDataSource dataSource;
     private HikariDataSource readDataSource;
     private SqlSchema sqlSchema;
-    private DatabasePlatform dbPlatform;
+    private SqlPlatform dbPlatform;
     private Settings settings;
     private H2Server h2Server;
-    private WriteService writeService;
+    private ExecutorService writeExecutor;
+    private ExecutorService readExecutor;
+    private Scheduler observableScheduler;
 
-    public Database(
-        DbConfig config,
+    public SqlDatabase(
+        Vertx vertx,
+        SqlConfig config,
         String[] entityPackageNames,
         String[] jooqPackageNames) {
         entityPackageNames = entityPackageNames == null ? new String[0] : entityPackageNames;
         jooqPackageNames = jooqPackageNames == null ? new String[0] : jooqPackageNames;
+        this.vertx = vertx;
         this.config = Preconditions.checkNotNull(config, "config must be set.");
         this.name = Strings.nullToEmpty(config.getName()).trim();
         this.entityPackageNames = entityPackageNames;
         this.jooqPackageNames = jooqPackageNames;
+
+        observableScheduler = io.vertx.rxjava.core.RxHelper.blockingScheduler(vertx);
 
         final List<Reflections> entityReflections = new ArrayList<>();
         final List<Reflections> jooqReflections = new ArrayList<>();
@@ -148,11 +163,17 @@ public class Database extends AbstractIdleService {
         }
 
         // Sanitize Max Pool size.
-        if (config.getMaxPoolSize() > 0 && config.getMaxPoolSize() < 5001) {
+        if (config.getMaxPoolSize() > 0 && config.getMaxPoolSize() <= SANE_MAX) {
             hikariConfig.setMaximumPoolSize(config.getMaxPoolSize());
+        } else {
+            LOG.warn("An Invalid MaxPoolSize value was found. Found '" + config.getMaxPoolSize() + "' but set to a more reasonable '" + SANE_MAX + "'");
+            hikariConfig.setMaximumPoolSize(SANE_MAX);
         }
-        if (config.getMaxReadPoolSize() > 0 && config.getMaxReadPoolSize() < 5001) {
+        if (config.getMaxReadPoolSize() > 0 && config.getMaxReadPoolSize() < SANE_MAX) {
             hikariReadConfig.setMaximumPoolSize(config.getMaxReadPoolSize());
+        } else {
+            LOG.warn("An Invalid MaxReadPoolSize value was found. Found '" + config.getMaxPoolSize() + "' but set to a more reasonable '" + SANE_MAX + "'");
+            hikariReadConfig.setMaximumPoolSize(SANE_MAX);
         }
 
         // Always use READ_COMMITTED.
@@ -183,7 +204,7 @@ public class Database extends AbstractIdleService {
         configuration.set(dialect);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////
-        // Database Vendor Specific Configuration
+        // SqlDatabase Vendor Specific Configuration
         ////////////////////////////////////////////////////////////////////////////////////////////////////
         switch (dialect) {
             case DEFAULT:
@@ -282,28 +303,13 @@ public class Database extends AbstractIdleService {
         findJooqSchema();
     }
 
-    public DbConfig getConfig() {
+    public SqlConfig getConfig() {
         return config;
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////
     // Property Accessors
     ////////////////////////////////////////////////////////////////////////////////////////////////////
-
-    /**
-     * Gets the Session attached to the current thread.
-     *
-     * @return
-     */
-    public DatabaseSession getSession() {
-        final DatabaseSession session = sessionLocal.get();
-
-        if (session == null) {
-            throw new PersistException("DatabaseSession does not exist.  Must call Database.execute()");
-        }
-
-        return session;
-    }
 
     /**
      * @return
@@ -337,6 +343,9 @@ public class Database extends AbstractIdleService {
 
     @Override
     protected void startUp() throws Exception {
+        writeExecutor = Executors.newFixedThreadPool(config.getMaxPoolSize());
+        readExecutor = Executors.newFixedThreadPool(config.getMaxReadPoolSize());
+
         ////////////////////////////////////////////////////////////////////////////////////////////////////
         // H2 TCP Server to allow remote connections
         ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -389,10 +398,6 @@ public class Database extends AbstractIdleService {
         tableMappingList.forEach(mapping -> mapping.wireRelationships(tableMappings));
         // Validate Table Mapping.
         tableMappingList.forEach(TableMapping::checkValidity);
-
-        // Startup the WriteService.
-        writeService = new WriteService(this);
-        writeService.startAsync().awaitRunning();
     }
 
 
@@ -402,10 +407,8 @@ public class Database extends AbstractIdleService {
 
     @Override
     protected void shutDown() throws Exception {
-        if (writeService != null) {
-            Try.run(() -> writeService.stopAsync().awaitTerminated())
-                .onFailure((e) -> LOG.error("Failed to shutdown [WriteService]", e));
-        }
+        writeExecutor.shutdown();
+        readExecutor.shutdown();
 
         if (config.getUrl().startsWith("jdbc:h2:mem")) {
             Try.run(() -> {
@@ -563,7 +566,7 @@ public class Database extends AbstractIdleService {
         final List<EvolutionChangeEntity> changeEntities = new ArrayList<>();
 
         try {
-            executeResult(session -> {
+            executeWrite(session -> {
                 evolution.setChanged(new Date());
                 boolean failed = false;
 
@@ -607,7 +610,7 @@ public class Database extends AbstractIdleService {
                     session.insert(changeEntities);
                 }
 
-                return evolution;
+                return SqlResult.success(evolution);
             });
         } finally {
             try {
@@ -616,9 +619,10 @@ public class Database extends AbstractIdleService {
                     if (!config.isGenerateSchema()) {
                         // We need to Insert the Evolution outside of the applier
                         // SQL Transaction since it would be rolled back.
-                        execute(sql -> {
+                        executeWrite(sql -> {
                             sql.insert(evolution);
                             sql.insert(changeEntities);
+                            return SqlResult.success();
                         });
                     }
                 }
@@ -629,75 +633,239 @@ public class Database extends AbstractIdleService {
         }
     }
 
-
-    public <T extends AbstractEntity> void saveLater(T entity) {
-        writeService.add(entity);
-    }
-
-    public <T extends AbstractEntity> void saveLater(List<T> entities) {
-        writeService.addAll(entities);
-    }
-
-
     ////////////////////////////////////////////////////////////////////////////////////////////////////
     // Execution
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    protected DatabaseSession createSession(boolean master) {
+    protected SqlSession createSession(boolean master) {
         final Configuration configuration = master ? this.configuration.derive() : this.readConfiguration.derive();
 
-        return new DatabaseSession(
+        return new SqlSession(
             this,
             configuration
         );
     }
 
+    @Override
+    public void writeRunnable(SqlRunnable task, Handler<AsyncResult<Void>> handler) {
+        writeExecutor.submit(() -> {
+            try {
+                executeWrite(sql -> {
+                    task.run(sql);
+                    return null;
+                });
 
-    public void run(Runnable runnable) {
-        Preconditions.checkNotNull(runnable);
-        execute(sql -> runnable.run());
-    }
-
-    public void execute(DatabaseRunnable runnable) {
-        executeResult(session -> {
-            runnable.run(session);
-            return null;
+                if (handler != null) {
+                    vertx.executeBlocking(
+                        event -> {
+                            handler.handle(Future.succeededFuture());
+                        },
+                        event -> {
+                        }
+                    );
+                }
+            } catch (Exception e) {
+                if (handler != null) {
+                    vertx.executeBlocking(
+                        event -> {
+                            handler.handle(Future.failedFuture(e));
+                        },
+                        event -> {
+                        }
+                    );
+                }
+            }
         });
     }
 
-    public void transaction(DatabaseRunnable runnable) {
-        transactionResult(session -> {
-            runnable.run(session);
-            return null;
+    public <T> void write(SqlCallable<T> task) {
+        write(task, null);
+    }
+
+    public <T> Observable<SqlResult<T>> writeObservable(SqlCallable<T> task) {
+        return Observable.create(
+            (Observable.OnSubscribe<SqlResult<T>>) subscriber ->
+                write(task, result -> {
+                    if (!subscriber.isUnsubscribed()) {
+                        subscriber.onNext(result.result());
+                        subscriber.onCompleted();
+                    }
+                })).observeOn(observableScheduler);
+    }
+
+    /**
+     * @param task
+     * @param handler
+     * @param <T>
+     */
+    public <T> void write(SqlCallable<T> task, Handler<AsyncResult<SqlResult<T>>> handler) {
+        writeExecutor.submit(() -> {
+            try {
+                final SqlResult<T> result = executeWrite(task);
+
+                if (handler != null) {
+                    vertx.executeBlocking(
+                        event -> handler.handle(Future.succeededFuture(result)),
+                        event -> {
+                        }
+                    );
+                }
+            } catch (Exception e) {
+                if (handler != null) {
+                    vertx.executeBlocking(
+                        event -> handler.handle(Future.failedFuture(e)),
+                        event -> {
+                        }
+                    );
+                }
+            }
         });
     }
 
-    public <R extends UpdatableRecord<R>, E extends AbstractEntity> E getEntity(Class<E> entityClass, String id) {
-        return transactionResult(sql -> sql.getEntity(entityClass, id));
+    public <T> Observable<T> readObservable(SqlReadCallable<T> task) {
+        return Observable.create(
+            (Observable.OnSubscribe<T>) subscriber ->
+                read(task, result -> {
+                    if (!subscriber.isUnsubscribed()) {
+                        subscriber.onNext(result.result());
+                        subscriber.onCompleted();
+                    }
+                })).observeOn(observableScheduler);
     }
 
-    public <T> T transactionResult(DatabaseSessionCallable<T> callable) {
-        return transactionResult(callable, true);
+    /**
+     * @param task
+     * @param handler
+     * @param <T>
+     */
+    public <T> void read(final SqlReadCallable<T> task, final Handler<AsyncResult<T>> handler) {
+        readExecutor.submit(() -> {
+            try {
+                final T result = executeRead(task);
+
+                if (handler != null) {
+                    vertx.executeBlocking(
+                        event -> handler.handle(Future.succeededFuture(result)),
+                        event -> {
+                        }
+                    );
+                }
+            } catch (Exception e) {
+                if (handler != null) {
+                    vertx.executeBlocking(
+                        event -> handler.handle(Future.failedFuture(e)),
+                        event -> {
+                        }
+                    );
+                }
+            }
+        });
     }
 
-    public <T> T executeResult(DatabaseSessionCallable<T> callable) {
-        return transactionResult(callable, true);
+    /**
+     * @param task
+     * @param <T>
+     * @throws ExecutionException
+     * @throws InterruptedException
+     */
+    public <T> T readBlocking(SqlReadCallable<T> task) {
+        try {
+            return readExecutor.submit(() -> {
+                try {
+                    return executeRead(task);
+                } catch (Exception e) {
+                    throw new PersistException(e);
+                }
+            }).get();
+        } catch (InterruptedException e) {
+            throw new PersistException(e);
+        } catch (ExecutionException e) {
+            throw new PersistException(e);
+        }
     }
 
-    public <T> T executeMaster(DatabaseSessionCallable<T> callable) {
-        return transactionResult(callable, true);
+//    /**
+//     * @param task
+//     * @throws ExecutionException
+//     * @throws InterruptedException
+//     */
+//    public void writeBlocking(SqlRunnable task) {
+//        try {
+//            writeExecutor.submit(() -> {
+//                try {
+//                    executeWrite(session -> {
+//                        task.run(session);
+//                        return null;
+//                    });
+//                } catch (Exception e) {
+//                    throw new PersistException(e);
+//                }
+//            }).get();
+//        } catch (InterruptedException e) {
+//            throw new PersistException(e);
+//        } catch (ExecutionException e) {
+//            throw new PersistException(e);
+//        }
+//    }
+
+    /**
+     * @param task
+     * @param <T>
+     * @throws ExecutionException
+     * @throws InterruptedException
+     */
+    public <T> SqlResult<T> writeBlocking(SqlCallable<T> task) {
+        try {
+            return writeExecutor.submit(() -> {
+                try {
+                    return executeWrite(task);
+                } catch (Exception e) {
+                    throw new PersistException(e);
+                }
+            }).get();
+        } catch (InterruptedException e) {
+            throw new PersistException(e);
+        } catch (ExecutionException e) {
+            throw new PersistException(e);
+        }
     }
 
-    public <T> T executeRead(DatabaseSessionCallable<T> callable) {
-        return transactionResult(callable, false);
+    /**
+     * @param callable
+     * @param <T>
+     * @return
+     */
+    protected <T> T executeRead(SqlReadCallable<T> callable) {
+        SqlSession session = sessionLocal.get();
+
+        if (session == null) {
+            session = createSession(false);
+
+            if (session == null) {
+                throw new PersistException("createSession() returned null.");
+            }
+
+            sessionLocal.set(session);
+        }
+
+        try {
+            return callable.call(session);
+        } finally {
+            sessionLocal.remove();
+        }
     }
 
-    public <T> T transactionResult(DatabaseSessionCallable<T> callable, boolean master) {
-        DatabaseSession session = sessionLocal.get();
+    /**
+     * @param callable
+     * @param <T>
+     * @return
+     */
+    protected <T> SqlResult<T> executeWrite(SqlCallable<T> callable) {
+        SqlSession session = sessionLocal.get();
         final boolean created;
 
         if (session == null) {
-            session = createSession(master);
+            session = createSession(true);
 
             if (session == null) {
                 throw new PersistException("createSession() returned null.");
@@ -709,53 +877,43 @@ public class Database extends AbstractIdleService {
             created = false;
         }
 
-        if (master) {
-            final AtomicReference<T> r = new AtomicReference<>();
-            final DatabaseSession finalSession = session;
+        final AtomicReference<SqlResult<T>> r = new AtomicReference<>();
+        final SqlSession finalSession = session;
+        try {
+            final AtomicBoolean updateCache = new AtomicBoolean(false);
             try {
-                final AtomicBoolean updateCache = new AtomicBoolean(false);
-                try {
-                    return DSL.using(session.configuration()).transactionResult(configuration1 -> {
-                        finalSession.scope(configuration1);
+                return DSL.using(session.configuration()).transactionResult(configuration1 -> {
+                    finalSession.scope(configuration1);
 
-                        try {
-                            // Execute the code.
-                            final T result = callable.call(finalSession);
+                    try {
+                        // Execute the code.
+                        final SqlResult<T> result = callable.call(finalSession);
+                        r.set(result);
 
-//                            // Rollback if ActionResponse isFailure.
-//                            if (result != null && result instanceof ActionResponse) {
-//                                if (((ActionResponse) result).isFailure()) {
-//                                    r.set(result);
-//                                    throw new RollbackException(result);
-//                                }
-//                            }
-
-                            updateCache.set(true);
-
-                            return result;
-                        } finally {
-                            finalSession.unscope();
+                        // Rollback if ActionResponse isFailure.
+                        if (result != null && !result.isSuccess()) {
+                            throw new RollbackException();
                         }
-                    });
-                } finally {
-                    if (created) {
-                        sessionLocal.remove();
-                    }
 
-                    // Update cache.
-                    if (updateCache.get()) {
-                        Try.run(() -> finalSession.updateCache());
+                        updateCache.set(true);
+
+                        return result;
+                    } finally {
+                        finalSession.unscope();
                     }
-                }
-            } catch (RollbackException e) {
-                return r.get();
-            }
-        } else {
-            try {
-                return callable.call(session);
+                });
             } finally {
-                sessionLocal.remove();
+                if (created) {
+                    sessionLocal.remove();
+                }
+
+                // Update cache.
+                if (updateCache.get()) {
+                    Try.run(() -> finalSession.updateCache());
+                }
             }
+        } catch (RollbackException e) {
+            return r.get();
         }
     }
 
@@ -768,11 +926,11 @@ public class Database extends AbstractIdleService {
      * @param cls
      * @return
      */
-    public Mapping findMapping(Class cls) {
+    Mapping findMapping(Class cls) {
         Mapping mapping = mappings.get(cls);
 
         if (mapping == null) {
-            synchronized (Database.class) {
+            synchronized (SqlDatabase.class) {
                 mapping = mappings.get(cls);
 
                 if (mapping == null) {
@@ -813,7 +971,7 @@ public class Database extends AbstractIdleService {
      * @param <E>
      * @return
      */
-    public <E extends AbstractEntity> E entity(Class<E> entityClass) {
+    <E extends AbstractEntity> E entity(Class<E> entityClass) {
         final TableMapping mapping = getMapping(entityClass);
         if (mapping == null) {
             return null;
@@ -846,7 +1004,7 @@ public class Database extends AbstractIdleService {
      * @param cls
      * @return
      */
-    public TableMapping getCheckedMapping(Class cls) {
+    TableMapping getCheckedMapping(Class cls) {
         Preconditions.checkNotNull(cls, "cls must be specified.");
         final TableMapping mapping = getMapping(cls);
         if (mapping == null) {
@@ -861,7 +1019,7 @@ public class Database extends AbstractIdleService {
      * @param <E>
      * @return
      */
-    public <R extends Record, E extends AbstractEntity> RecordMapper<R, E> recordMapper(TableMapping mapping) {
+    <R extends Record, E extends AbstractEntity> RecordMapper<R, E> recordMapper(TableMapping mapping) {
         return (RecordMapper<R, E>) mapping.getRecordMapper();
     }
 
@@ -869,7 +1027,7 @@ public class Database extends AbstractIdleService {
      * @param mapping
      * @return
      */
-    public RecordMapper<UpdatableRecord, UpdatableRecord> journalMapper(TableMapping mapping) {
+    RecordMapper<UpdatableRecord, UpdatableRecord> journalMapper(TableMapping mapping) {
         return mapping.getJournalMapper();
     }
 
@@ -879,7 +1037,7 @@ public class Database extends AbstractIdleService {
      * @param <E>
      * @return
      */
-    public <R extends UpdatableRecord<R>, E extends AbstractEntity> RecordMapper<R, E> recordMapper(Class cls) {
+    <R extends UpdatableRecord<R>, E extends AbstractEntity> RecordMapper<R, E> recordMapper(Class cls) {
         return (RecordMapper<R, E>) getCheckedMapping(cls).getRecordMapper();
     }
 
@@ -889,7 +1047,7 @@ public class Database extends AbstractIdleService {
      * @param <E>
      * @return
      */
-    public <R extends UpdatableRecord<R>, E extends AbstractEntity> RecordMapper<R, E> mapper(Class cls) {
+    <R extends UpdatableRecord<R>, E extends AbstractEntity> RecordMapper<R, E> mapper(Class cls) {
         return (RecordMapper<R, E>) getCheckedMapping(cls).getRecordMapper();
     }
 
@@ -899,7 +1057,7 @@ public class Database extends AbstractIdleService {
      * @param <R>
      * @return
      */
-    public <E extends AbstractEntity, R extends UpdatableRecord<R>> EntityMapper<E, R> entityMapper(Class cls) {
+    <E extends AbstractEntity, R extends UpdatableRecord<R>> EntityMapper<E, R> entityMapper(Class cls) {
         return (EntityMapper<E, R>) getCheckedMapping(cls).getEntityMapper();
     }
 
@@ -909,7 +1067,7 @@ public class Database extends AbstractIdleService {
      * @param <R>
      * @return
      */
-    public <E extends AbstractEntity, R extends UpdatableRecord<R>> EntityMapper<E, R> entityMapper(List list) {
+    <E extends AbstractEntity, R extends UpdatableRecord<R>> EntityMapper<E, R> entityMapper(List list) {
         if (list == null || list.isEmpty()) {
             return null;
         }
@@ -922,7 +1080,7 @@ public class Database extends AbstractIdleService {
      * @param <E>
      * @return
      */
-    public <R extends UpdatableRecord<R>, E extends AbstractEntity> E map(R record) {
+    <R extends UpdatableRecord<R>, E extends AbstractEntity> E map(R record) {
         if (record == null) {
             return null;
         }
@@ -935,7 +1093,7 @@ public class Database extends AbstractIdleService {
      * @param <R>
      * @return
      */
-    public <E extends AbstractEntity, R extends Record> R map(E entity) {
+    <E extends AbstractEntity, R extends Record> R map(E entity) {
         if (entity == null) {
             return null;
         }
@@ -948,7 +1106,7 @@ public class Database extends AbstractIdleService {
      * @param <E>
      * @return
      */
-    public <R extends UpdatableRecord<R>, E extends AbstractEntity> List<E> map(R... records) {
+    <R extends UpdatableRecord<R>, E extends AbstractEntity> List<E> map(R... records) {
         if (records == null) {
             return new ArrayList<>(0);
         }
@@ -961,7 +1119,7 @@ public class Database extends AbstractIdleService {
      * @param <E>
      * @return
      */
-    public <R extends UpdatableRecord<R>, E extends AbstractEntity> List<E> map(Collection<R> records) {
+    <R extends UpdatableRecord<R>, E extends AbstractEntity> List<E> map(Collection<R> records) {
         if (records == null || records.isEmpty()) {
             return new ArrayList<>(0);
         }
@@ -979,68 +1137,6 @@ public class Database extends AbstractIdleService {
 
     public Configuration getReadConfiguration() {
         return readConfiguration;
-    }
-
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Helper Classes
-    ////////////////////////////////////////////////////////////////////////////////////////////////////
-
-    public static class RollbackException extends RuntimeException {
-        private final Object result;
-
-        public RollbackException(Object result) {
-            this.result = result;
-        }
-    }
-
-    /**
-     *
-     */
-    private static class RunnableWrapper implements DatabaseSessionCallable<Void> {
-        private final Runnable runnable;
-
-        private RunnableWrapper(Runnable runnable) {
-            this.runnable = runnable;
-        }
-
-        @Override
-        public Void call(DatabaseSession session) throws PersistException {
-            try {
-                runnable.run();
-                return null;
-            } catch (Exception e) {
-                if (e instanceof PersistException) {
-                    throw (PersistException) e;
-                }
-
-                throw new PersistException("Unknown exception thrown.", e);
-            }
-        }
-    }
-
-    /**
-     * @param <T>
-     */
-    private static class SessionCallableWrapper<T> implements DatabaseSessionCallable<T> {
-        private final Callable<T> callable;
-
-        private SessionCallableWrapper(Callable<T> callable) {
-            this.callable = callable;
-        }
-
-        @Override
-        public T call(DatabaseSession session) throws PersistException {
-            try {
-                return callable.call();
-            } catch (Exception e) {
-                if (e instanceof PersistException) {
-                    throw (PersistException) e;
-                }
-
-                throw new PersistException("Unknown exception thrown.", e);
-            }
-        }
     }
 
 
@@ -1085,7 +1181,7 @@ public class Database extends AbstractIdleService {
     /**
      *
      */
-    private class RecordMapperProviderImpl implements RecordMapperProvider {
+    private final class RecordMapperProviderImpl implements RecordMapperProvider {
         @Override
         public <R extends Record, E> RecordMapper<R, E> provide(RecordType<R> recordType, Class<? extends E> type) {
             final TableMapping mapping = tableMappings.get(type);

@@ -10,17 +10,17 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Compares the Entity Schema against a SQL Database Schema.
+ * Compares the Entity Schema against a SQL SqlDatabase Schema.
  * It generates Change Operations in order to synchronize
- * the differences in the Entity Schema to the SQL Database.
+ * the differences in the Entity Schema to the SQL SqlDatabase.
  * Persist Schema is always defined using Entities.
  */
 public class SchemaInspector {
-    private final DatabasePlatform platform;
+    private final SqlPlatform platform;
     private final Map<Class, TableMapping> tableMappings;
     private final List<Change> changes = new ArrayList<>();
 
-    private SchemaInspector(final DatabasePlatform platform,
+    private SchemaInspector(final SqlPlatform platform,
                             final Map<Class, TableMapping> tableMappings) {
         Preconditions.checkNotNull(platform, "dbPlatform must be set.");
         Preconditions.checkNotNull(tableMappings, "tableMappings must be set.");
@@ -28,7 +28,7 @@ public class SchemaInspector {
         this.tableMappings = tableMappings;
     }
 
-    public static List<Change> inspect(final DatabasePlatform platform,
+    public static List<Change> inspect(final SqlPlatform platform,
                                        final Map<Class, TableMapping> tableMappings) throws SQLException {
         return new SchemaInspector(platform, tableMappings).inspect();
     }
@@ -204,7 +204,7 @@ public class SchemaInspector {
     public static abstract class Change {
         public abstract ChangeType type();
 
-        public abstract String ddl(DatabasePlatform platform);
+        public abstract String ddl(SqlPlatform platform);
     }
 
     /**
@@ -225,7 +225,7 @@ public class SchemaInspector {
         }
 
         @Override
-        public String ddl(DatabasePlatform platform) {
+        public String ddl(SqlPlatform platform) {
             return platform.ddlDropTable(mapping, journal);
         }
     }
@@ -248,7 +248,7 @@ public class SchemaInspector {
         }
 
         @Override
-        public String ddl(DatabasePlatform platform) {
+        public String ddl(SqlPlatform platform) {
             return platform.ddlCreateTable(mapping, journal);
         }
     }
@@ -273,7 +273,7 @@ public class SchemaInspector {
         }
 
         @Override
-        public String ddl(DatabasePlatform platform) {
+        public String ddl(SqlPlatform platform) {
             return platform.ddlAddColumn(mapping, property, journal);
         }
     }
@@ -298,7 +298,7 @@ public class SchemaInspector {
         }
 
         @Override
-        public String ddl(DatabasePlatform platform) {
+        public String ddl(SqlPlatform platform) {
             return platform.ddlDropColumn(mapping, column, forJournal);
         }
     }
@@ -323,7 +323,7 @@ public class SchemaInspector {
         }
 
         @Override
-        public String ddl(DatabasePlatform platform) {
+        public String ddl(SqlPlatform platform) {
             return platform.ddlModifyColumn(mapping, property, journal);
         }
     }
@@ -346,7 +346,7 @@ public class SchemaInspector {
         }
 
         @Override
-        public String ddl(DatabasePlatform platform) {
+        public String ddl(SqlPlatform platform) {
             return platform.ddlPrimaryKey(mapping, journal);
         }
     }
@@ -369,7 +369,7 @@ public class SchemaInspector {
         }
 
         @Override
-        public String ddl(DatabasePlatform platform) {
+        public String ddl(SqlPlatform platform) {
             return platform.ddlCreateIndex(mapping, index);
         }
     }
@@ -392,7 +392,7 @@ public class SchemaInspector {
         }
 
         @Override
-        public String ddl(DatabasePlatform platform) {
+        public String ddl(SqlPlatform platform) {
             return platform.ddlDropIndex(index);
         }
     }

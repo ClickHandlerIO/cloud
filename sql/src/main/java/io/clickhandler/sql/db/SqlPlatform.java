@@ -12,19 +12,19 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Database app specific settings.
+ * SqlDatabase app specific settings.
  *
  * @author Clay Molocznik
  */
-public class DatabasePlatform {
+public class SqlPlatform {
     /**
      * The Constant logger.
      */
-    public static final Logger LOG = LoggerFactory.getLogger(DatabasePlatform.class);
+    public static final Logger LOG = LoggerFactory.getLogger(SqlPlatform.class);
     private final Configuration configuration;
-    private final DbConfig configEntity;
+    private final SqlConfig configEntity;
 
-    public DatabasePlatform(Configuration configuration, DbConfig configEntity) {
+    public SqlPlatform(Configuration configuration, SqlConfig configEntity) {
         this.configuration = configuration;
         this.configEntity = configEntity;
     }
@@ -45,7 +45,7 @@ public class DatabasePlatform {
         return configuration;
     }
 
-    public DbConfig getConfigEntity() {
+    public SqlConfig getConfigEntity() {
         return configEntity;
     }
 

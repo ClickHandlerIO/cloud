@@ -10,6 +10,7 @@ import rx.Subscriber;
  *
  */
 public class HystrixTester {
+
     public static void main(String[] args) {
         Vertx vertx = Vertx.vertx();
 
@@ -23,7 +24,7 @@ public class HystrixTester {
                 return Observable.create(new Observable.OnSubscribe<String>() {
                     @Override
                     public void call(Subscriber<? super String> subscriber) {
-                        vertx.setTimer(500, event -> {
+                        vertx.setTimer(5000, event -> {
                             subscriber.onNext("Done");
                             subscriber.onCompleted();
                         });

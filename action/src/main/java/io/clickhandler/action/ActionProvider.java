@@ -1,20 +1,20 @@
 package io.clickhandler.action;
 
-import javaslang.Function1;
+import com.netflix.hystrix.*;
 import javaslang.control.Try;
 import rx.Observable;
-import rx.functions.Function;
 
 import javax.inject.Inject;
 import javax.inject.Provider;
-import java.util.concurrent.Callable;
 
 /**
  * Handles providing
  */
 public class ActionProvider<A, IN, OUT> {
+    static final long DEFAULT_TIMEOUT_MILLIS = 5000;
     private ActionConfig actionConfig;
-
+    private HystrixCommand.Setter defaultSetter;
+    private HystrixObservableCommand.Setter defaultObservableSetter;
     private Provider<A> actionProvider;
     private Provider<IN> inProvider;
     private Provider<OUT> outProvider;
@@ -85,11 +85,95 @@ public class ActionProvider<A, IN, OUT> {
     }
 
     protected void init() {
+        // Get default config.
         actionConfig = actionClass.getAnnotation(ActionConfig.class);
+
+        // Create command props defaults.
+        final HystrixCommandProperties.Setter commandPropertiesDefaults = HystrixCommandProperties.Setter();
+
+        // Timeout milliseconds.
+        long timeoutMillis = DEFAULT_TIMEOUT_MILLIS;
+        if (actionConfig != null) {
+            if (actionConfig.maxExecutionMillis() == 0) {
+                timeoutMillis = 0;
+            } else if (actionConfig.maxExecutionMillis() > 0) {
+                timeoutMillis = actionConfig.maxExecutionMillis();
+            }
+        }
+
+        // Enable timeout?
+        if (timeoutMillis > 0) {
+            commandPropertiesDefaults.withExecutionTimeoutEnabled(true);
+            commandPropertiesDefaults.withExecutionTimeoutInMilliseconds((int) timeoutMillis);
+        }
+
+        // Default isolation strategy.
+        final ExecutionIsolationStrategy isolationStrategy = actionConfig != null
+            ? actionConfig.isolationStrategy()
+            : ExecutionIsolationStrategy.BEST;
+
+        if (ObservableAction.class.isAssignableFrom(actionClass)) {
+            // Determine Hystrix isolation strategy.
+            HystrixCommandProperties.ExecutionIsolationStrategy hystrixIsolation;
+            switch (isolationStrategy) {
+                default:
+                case SEMAPHORE:
+                case BEST:
+                    hystrixIsolation = HystrixCommandProperties.ExecutionIsolationStrategy.SEMAPHORE;
+                    break;
+                case THREAD:
+                    hystrixIsolation = HystrixCommandProperties.ExecutionIsolationStrategy.THREAD;
+                    break;
+            }
+
+            // Set Hystrix isolation strategy.
+            commandPropertiesDefaults.withExecutionIsolationStrategy(hystrixIsolation);
+
+            // Build HystrixObservableCommand.Setter default.
+            final String groupKey = actionConfig != null ? actionConfig.groupKey() : "";
+            defaultObservableSetter =
+                HystrixObservableCommand.Setter
+                    .withGroupKey(HystrixCommandGroupKey.Factory.asKey(groupKey))
+                    .andCommandPropertiesDefaults(commandPropertiesDefaults)
+                    .andCommandKey(HystrixCommandKey.Factory.asKey(actionClass.getName()));
+        }
+
+        // Is it a blocking action.
+        else if (AbstractBlockingAction.class.isAssignableFrom(actionClass)) {
+            HystrixCommandProperties.ExecutionIsolationStrategy hystrixIsolation;
+            switch (isolationStrategy) {
+                case SEMAPHORE:
+                    hystrixIsolation = HystrixCommandProperties.ExecutionIsolationStrategy.SEMAPHORE;
+                    break;
+                default:
+                case BEST:
+                case THREAD:
+                    hystrixIsolation = HystrixCommandProperties.ExecutionIsolationStrategy.THREAD;
+                    break;
+            }
+
+            // Set Hystrix isolation strategy.
+            commandPropertiesDefaults.withExecutionIsolationStrategy(hystrixIsolation);
+
+            // Build HystrixCommand.Setter default.
+            final String groupKey = actionConfig != null ? actionConfig.groupKey() : "";
+            defaultSetter =
+                HystrixCommand.Setter
+                    .withGroupKey(HystrixCommandGroupKey.Factory.asKey(groupKey))
+                    .andCommandKey(HystrixCommandKey.Factory.asKey(actionClass.getName()))
+                    .andCommandPropertiesDefaults(commandPropertiesDefaults);
+
+        }
     }
 
     protected A create() {
-        return actionProvider.get();
+        final A action = actionProvider.get();
+        if (action instanceof AbstractBlockingAction) {
+            ((AbstractBlockingAction) action).setCommandSetter(defaultSetter);
+        } else if (action instanceof AbstractObservableAction) {
+            ((AbstractObservableAction) action).setCommandSetter(defaultObservableSetter);
+        }
+        return action;
     }
 
 
@@ -108,7 +192,7 @@ public class ActionProvider<A, IN, OUT> {
      */
     protected A create(
         final IN request) {
-        A action = actionProvider.get();
+        A action = create();
 
         final AbstractAction<IN, OUT> abstractAction = (AbstractAction<IN, OUT>) action;
         abstractAction.setRequest(request);
@@ -143,7 +227,7 @@ public class ActionProvider<A, IN, OUT> {
         final IN request) {
         return observe(
             request,
-            actionProvider.get()
+            create()
         );
     }
 
@@ -163,14 +247,5 @@ public class ActionProvider<A, IN, OUT> {
         }
 
         return abstractAction.observe();
-    }
-
-    /**
-     * @param request
-     * @param action
-     * @return
-     */
-    protected Observable<Boolean> queue(final IN request, final A action) {
-        return Observable.empty();
     }
 }

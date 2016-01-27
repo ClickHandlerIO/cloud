@@ -7,17 +7,18 @@ import javax.inject.Inject;
 /**
  *
  */
-public class RemoteActionProvider<A extends Action<IN, OUT>, IN, OUT> extends ActionProvider<A, IN, OUT> {
-    private RemoteAction remoteAction;
+public class InternalActionProvider<A extends Action<IN, OUT>, IN, OUT> extends ActionProvider<A, IN, OUT> {
+    private InternalAction internalAction;
 
     @Inject
-    public RemoteActionProvider() {
+    public InternalActionProvider() {
     }
 
     @Override
     protected void init() {
+        internalAction = getActionClass().getAnnotation(InternalAction.class);
         super.init();
-        remoteAction = getActionClass().getAnnotation(RemoteAction.class);
+
     }
 
     public Observable<OUT> observe(final Func.Run1<IN> callback) {

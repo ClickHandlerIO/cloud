@@ -11,8 +11,8 @@ import org.jooq.util.mysql.MySQLDataType;
  *
  * @author Clay Molocznik
  */
-public class MySqlPlatform extends DatabasePlatform {
-    public MySqlPlatform(Configuration configuration, DbConfig configEntity) {
+public class MySqlPlatform extends SqlPlatform {
+    public MySqlPlatform(Configuration configuration, SqlConfig configEntity) {
         super(configuration, configEntity);
     }
 
@@ -47,7 +47,7 @@ public class MySqlPlatform extends DatabasePlatform {
      * @return
      */
     public String getStorageEngine() {
-        final DbConfig config = getConfigEntity();
+        final SqlConfig config = getConfigEntity();
         final String engine = config != null ? Strings.nullToEmpty(config.getStorageEngine()).trim() : "";
         return engine.isEmpty() ? "InnoDB" : engine;
     }

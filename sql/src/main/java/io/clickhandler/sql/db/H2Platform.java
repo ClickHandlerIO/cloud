@@ -10,8 +10,8 @@ import org.jooq.util.h2.H2DataType;
 /**
  *
  */
-public class H2Platform extends DatabasePlatform {
-    public H2Platform(Configuration configuration, DbConfig configEntity) {
+public class H2Platform extends SqlPlatform {
+    public H2Platform(Configuration configuration, SqlConfig configEntity) {
         super(configuration, configEntity);
     }
 

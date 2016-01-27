@@ -10,12 +10,17 @@ import java.util.concurrent.atomic.AtomicReference;
 public abstract class AbstractBlockingAction<IN, OUT>
     extends AbstractAction<IN, OUT> {
     private final AtomicReference<HystrixCommand<OUT>> command = new AtomicReference<>();
+    private HystrixCommand.Setter setter;
+
+    void setCommandSetter(HystrixCommand.Setter setter) {
+        this.setter = setter;
+    }
 
     /**
      * @return
      */
     protected HystrixCommand.Setter getCommandSetter() {
-        return getDescriptor().commandSetter.get();
+        return setter;
     }
 
     /**

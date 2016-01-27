@@ -3,7 +3,7 @@ package io.clickhandler.sql.db;
 /**
  *
  */
-public class DbConfig {
+public class SqlConfig {
     private String name = "CORE";
     private String url = "jdbc:h2:mem:move;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=TRUE;";
     private String catalog = "";

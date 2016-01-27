@@ -9,11 +9,19 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * @author Clay Molocznik
  */
-public abstract class AbstractObservableAction<IN, OUT extends ActionResponse> extends AbstractAction<IN, OUT> {
+public abstract class AbstractObservableAction<IN, OUT>
+    extends AbstractAction<IN, OUT>
+    implements ObservableAction<IN, OUT> {
+
     private final AtomicReference<HystrixObservableCommand<OUT>> command = new AtomicReference<>();
+    private HystrixObservableCommand.Setter setter;
 
     protected HystrixObservableCommand.Setter getCommandSetter() {
-        return getDescriptor().observableCommandSetter.get();
+        return setter;
+    }
+
+    void setCommandSetter(HystrixObservableCommand.Setter setter) {
+        this.setter = setter;
     }
 
     /**

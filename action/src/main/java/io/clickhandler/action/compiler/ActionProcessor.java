@@ -11,24 +11,23 @@ import javax.lang.model.SourceVersion;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
-import javax.lang.model.element.TypeParameterElement;
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.TypeKind;
-import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
-import java.util.*;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.Set;
+import java.util.TreeMap;
 
 /**
- *
+ * Action annotation processor.
  */
 @AutoService(Processor.class)
 public class ActionProcessor extends AbstractProcessor {
     public static final String LOCATOR = "_Locator";
     public static final String LOCATOR_ROOT = "_LocatorRoot";
     private final TreeMap<String, ActionHolder> actionMap = new TreeMap<>();
-    private final Pkg rootPackage = new Pkg("Action", "", null);
+    private final Pkg rootPackage = new Pkg("Action", "");
 
     private Types typeUtils;
     private Elements elementUtils;
@@ -44,35 +43,92 @@ public class ActionProcessor extends AbstractProcessor {
         messager = processingEnv.getMessager();
     }
 
+    /**
+     * @return
+     */
     @Override
     public SourceVersion getSupportedSourceVersion() {
         return SourceVersion.RELEASE_8;
     }
 
+    /**
+     * @return
+     */
     @Override
     public Set<String> getSupportedAnnotationTypes() {
         Set<String> annotataions = new LinkedHashSet<>();
         annotataions.add(RemoteAction.class.getCanonicalName());
         annotataions.add(QueueAction.class.getCanonicalName());
         annotataions.add(InternalAction.class.getCanonicalName());
-        annotataions.add(ActionConfig.class.getCanonicalName());
+//        annotataions.add(ActionConfig.class.getCanonicalName());
         return annotataions;
     }
 
+    /**
+     * @param annotations
+     * @param roundEnv
+     * @return
+     */
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
         try {
-            for (Element annotatedElement : roundEnv.getElementsAnnotatedWith(RemoteAction.class)) {
+            final Set<? extends Element> remoteElements = roundEnv.getElementsAnnotatedWith(RemoteAction.class);
+            final Set<? extends Element> queueElements = roundEnv.getElementsAnnotatedWith(QueueAction.class);
+            final Set<? extends Element> internalElements = roundEnv.getElementsAnnotatedWith(InternalAction.class);
+
+            final HashSet<Element> elements = new HashSet<>();
+
+            if (remoteElements != null) {
+                elements.addAll(remoteElements);
+            }
+            if (queueElements != null) {
+                elements.addAll(queueElements);
+            }
+            if (internalElements != null) {
+                elements.addAll(internalElements);
+            }
+
+            for (Element annotatedElement : elements) {
                 final RemoteAction remoteAction = annotatedElement.getAnnotation(RemoteAction.class);
+                final QueueAction queueAction = annotatedElement.getAnnotation(QueueAction.class);
+                final InternalAction internalAction = annotatedElement.getAnnotation(InternalAction.class);
 
                 final TypeElement element = elementUtils.getTypeElement(annotatedElement.toString());
+
+//                ActionConfig actionConfig;
+//                try {
+//                    actionConfig = annotatedElement.getAnnotation(ActionConfig.class);
+//                } catch (Throwable e) {
+//                    actionConfig = null;
+//                }
 
                 ActionHolder holder = actionMap.get(element.getQualifiedName().toString());
 
                 if (holder == null) {
                     holder = new ActionHolder();
-                    holder.remoteAction = remoteAction;
                     holder.type = element;
+                }
+
+//                holder.config = actionConfig;
+
+                if (holder.remoteAction == null) {
+                    holder.remoteAction = remoteAction;
+                }
+                if (holder.queueAction == null) {
+                    holder.queueAction = queueAction;
+                }
+                if (holder.internalAction == null) {
+                    holder.internalAction = internalAction;
+                }
+
+                // Ensure only 1 action annotation was used.
+                int actionAnnotationCount = 0;
+                if (holder.remoteAction != null) actionAnnotationCount++;
+                if (holder.queueAction != null) actionAnnotationCount++;
+                if (holder.internalAction != null) actionAnnotationCount++;
+                if (actionAnnotationCount > 1) {
+                    messager.printMessage(Diagnostic.Kind.ERROR, element.getQualifiedName() + "  has multiple Action annotations. Only one of the following may be used... @RemoteAction or @QueueAction or @InternalAction");
+                    continue;
                 }
 
                 // Make sure it's concrete.
@@ -90,10 +146,10 @@ public class ActionProcessor extends AbstractProcessor {
                     messager.printMessage(Diagnostic.Kind.WARNING, element.getQualifiedName().toString());
 
                     if (holder.inType != null) {
-                        messager.printMessage(Diagnostic.Kind.WARNING, "IN = " + holder.inType.varTypeElement.getQualifiedName().toString());
+                        messager.printMessage(Diagnostic.Kind.WARNING, "IN = " + holder.inType.getResolvedElement().getQualifiedName().toString());
                     }
                     if (holder.outType != null) {
-                        messager.printMessage(Diagnostic.Kind.WARNING, "OUT = " + holder.outType.varTypeElement.getQualifiedName().toString());
+                        messager.printMessage(Diagnostic.Kind.WARNING, "OUT = " + holder.outType.getResolvedElement().getQualifiedName().toString());
                     }
                 }
 
@@ -149,225 +205,24 @@ public class ActionProcessor extends AbstractProcessor {
         messager.printMessage(Diagnostic.Kind.ERROR, msg, e);
     }
 
-    private static class DeclaredTypeVar {
-        private final Map<String, TypeVarImpl> resolvedMap = new HashMap<>();
-        private DeclaredType type;
-        private TypeElement element;
-        private int index;
-        private String varName;
-        private TypeMirror varType;
-        private TypeElement varTypeElement;
-
-        public DeclaredTypeVar(DeclaredType type, TypeElement element, int index, String varName, TypeMirror varType) {
-            this.type = type;
-            this.element = element;
-            this.index = index;
-            this.varName = varName;
-            this.varType = varType;
-
-            if (varType instanceof DeclaredType) {
-                this.varTypeElement = (TypeElement) ((DeclaredType) varType).asElement();
-            }
-        }
-
-        public void resolve() {
-            // Find 'varName' on the SuperClass or any Interfaces.
-            final TypeMirror superClass = element.getSuperclass();
-
-            if (superClass != null) {
-                search(varName, superClass);
-            }
-        }
-
-        private void search(String varName, TypeMirror mirror) {
-            if (mirror == null || !(mirror instanceof DeclaredType)) {
-                return;
-            }
-
-            final DeclaredType type = (DeclaredType) mirror;
-            final TypeElement element = (TypeElement) type.asElement();
-            final List<? extends TypeMirror> typeArgs = type.getTypeArguments();
-            if (typeArgs == null || typeArgs.isEmpty()) {
-                return;
-            }
-
-            for (int i = 0; i < typeArgs.size(); i++) {
-                final TypeMirror typeArg = typeArgs.get(i);
-
-                if (typeArg.getKind() == TypeKind.TYPEVAR
-                    && typeArg.toString().equals(varName)) {
-                    // Found it.
-                    // Get TypeVariable name.
-                    varName = element.getTypeParameters().get(i).getSimpleName().toString();
-
-                    // Add to resolved map.
-                    resolvedMap.put(element.toString(), new TypeVarImpl(type, element, i, varName));
-
-                    // Go up to the SuperClass.
-                    search(varName, element.getSuperclass());
-
-                    final List<? extends TypeMirror> interfaces = element.getInterfaces();
-                    if (interfaces != null && !interfaces.isEmpty()) {
-                        for (TypeMirror iface : interfaces) {
-                            search(varName, iface);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private static class TypeVarImpl {
-        private DeclaredType type;
-        private TypeElement element;
-        private int index;
-        private String varName;
-
-        public TypeVarImpl(DeclaredType type, TypeElement element, int index, String varName) {
-            this.type = type;
-            this.element = element;
-            this.index = index;
-            this.varName = varName;
-        }
-    }
-
-    private static class TypeParameterResolver {
-        private final TypeElement element;
-        private final List<DeclaredTypeVar> vars = new ArrayList<>();
-        private boolean resolved;
-
-        public TypeParameterResolver(TypeElement element) {
-            this.element = element;
-        }
-
-        public void resolve() {
-            if (resolved) {
-                return;
-            }
-
-            resolveDeclaredTypeVars(element.getSuperclass());
-
-            final List<? extends TypeMirror> interfaces = element.getInterfaces();
-            if (interfaces != null && !interfaces.isEmpty()) {
-                for (TypeMirror iface : interfaces) {
-                    resolveDeclaredTypeVars(iface);
-                }
-            }
-
-            resolved = true;
-        }
-
-        public DeclaredTypeVar resolve(Class cls, int typeVarIndex) {
-            if (!resolved) {
-                resolve();
-            }
-            for (DeclaredTypeVar var : vars) {
-                final TypeVarImpl actionTypeVar = var.resolvedMap.get(cls.getName());
-                if (actionTypeVar != null) {
-                    if (actionTypeVar.index == typeVarIndex) {
-                        return var;
-                    }
-                }
-            }
-            return null;
-        }
-
-        private void resolveDeclaredTypeVars(TypeMirror type) {
-            if (type == null) {
-                return;
-            }
-
-            if (type.getKind() != TypeKind.DECLARED) {
-                return;
-            }
-
-            if (type.toString().equals(Object.class.getName())) {
-                return;
-            }
-
-            if (!(type instanceof DeclaredType)) {
-                return;
-            }
-
-            final DeclaredType declaredType = (DeclaredType) type;
-            final TypeElement element = ((TypeElement) ((DeclaredType) type).asElement());
-
-            if (element.getQualifiedName().toString().equals(Object.class.getName())) {
-                return;
-            }
-
-            final List<? extends TypeMirror> typeArgs = declaredType.getTypeArguments();
-            if (typeArgs != null && !typeArgs.isEmpty()) {
-                for (int i = 0; i < typeArgs.size(); i++) {
-                    final TypeMirror typeArg = typeArgs.get(i);
-
-                    if (typeArg.getKind() == TypeKind.DECLARED) {
-                        final List<? extends TypeParameterElement> typeParams = ((TypeElement) ((DeclaredType) type).asElement()).getTypeParameters();
-                        final String typeVarName = typeParams.get(i).getSimpleName().toString();
-
-                        final DeclaredTypeVar declaredTypeVar = new DeclaredTypeVar(declaredType, element, i, typeVarName, typeArg);
-                        declaredTypeVar.resolve();
-                        vars.add(declaredTypeVar);
-                    }
-                }
-            }
-
-            resolveDeclaredTypeVars(element.getSuperclass());
-
-            final List<? extends TypeMirror> interfaces = element.getInterfaces();
-            if (interfaces != null && !interfaces.isEmpty()) {
-                for (TypeMirror iface : interfaces) {
-                    resolveDeclaredTypeVars(iface);
-                }
-            }
-        }
-    }
-
-    public static class ActionHolder {
-        RemoteAction remoteAction;
-        QueueAction queueAction;
-        ActionConfig config;
-        TypeElement type;
-        DeclaredTypeVar inType;
-        DeclaredTypeVar outType;
-
-        String pkgName = null;
-
-        public String getName() {
-            return type.getQualifiedName().toString();
-        }
-
-        public String getFieldName() {
-            final String name = type.getSimpleName().toString();
-            return Character.toLowerCase(name.charAt(0)) + name.substring(1);
-        }
-
-        public String getPackage() {
-            if (pkgName != null) {
-                return pkgName;
-            }
-
-            final String qname = type.getQualifiedName().toString();
-
-            final String[] parts = qname.split("[.]");
-            if (parts.length == 1) {
-                return pkgName = "";
-            } else {
-                final String lastPart = parts[parts.length - 1];
-                return pkgName = qname.substring(0, qname.length() - lastPart.length() - 1);
-            }
-        }
-    }
-
+    /**
+     *
+     */
     public class Pkg {
         public final String name;
         public final Pkg parent;
         public final TreeMap<String, Pkg> children = new TreeMap<>();
         public final TreeMap<String, ActionHolder> actions = new TreeMap<>();
+        private final boolean root;
         public String path;
         private boolean processed = false;
 
+        public Pkg(String name, String path) {
+            this(name, path, null);
+        }
+
         public Pkg(String name, String path, Pkg parent) {
+            this.root = parent == null;
             this.name = name;
             this.path = path;
             this.parent = parent;
@@ -382,52 +237,54 @@ public class ActionProcessor extends AbstractProcessor {
         }
 
         public String getClassName() {
-            return name == null || name.isEmpty() ? "Root" : Character.toUpperCase(name.charAt(0)) + name.substring(1) + (this == rootPackage ? LOCATOR_ROOT : LOCATOR);
+            return name == null || name.isEmpty() ? "Root" : Character.toUpperCase(name.charAt(0)) + name.substring(1) + (root ? LOCATOR_ROOT : LOCATOR);
         }
 
         public void generateJava() {
-            if (processed) {
-                return;
-            }
-            processed = true;
+            if (processed) return;
 
-            if (this == rootPackage) {
-                if (children.isEmpty()) {
-                    return;
-                }
+            if (root) {
+                if (children.isEmpty()) return;
 
                 path = children.values().iterator().next().path;
-
                 messager.printMessage(Diagnostic.Kind.WARNING, "Found ActionRoot Path: " + path);
             }
 
-            MethodSpec ctor = MethodSpec.constructorBuilder()
-                .addAnnotation(AnnotationSpec.builder(Inject.class).build())
+            processed = true;
+
+            // Build empty @Inject constructor.
+            final MethodSpec ctor = MethodSpec.constructorBuilder()
+                .addAnnotation(Inject.class)
                 .addModifiers(Modifier.PUBLIC)
                 .build();
 
-            TypeSpec.Builder type = TypeSpec.classBuilder(getClassName())
+            // Init Class.
+            final TypeSpec.Builder type = TypeSpec.classBuilder(getClassName())
                 .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                 .superclass(TypeName.get(ActionLocator.class))
                 .addAnnotation(Singleton.class)
                 .addMethod(ctor);
 
+            // We generate the code for "initActions()" and "initChildren()" as we process.
             final CodeBlock.Builder initActionsCode = CodeBlock.builder();
             final CodeBlock.Builder initChildrenCode = CodeBlock.builder();
 
             // Generate SubPackage locators.
             for (Pkg childPackage : children.values()) {
+                // Build type name.
                 final TypeName typeName = ClassName.get(childPackage.path, childPackage.getClassName());
 
+                // Add field.
                 type.addField(
-                    FieldSpec.builder(
-                        typeName,
-                        childPackage.name
-                    ).addAnnotation(AnnotationSpec.builder(Inject.class).build()).build()
+                    FieldSpec.builder(typeName, childPackage.name)
+                        .addAnnotation(Inject.class)
+                        .build()
                 );
 
+                // Add code to initChildren() code.
                 initChildrenCode.addStatement("children.add($L)", childPackage.name);
 
+                // Add getter method.
                 type.addMethod(
                     MethodSpec.methodBuilder(childPackage.name)
                         .addModifiers(Modifier.PUBLIC)
@@ -437,54 +294,65 @@ public class ActionProcessor extends AbstractProcessor {
                 );
             }
 
+            // Go through all actions.
             actions.forEach((classPath, action) -> {
+                // Get Action classname.
                 ClassName actionName = ClassName.get(action.type);
-                ClassName inName = ClassName.get(action.inType.varTypeElement);
-                ClassName outName = ClassName.get(action.outType.varTypeElement);
+                // Get Action IN resolved name.
+                ClassName inName = ClassName.get(action.inType.getResolvedElement());
+                // Get Action OUT resolved name.
+                ClassName outName = ClassName.get(action.outType.getResolvedElement());
 
-                TypeName actionProvider = ParameterizedTypeName.get(
-                    ClassName.get(RemoteActionProvider.class),
+                TypeName actionProviderBuilder = ParameterizedTypeName.get(
+                    action.getProviderTypeName(),
                     actionName,
                     inName,
                     outName
                 );
 
                 type.addField(
-                    FieldSpec.builder(
-                        actionProvider, action.getFieldName()
-                    ).addAnnotation(Inject.class).build()
+                    FieldSpec.builder(actionProviderBuilder, action.getFieldName())
+                        .addAnnotation(Inject.class)
+                        .build()
                 );
 
                 initActionsCode.addStatement("actionMap.put($T.class, $L)", action.type, action.getFieldName());
-                initActionsCode.addStatement("actionMap.put($T.class, $L)", action.inType.varTypeElement, action.getFieldName());
-                initActionsCode.addStatement("actionMap.put($T.class, $L)", action.outType.varTypeElement, action.getFieldName());
+                // TODO: Is this something we should add back in?
+//                initActionsCode.addStatement("actionMap.put($T.class, $L)", action.inType.getResolvedElement(), action.getFieldName());
+//                initActionsCode.addStatement("actionMap.put($T.class, $L)", action.outType.getResolvedElement(), action.getFieldName());
 
                 type.addMethod(
                     MethodSpec.methodBuilder(action.getFieldName())
                         .addModifiers(Modifier.PUBLIC)
-                        .returns(actionProvider)
+                        .returns(actionProviderBuilder)
                         .addStatement("return " + action.getFieldName())
                         .build()
                 );
             });
 
+            // Add implemented "initActions()".
             type.addMethod(
                 MethodSpec.methodBuilder("initActions")
+                    .addAnnotation(Override.class)
                     .addModifiers(Modifier.PROTECTED)
                     .returns(void.class)
                     .addCode(initActionsCode.build()).build()
             );
 
+            // Add implemented "initChildren()".
             type.addMethod(
                 MethodSpec.methodBuilder("initChildren")
+                    .addAnnotation(Override.class)
                     .addModifiers(Modifier.PROTECTED)
                     .returns(void.class)
                     .addCode(initChildrenCode.build()).build()
             );
 
-            JavaFile javaFile = JavaFile.builder(path, type.build()).build();
+            // Build java file.
+            final JavaFile javaFile = JavaFile.builder(path, type.build()).build();
 
             try {
+                // Write .java source code file.
                 javaFile.writeTo(filer);
             } catch (Throwable e) {
                 // Ignore.
