@@ -11,8 +11,7 @@ import entity.EmailEntity;
 import entity.EmailRecipientEntity;
 import entity.RecipientStatus;
 import io.clickhandler.queue.QueueHandler;
-import io.clickhandler.sql.db.Database;
-import io.clickhandler.sql.db.DatabaseSession;
+import io.clickhandler.sql.db.*;
 import io.vertx.rxjava.core.eventbus.EventBus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,13 +33,13 @@ public class SESSendQueueHandler implements QueueHandler<SESSendRequest>, Tables
 
     private final static Logger LOG = LoggerFactory.getLogger(SESSendQueueHandler.class);
     private final EventBus eventBus;
-    private final DatabaseSession db;
+    private final SqlDatabase db;
     private final AmazonSimpleEmailServiceClient client;
     private final int ALLOWED_ATTEMPTS;
 
-    public SESSendQueueHandler(EventBus eventBus, Database db){
+    public SESSendQueueHandler(EventBus eventBus, SqlDatabase db){
         this.eventBus = eventBus;
-        this.db = db.getSession();
+        this.db = db;
         final BasicAWSCredentials AWSCredentials = new BasicAWSCredentials(
                 Strings.nullToEmpty(SESConfig.getAwsAccessKey()),
                 Strings.nullToEmpty(SESConfig.getAwsSecretKey())
@@ -103,20 +102,33 @@ public class SESSendQueueHandler implements QueueHandler<SESSendRequest>, Tables
         return new SendRawEmailRequest(rawMessage);
     }
 
-    private EmailEntity updateRecords(EmailEntity emailEntity, final String sesMessageId) throws Exception {
+    private EmailEntity updateRecords(final EmailEntity emailEntity, final String sesMessageId) throws Exception {
         boolean success = sesMessageId != null && !sesMessageId.isEmpty();
+        // update email record
         if(success) {
             emailEntity.setMessageId(sesMessageId);
-            db.update(emailEntity);
+            db.writeObservable(session -> new SqlResult<>(session.update(emailEntity) == 1, emailEntity)).subscribe(emailEntitySqlResult -> {
+                if(!emailEntitySqlResult.isSuccess()) {
+                    LOG.error("Email failed to update on send.");
+                }
+            });
         }
+
         // update recipient records
-        List<EmailRecipientEntity> recipientEntities = db.select(EMAIL_RECIPIENT.fields())
+        // get recipients
+        final SqlHelper sqlHelper = new SqlHelper();
+        db.readObservable(session -> session.select(EMAIL_RECIPIENT.fields())
                 .where(EMAIL_RECIPIENT.EMAIL_ID.eq(emailEntity.getId()))
-                .fetch().into(EMAIL_RECIPIENT).into(EmailRecipientEntity.class);
-        if(recipientEntities == null || recipientEntities.isEmpty()) {
+                .fetch().into(EMAIL_RECIPIENT).into(EmailRecipientEntity.class)).subscribe(emailRecipientEntities -> {
+            sqlHelper.setRecipientEntities(emailRecipientEntities);
+            sqlHelper.notify();
+        });
+        sqlHelper.wait();
+        if(sqlHelper.getRecipientEntities() == null || sqlHelper.getRecipientEntities().isEmpty()) {
             throw new Exception("Email " + (success ? "sent " : "failed ") + "and recipient record(s) update failed.");
         }
-        for(EmailRecipientEntity recipientEntity:recipientEntities) {
+        // update recipients
+        for(final EmailRecipientEntity recipientEntity:sqlHelper.getRecipientEntities()) {
             if(success) {
                 recipientEntity.setStatus(RecipientStatus.SENT);
                 recipientEntity.setSent(new Date());
@@ -124,12 +136,31 @@ public class SESSendQueueHandler implements QueueHandler<SESSendRequest>, Tables
                 recipientEntity.setStatus(RecipientStatus.FAILED);
                 recipientEntity.setFailed(new Date());
             }
-            db.update(recipientEntity);
+            db.writeObservable(session -> new SqlResult<>(session.update(recipientEntity) == 1, recipientEntity)).subscribe(recipientEntitySqlResult -> {
+                if (!recipientEntitySqlResult.isSuccess()) {
+                    LOG.error("EmailRecipient failed to update on send.");
+                }
+            });
         }
         return emailEntity;
     }
 
     private void publishEvent(EmailEntity emailEntity, boolean success) {
         eventBus.publish(SESEmailSentEvent.ADDRESS, new SESEmailSentEvent(emailEntity, success));
+    }
+
+    class SqlHelper {
+        List<EmailRecipientEntity> recipientEntities;
+
+        public SqlHelper() {
+        }
+
+        public List<EmailRecipientEntity> getRecipientEntities() {
+            return recipientEntities;
+        }
+
+        public void setRecipientEntities(List<EmailRecipientEntity> recipientEntities) {
+            this.recipientEntities = recipientEntities;
+        }
     }
 }

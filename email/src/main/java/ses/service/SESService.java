@@ -2,7 +2,7 @@ package ses.service;
 
 import com.sun.istack.internal.NotNull;
 import common.service.AbstractEmailService;
-import io.clickhandler.sql.db.Database;
+import io.clickhandler.sql.db.SqlDatabase;
 import io.vertx.rxjava.core.eventbus.EventBus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,7 +27,7 @@ public class SESService extends AbstractEmailService<SESSendRequest> {
     private final SESSendService sesSendService;
 
     @Inject
-    public SESService(@NotNull EventBus eventBus, @NotNull Database db, @NotNull S3Service s3Service) {
+    public SESService(@NotNull EventBus eventBus, @NotNull SqlDatabase db, @NotNull S3Service s3Service) {
         this.SESAttachmentService = new SESAttachmentService(db, s3Service);
         this.sesSendService = new SESSendService(eventBus, db);
         this.sesSendPrepService = new SESSendPrepService(eventBus, db, SESAttachmentService, sesSendService);

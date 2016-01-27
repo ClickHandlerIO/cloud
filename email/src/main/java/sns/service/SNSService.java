@@ -6,7 +6,7 @@ import io.clickhandler.queue.LocalQueueServiceFactory;
 import io.clickhandler.queue.QueueFactory;
 import io.clickhandler.queue.QueueService;
 import io.clickhandler.queue.QueueServiceConfig;
-import io.clickhandler.sql.db.Database;
+import io.clickhandler.sql.db.SqlDatabase;
 import io.vertx.rxjava.core.eventbus.EventBus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,7 +34,7 @@ public class SNSService extends AbstractIdleService {
     private QueueService<Message> queueService;
 
     @Inject
-    public SNSService(EventBus eventBus, Database db) {
+    public SNSService(EventBus eventBus, SqlDatabase db) {
 
         // initialize sns queues
         QueueFactory factory = new LocalQueueServiceFactory();

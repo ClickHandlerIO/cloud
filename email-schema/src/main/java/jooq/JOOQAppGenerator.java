@@ -1,8 +1,9 @@
 package jooq;
 
-import io.clickhandler.sql.db.Database;
-import io.clickhandler.sql.db.DbConfig;
 import io.clickhandler.sql.db.SchemaGenerator;
+import io.clickhandler.sql.db.SqlConfig;
+import io.clickhandler.sql.db.SqlDatabase;
+import io.vertx.rxjava.core.Vertx;
 import org.jooq.util.GenerationTool;
 
 import java.io.File;
@@ -17,10 +18,11 @@ import java.nio.file.StandardOpenOption;
  */
 public class JOOQAppGenerator {
     public static void main(String[] args) throws Throwable {
-        final DbConfig dbConfig = new DbConfig();
+        final SqlConfig dbConfig = new SqlConfig();
         dbConfig.setGenerateSchema(true);
 
-        final Database database = new Database(
+        final SqlDatabase database = new SqlDatabase(
+            Vertx.vertx(),
             dbConfig,
             new String[]{"entity"},
             new String[]{"data.schema"}

@@ -5,8 +5,7 @@ import data.schema.Tables;
 import entity.EmailAttachmentEntity;
 import entity.EmailEntity;
 import io.clickhandler.queue.QueueHandler;
-import io.clickhandler.sql.db.Database;
-import io.clickhandler.sql.db.DatabaseSession;
+import io.clickhandler.sql.db.SqlDatabase;
 import io.vertx.rxjava.core.eventbus.EventBus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,13 +42,13 @@ public class SESPrepQueueHandler  implements QueueHandler<SESSendRequest>, Table
 
     private static final Logger LOG = LoggerFactory.getLogger(SESPrepQueueHandler.class);
     private final EventBus eventBus;
-    private final DatabaseSession db;
+    private final SqlDatabase db;
     private final SESAttachmentService SESAttachmentService;
     private final SESSendService sesSendService;
 
-    public SESPrepQueueHandler(EventBus eventBus, Database db, SESAttachmentService SESAttachmentService, SESSendService sesSendService) {
+    public SESPrepQueueHandler(EventBus eventBus, SqlDatabase db, SESAttachmentService SESAttachmentService, SESSendService sesSendService) {
         this.eventBus = eventBus;
-        this.db = db.getSession();
+        this.db = db;
         this.SESAttachmentService = SESAttachmentService;
         this.sesSendService = sesSendService;
     }
@@ -156,12 +155,32 @@ public class SESPrepQueueHandler  implements QueueHandler<SESSendRequest>, Table
     }
 
     private List<EmailAttachmentEntity> getEmailAttachmentEntities(EmailEntity emailEntity) throws Exception {
-        List<EmailAttachmentEntity> attachmentEntities = db.select(EMAIL_ATTACHMENT.fields())
+        final SqlHelper sqlHelper = new SqlHelper();
+        db.readObservable(session -> session.select(EMAIL_ATTACHMENT.fields())
                 .where(EMAIL_ATTACHMENT.EMAIL_ID.eq(emailEntity.getId()))
-                .fetch().into(EMAIL_ATTACHMENT).into(EmailAttachmentEntity.class);
-        if (attachmentEntities.isEmpty()) {
+                .fetch().into(EMAIL_ATTACHMENT).into(EmailAttachmentEntity.class)).subscribe(emailAttachmentEntities -> {
+            sqlHelper.setAttachmentEntities(emailAttachmentEntities);
+            sqlHelper.notify();
+        });
+        sqlHelper.wait();
+        if (sqlHelper.getAttachmentEntities().isEmpty()) {
             throw new Exception("Email attachment record(s) not found.");
         }
-        return attachmentEntities;
+        return sqlHelper.getAttachmentEntities();
+    }
+
+    class SqlHelper {
+        List<EmailAttachmentEntity> attachmentEntities;
+
+        public SqlHelper() {
+        }
+
+        public List<EmailAttachmentEntity> getAttachmentEntities() {
+            return attachmentEntities;
+        }
+
+        public void setAttachmentEntities(List<EmailAttachmentEntity> attachmentEntities) {
+            this.attachmentEntities = attachmentEntities;
+        }
     }
 }

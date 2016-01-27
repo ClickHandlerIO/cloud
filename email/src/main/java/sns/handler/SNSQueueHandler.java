@@ -3,8 +3,7 @@ package sns.handler;
 import data.schema.Tables;
 import entity.*;
 import io.clickhandler.queue.QueueHandler;
-import io.clickhandler.sql.db.Database;
-import io.clickhandler.sql.db.DatabaseSession;
+import io.clickhandler.sql.db.*;
 import io.vertx.rxjava.core.eventbus.EventBus;
 import sns.event.email.SNSEmailBounceEvent;
 import sns.event.email.SNSEmailComplaintEvent;
@@ -23,8 +22,6 @@ import sns.data.json.email.notify.*;
 import sns.data.json.email.receive.EmailReceivedMessage;
 import sns.data.json.general.GeneralMessage;
 
-import javax.inject.Inject;
-import javax.inject.Singleton;
 import java.net.URL;
 import java.util.Date;
 import java.util.List;
@@ -40,7 +37,6 @@ import java.util.Scanner;
  *
  * @author Brad Behnke
  */
-@Singleton
 public class SNSQueueHandler implements QueueHandler<Message>, Tables {
 
     public static final Logger LOG = LoggerFactory.getLogger(SNSQueueHandler.class);
@@ -48,12 +44,11 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
     private final List<String> emailNotifySubscriptionArnList;
     private final List<String> emailReceivedSubscriptionArnList;
 
-    private final DatabaseSession db;
+    private final SqlDatabase db;
     private final EventBus eventBus;
 
-    @Inject
-    public SNSQueueHandler(EventBus eventBus, Database db) {
-        this.db = db.getSession();
+    public SNSQueueHandler(EventBus eventBus, SqlDatabase db) {
+        this.db = db;
         this.eventBus = eventBus;
         this.generalSubscriptionArnList = SNSConfig.getGeneralSubscriptionArnList();
         this.emailNotifySubscriptionArnList = SNSConfig.getEmailNotifySubscriptionArnList();
@@ -182,7 +177,7 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
             recipientEntities.stream().filter(recipientEntity -> delivery.getRecipients().contains(recipientEntity.getAddress())).forEach(recipientEntity -> {
                 recipientEntity.setStatus(RecipientStatus.DELIVERED);
                 recipientEntity.setDelivered(new Date());
-                db.update(recipientEntity);
+                updateRecipient(recipientEntity);
             });
         }
         eventBus.publish(SNSEmailDeliveryEvent.ADDRESS, new SNSEmailDeliveryEvent(message));
@@ -197,7 +192,7 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
             recipientEntities.stream().filter(recipientEntity -> bouncedRecipients.contains(recipientEntity.getAddress())).forEach(recipientEntity -> {
                 recipientEntity.setStatus(RecipientStatus.BOUNCED);
                 recipientEntity.setBounced(new Date());
-                db.update(recipientEntity);
+                updateRecipient(recipientEntity);
             });
         }
         eventBus.publish(SNSEmailBounceEvent.ADDRESS, new SNSEmailBounceEvent(message));
@@ -212,30 +207,53 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
             recipientEntities.stream().filter(recipientEntity -> complainedRecipients.contains(recipientEntity.getAddress())).forEach(recipientEntity -> {
                 recipientEntity.setStatus(RecipientStatus.COMPLAINT);
                 recipientEntity.setComplaint(new Date());
-                db.update(recipientEntity);
+                updateRecipient(recipientEntity);
             });
         }
         eventBus.publish(SNSEmailComplaintEvent.ADDRESS, new SNSEmailComplaintEvent(message));
     }
 
     private List<EmailRecipientEntity> getRecipients(NotifyMail mail) {
-        Record record = db.select(EMAIL.fields()).from(EMAIL).where(EMAIL.MESSAGE_ID.eq(mail.getMessageId())).fetchAny();
-        if(record == null) {
-            LOG.error("Email Record Not Found for MessageId: " + mail.getMessageId());
+        try {
+            final SqlHelper sqlHelper = new SqlHelper();
+            db.readObservable(session -> {
+                Record record = session.select(EMAIL.fields()).from(EMAIL).where(EMAIL.MESSAGE_ID.eq(mail.getMessageId())).fetchAny();
+                if (record == null) {
+                    LOG.error("Email Record Not Found for MessageId: " + mail.getMessageId());
+                    return null;
+                }
+                return record.into(EMAIL).into(EmailEntity.class);
+            }).subscribe(emailEntity -> {
+                sqlHelper.setEmailEntity(emailEntity);
+                sqlHelper.notify();
+            });
+            sqlHelper.wait();
+            if (sqlHelper.getEmailEntity() == null) {
+                return null;
+            }
+            db.readObservable(session ->
+                    session.select(EMAIL_RECIPIENT.fields()).from(EMAIL_RECIPIENT)
+                            .where(EMAIL_RECIPIENT.EMAIL_ID.eq(sqlHelper.getEmailEntity().getId()))
+                            .fetch()
+                            .into(EMAIL_RECIPIENT)
+                            .into(EmailRecipientEntity.class)).subscribe(emailRecipientEntities -> {
+                sqlHelper.setEmailRecipientEntities(emailRecipientEntities);
+                sqlHelper.notify();
+            });
+            sqlHelper.wait();
+            return sqlHelper.getEmailRecipientEntities();
+        } catch (InterruptedException e) {
+            LOG.error(e.getMessage());
             return null;
         }
-        EmailEntity emailEntity = record.into(EMAIL).into(EmailEntity.class);
+    }
 
-        List<EmailRecipientEntity> recipientEntities = db.select(EMAIL_RECIPIENT.fields()).from(EMAIL_RECIPIENT)
-                .where(EMAIL_RECIPIENT.EMAIL_ID.eq(emailEntity.getId()))
-                .fetch()
-                .into(EMAIL_RECIPIENT)
-                .into(EmailRecipientEntity.class);
-        if(recipientEntities == null || recipientEntities.isEmpty()) {
-            LOG.error("Email Recipients Not Found for EmailId: " + emailEntity.getId());
-            return null;
-        }
-        return recipientEntities;
+    private void updateRecipient(final EmailRecipientEntity recipientEntity) {
+        db.writeObservable(session -> new SqlResult<>(session.update(recipientEntity) == 1, recipientEntity)).subscribe(result -> {
+            if(!result.isSuccess()) {
+                LOG.error("Failed to update email recipient.");
+            }
+        });
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -262,6 +280,34 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
 
     private void handleReceived(EmailReceivedMessage message) {
         eventBus.publish(SNSEmailReceivedEvent.ADDRESS, new SNSEmailReceivedEvent(message));
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Helper Object for getting objects out of inner classes
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    class SqlHelper {
+        private EmailEntity emailEntity;
+        private List<EmailRecipientEntity> emailRecipientEntities;
+
+        public SqlHelper() {
+        }
+
+        public EmailEntity getEmailEntity() {
+            return emailEntity;
+        }
+
+        public void setEmailEntity(EmailEntity emailEntity) {
+            this.emailEntity = emailEntity;
+        }
+
+        public List<EmailRecipientEntity> getEmailRecipientEntities() {
+            return emailRecipientEntities;
+        }
+
+        public void setEmailRecipientEntities(List<EmailRecipientEntity> emailRecipientEntities) {
+            this.emailRecipientEntities = emailRecipientEntities;
+        }
     }
 
 }

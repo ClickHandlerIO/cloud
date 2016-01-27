@@ -5,7 +5,7 @@ import io.clickhandler.queue.LocalQueueServiceFactory;
 import io.clickhandler.queue.QueueFactory;
 import io.clickhandler.queue.QueueService;
 import io.clickhandler.queue.QueueServiceConfig;
-import io.clickhandler.sql.db.Database;
+import io.clickhandler.sql.db.SqlDatabase;
 import io.vertx.rxjava.core.eventbus.EventBus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,7 +22,7 @@ public class SESSendPrepService extends AbstractIdleService {
     private final static Logger LOG = LoggerFactory.getLogger(SESSendPrepService.class);
     private final QueueService<SESSendRequest> queueService;
 
-    public SESSendPrepService(EventBus eventBus, Database db, SESAttachmentService SESAttachmentService, SESSendService sesSendService) {
+    public SESSendPrepService(EventBus eventBus, SqlDatabase db, SESAttachmentService SESAttachmentService, SESSendService sesSendService) {
         final QueueServiceConfig<SESSendRequest> config = new QueueServiceConfig<>("SESPrepQueue", SESSendRequest.class, true, SESConfig.getPrepParallelism(), SESConfig.getPrepBatchSize());
         config.setHandler(new SESPrepQueueHandler(eventBus, db, SESAttachmentService, sesSendService));
 
