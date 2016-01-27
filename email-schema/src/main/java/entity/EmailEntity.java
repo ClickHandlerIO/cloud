@@ -25,7 +25,11 @@ public class EmailEntity extends AbstractEntity {
     @Column
     private String textBody;
     @Column
+    private String strippedTextBody;
+    @Column
     private String htmlBody;
+    @Column
+    private String strippedHtmlBody;
     @Column
     private boolean attachments;
     // Id provided from email client on send
@@ -113,6 +117,22 @@ public class EmailEntity extends AbstractEntity {
 
     public void setMessageId(String messageId) {
         this.messageId = messageId;
+    }
+
+    public String getStrippedHtmlBody() {
+        return strippedHtmlBody;
+    }
+
+    public void setStrippedHtmlBody(String strippedHtmlBody) {
+        this.strippedHtmlBody = strippedHtmlBody;
+    }
+
+    public String getStrippedTextBody() {
+        return strippedTextBody;
+    }
+
+    public void setStrippedTextBody(String strippedTextBody) {
+        this.strippedTextBody = strippedTextBody;
     }
 
     public enum Status {

@@ -34,7 +34,7 @@ import org.jooq.impl.TableImpl;
 @SuppressWarnings({ "all", "unchecked", "rawtypes" })
 public class Email extends TableImpl<EmailRecord> {
 
-	private static final long serialVersionUID = 576132616;
+	private static final long serialVersionUID = 602426638;
 
 	/**
 	 * The reference instance of <code>email</code>
@@ -100,9 +100,19 @@ public class Email extends TableImpl<EmailRecord> {
 	public final TableField<EmailRecord, String> TEXT_BODY = createField("text_body", org.jooq.impl.SQLDataType.VARCHAR.length(128), this, "");
 
 	/**
+	 * The column <code>email.stripped_text_body</code>.
+	 */
+	public final TableField<EmailRecord, String> STRIPPED_TEXT_BODY = createField("stripped_text_body", org.jooq.impl.SQLDataType.VARCHAR.length(128), this, "");
+
+	/**
 	 * The column <code>email.html_body</code>.
 	 */
 	public final TableField<EmailRecord, String> HTML_BODY = createField("html_body", org.jooq.impl.SQLDataType.VARCHAR.length(128), this, "");
+
+	/**
+	 * The column <code>email.stripped_html_body</code>.
+	 */
+	public final TableField<EmailRecord, String> STRIPPED_HTML_BODY = createField("stripped_html_body", org.jooq.impl.SQLDataType.VARCHAR.length(128), this, "");
 
 	/**
 	 * The column <code>email.attachments</code>.
