@@ -77,7 +77,7 @@ public class Bounce {
     }
 
     @JsonIgnore
-    public List<String> getStringRecipients(){
+    public List<String> getRecipientsStrings(){
         return bouncedRecipients.stream().map(Recipient::getEmailAddress).collect(Collectors.toList());
     }
 }

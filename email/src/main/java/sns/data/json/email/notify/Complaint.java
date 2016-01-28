@@ -77,7 +77,7 @@ public class Complaint {
     }
 
     @JsonIgnore
-    public List<String> getStringRecipients(){
+    public List<String> getRecipientsStrings(){
         return complainedRecipients.stream().map(Recipient::getEmailAddress).collect(Collectors.toList());
     }
 }

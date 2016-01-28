@@ -6,9 +6,16 @@ import entity.EmailAttachmentEntity;
 import entity.EmailEntity;
 import io.clickhandler.queue.QueueHandler;
 import io.clickhandler.sql.db.SqlDatabase;
+import io.vertx.core.AsyncResult;
+import io.vertx.core.Future;
+import io.vertx.core.Handler;
+import io.vertx.rx.java.ObservableFuture;
+import io.vertx.rx.java.RxHelper;
 import io.vertx.rxjava.core.eventbus.EventBus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import rx.Observable;
+import rx.functions.Action1;
 import ses.data.DownloadRequest;
 import ses.data.SESSendRequest;
 import ses.event.SESEmailSentEvent;
@@ -55,15 +62,32 @@ public class SESPrepQueueHandler  implements QueueHandler<SESSendRequest>, Table
 
     @Override
     public void receive(List<SESSendRequest> sendRequests) {
-        for (SESSendRequest request:sendRequests) {
+        for (final SESSendRequest request:sendRequests) {
             try {
                 EmailEntity emailEntity = request.getEmailEntity();
-                MimeMessage message = buildMimeMessage(emailEntity);
+                final MimeMessage message = buildMimeMessage(emailEntity);
                 if(emailEntity.isAttachments()) {
-                    message = processAttachments(emailEntity, message);
+                    processAttachments(emailEntity, (MimeMultipart) message.getContent(), new AttachmentsCallBack() {
+                        @Override
+                        public void onSuccess(MimeMultipart content) {
+                            try {
+                                message.setContent(content);
+                                request.setMimeMessage(message);
+                                sesSendService.enqueue(request);
+                            } catch (Throwable e) {
+                                LOG.error("Failed to set content.", e);
+                            }
+                        }
+
+                        @Override
+                        public void onFailure(Throwable e) {
+                            LOG.error("Failed process attachments.", e);
+                        }
+                    });
+                } else {
+                    request.setMimeMessage(message);
+                    sesSendService.enqueue(request);
                 }
-                request.setMimeMessage(message);
-                sesSendService.enqueue(request);
             } catch (Exception e) {
                 request.getSendHandler().onFailure(e);
                 eventBus.publish(SESEmailSentEvent.ADDRESS, new SESEmailSentEvent(request.getEmailEntity(), false));
@@ -93,94 +117,96 @@ public class SESPrepQueueHandler  implements QueueHandler<SESSendRequest>, Table
         return message;
     }
 
-    private MimeMessage processAttachments(EmailEntity emailEntity, MimeMessage message) throws Exception {
-        // tracks number of current waiting downloads
-        final AtomicInteger activeDownloads = new AtomicInteger();
-        // tracks if download(s) failed or not, also used for completion notification
-        final AtomicBoolean failed = new AtomicBoolean();
-
+    private void processAttachments(EmailEntity emailEntity, MimeMultipart content, AttachmentsCallBack callBack) throws Exception {
         // get attachment info from db
-        List<EmailAttachmentEntity> attachmentEntities = getEmailAttachmentEntities(emailEntity);
-        final MimeMultipart content = (MimeMultipart) message.getContent();
-        for (final EmailAttachmentEntity attachmentEntity : attachmentEntities) {
-            activeDownloads.incrementAndGet();
-            if (failed.get())
-                break;
-            SESAttachmentService.enqueue(new DownloadRequest(attachmentEntity.getFileId(), new DownloadCallBack() {
-                @Override
-                public void onSuccess(byte[] data) {
-                    try {
-                        Preconditions.checkNotNull(data);
-                        final MimeBodyPart attachmentPart = new MimeBodyPart();
-                        attachmentPart.setDescription(attachmentEntity.getDescription(), "UTF-8");
-                        final DataSource ds = new ByteArrayDataSource(data, attachmentEntity.getMimeType());
-                        attachmentPart.setDataHandler(new DataHandler(ds));
-                        attachmentPart.setHeader("Content-ID", "<" + attachmentEntity.getId() + ">");
-                        attachmentPart.setFileName(attachmentEntity.getName());
-                        content.addBodyPart(attachmentPart);
+        getAttachmentEntitiesObservable(emailEntity)
+                .doOnError(callBack::onFailure)
+                .doOnNext(emailAttachmentEntities -> {
+                    // tracks number of current waiting downloads
+                    final AtomicInteger activeDownloads = new AtomicInteger();
+                    // tracks if download(s) failed or not, also used for completion notification
+                    final AtomicBoolean failed = new AtomicBoolean();
+                    for (final EmailAttachmentEntity attachmentEntity : emailAttachmentEntities) {
+                        activeDownloads.incrementAndGet();
+                        if (failed.get())
+                            break;
+                        SESAttachmentService.enqueue(new DownloadRequest(attachmentEntity.getFileId(), new DownloadCallBack() {
+                            @Override
+                            public void onSuccess(byte[] data) {
+                                try {
+                                    Preconditions.checkNotNull(data);
+                                    final MimeBodyPart attachmentPart = new MimeBodyPart();
+                                    attachmentPart.setDescription(attachmentEntity.getDescription(), "UTF-8");
+                                    final DataSource ds = new ByteArrayDataSource(data, attachmentEntity.getMimeType());
+                                    attachmentPart.setDataHandler(new DataHandler(ds));
+                                    attachmentPart.setHeader("Content-ID", "<" + attachmentEntity.getId() + ">");
+                                    attachmentPart.setFileName(attachmentEntity.getName());
+                                    content.addBodyPart(attachmentPart);
 
-                        if(activeDownloads.decrementAndGet() <=0 && !failed.get()){
-                            failed.set(false);
-                            failed.notify();
-                        }
-                    } catch (Exception e) {
-                        // break out of loop or if already out of loop stop waiting, and don't send.
-                        failed.set(true);
-                        failed.notify();
+                                    if(activeDownloads.decrementAndGet() <=0 && !failed.get()){
+                                        failed.set(false);
+                                        failed.notify();
+                                    }
+                                } catch (Exception e) {
+                                    // break out of loop or if already out of loop stop waiting, and don't send.
+                                    failed.set(true);
+                                    failed.notify();
+                                }
+                            }
+
+                            @Override
+                            public void onFailure(Exception e) {
+                                // break out of loop or if already out of loop stop waiting, and don't send.
+                                failed.set(true);
+                                failed.notify();
+                            }
+                        }));
                     }
-                }
-
-                @Override
-                public void onFailure(Exception e) {
-                    // break out of loop or if already out of loop stop waiting, and don't send.
-                    failed.set(true);
-                    failed.notify();
-                }
-            }));
-        }
-
-        // quick failure, don't wait
-        if(failed.get()) {
-            throw new Exception("Failed to obtain attachments.");
-        }
-        // wait for callbacks
-        failed.wait();
-        // failure
-        if(failed.get()) {
-            throw new Exception("Failed to obtain attachments.");
-        }
-        // complete
-        message.setContent(content);
-        return message;
+                    // quick failure, don't wait
+                    if(failed.get()) {
+                        callBack.onFailure(new Exception("Failed to process attachments."));
+                    }
+                    // wait for callbacks
+                    try {
+                        failed.wait();
+                    } catch (InterruptedException e) {
+                        LOG.error(e.getMessage());
+                    }
+                    // failure
+                    if(failed.get()) {
+                        callBack.onFailure(new Exception("Failed to process attachments."));
+                    }
+                    callBack.onSuccess(content);
+                });
     }
 
-    private List<EmailAttachmentEntity> getEmailAttachmentEntities(EmailEntity emailEntity) throws Exception {
-        final SqlHelper sqlHelper = new SqlHelper();
-        db.readObservable(session -> session.select(EMAIL_ATTACHMENT.fields())
-                .where(EMAIL_ATTACHMENT.EMAIL_ID.eq(emailEntity.getId()))
-                .fetch().into(EMAIL_ATTACHMENT).into(EmailAttachmentEntity.class)).subscribe(emailAttachmentEntities -> {
-            sqlHelper.setAttachmentEntities(emailAttachmentEntities);
-            sqlHelper.notify();
-        });
-        sqlHelper.wait();
-        if (sqlHelper.getAttachmentEntities().isEmpty()) {
-            throw new Exception("Email attachment record(s) not found.");
-        }
-        return sqlHelper.getAttachmentEntities();
+    private Observable<List<EmailAttachmentEntity>> getAttachmentEntitiesObservable(EmailEntity emailEntity) {
+        ObservableFuture<List<EmailAttachmentEntity>> observableFuture = RxHelper.observableFuture();
+        getEmailAttachmentEntities(emailEntity, observableFuture.toHandler());
+        return observableFuture;
     }
 
-    class SqlHelper {
-        List<EmailAttachmentEntity> attachmentEntities;
+    private void getEmailAttachmentEntities(EmailEntity emailEntity, Handler<AsyncResult<List<EmailAttachmentEntity>>> completionHandler) {
+        db.readObservable(session ->
+                session.select(EMAIL_ATTACHMENT.fields()).from(EMAIL_ATTACHMENT)
+                        .where(EMAIL_ATTACHMENT.EMAIL_ID.eq(emailEntity.getId()))
+                        .fetch()
+                        .into(EMAIL_ATTACHMENT)
+                        .into(EmailAttachmentEntity.class))
+                .doOnError(e -> {
+                    if (completionHandler != null) {
+                        completionHandler.handle(Future.failedFuture(e));
+                    }
+                })
+                .subscribe(emailRecipientEntities -> {
+                    if (completionHandler != null) {
+                        completionHandler.handle(Future.succeededFuture(emailRecipientEntities));
+                    }
+                });
+    }
 
-        public SqlHelper() {
-        }
-
-        public List<EmailAttachmentEntity> getAttachmentEntities() {
-            return attachmentEntities;
-        }
-
-        public void setAttachmentEntities(List<EmailAttachmentEntity> attachmentEntities) {
-            this.attachmentEntities = attachmentEntities;
-        }
+    interface AttachmentsCallBack {
+        void onSuccess(MimeMultipart content);
+        void onFailure(Throwable e);
     }
 }
