@@ -2,10 +2,17 @@ package ses.service;
 
 import com.sun.istack.internal.NotNull;
 import common.service.AbstractEmailService;
+import entity.EmailEntity;
 import io.clickhandler.sql.db.SqlDatabase;
+import io.vertx.core.AsyncResult;
+import io.vertx.core.Future;
+import io.vertx.core.Handler;
+import io.vertx.rx.java.ObservableFuture;
+import io.vertx.rx.java.RxHelper;
 import io.vertx.rxjava.core.eventbus.EventBus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import rx.Observable;
 import s3.service.S3Service;
 import ses.data.SESSendRequest;
 
@@ -15,7 +22,7 @@ import javax.inject.Singleton;
 /**
  * SES Email services manager.
  *
- * @author
+ * @author Brad Behnke
  */
 @Singleton
 public class SESService extends AbstractEmailService<SESSendRequest> {
@@ -50,15 +57,23 @@ public class SESService extends AbstractEmailService<SESSendRequest> {
     }
 
     @Override
-    public void send(@NotNull SESSendRequest sendRequest) {
+    public Observable<EmailEntity> sendObservable(SESSendRequest sendRequest) {
+        ObservableFuture<EmailEntity> observableFuture = RxHelper.observableFuture();
+        send(sendRequest, observableFuture.toHandler());
+        return observableFuture;
+    }
+
+    @Override
+    protected void send(SESSendRequest sendRequest, Handler<AsyncResult<EmailEntity>> completionHandler) {
         if(sendRequest.getEmailEntity() == null) {
-            sendRequest.getSendHandler().onFailure(new Exception("Null email entity."));
+            completionHandler.handle(Future.failedFuture(new Exception("Null EmailEntity.")));
             return;
         }
         if(sendRequest.getEmailEntity().getId() == null || sendRequest.getEmailEntity().getId().isEmpty()) {
-            sendRequest.getSendHandler().onFailure(new Exception("Null or empty email entity Id."));
+            completionHandler.handle(Future.failedFuture(new Exception("Null or Empty EmailEntity Id")));
             return;
         }
+        sendRequest.setCompletionHandler(completionHandler);
         this.sesSendPrepService.enqueue(sendRequest);
     }
 }

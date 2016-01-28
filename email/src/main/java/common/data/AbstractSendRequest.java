@@ -1,8 +1,8 @@
 package common.data;
 
-import com.sun.istack.internal.NotNull;
-import common.handler.SendHandler;
 import entity.EmailEntity;
+import io.vertx.core.AsyncResult;
+import io.vertx.core.Handler;
 
 /**
  *  Abstract for request to be passed to cloud-email services.
@@ -18,11 +18,10 @@ import entity.EmailEntity;
  */
 public abstract class AbstractSendRequest {
     private EmailEntity emailEntity;
-    private SendHandler sendHandler;
+    private Handler<AsyncResult<EmailEntity>> completionHandler;
 
-    public AbstractSendRequest(@NotNull EmailEntity emailEntity, @NotNull SendHandler sendHandler) {
+    public AbstractSendRequest(EmailEntity emailEntity) {
         this.emailEntity = emailEntity;
-        this.sendHandler = sendHandler;
     }
 
     public EmailEntity getEmailEntity() {
@@ -33,11 +32,11 @@ public abstract class AbstractSendRequest {
         this.emailEntity = emailEntity;
     }
 
-    public SendHandler getSendHandler() {
-        return sendHandler;
+    public Handler<AsyncResult<EmailEntity>> getCompletionHandler() {
+        return completionHandler;
     }
 
-    public void setSendHandler(SendHandler sendHandler) {
-        this.sendHandler = sendHandler;
+    public void setCompletionHandler(Handler<AsyncResult<EmailEntity>> completionHandler) {
+        this.completionHandler = completionHandler;
     }
 }

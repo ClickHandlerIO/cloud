@@ -8,8 +8,6 @@ import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.rx.java.ObservableFuture;
 import io.vertx.rx.java.RxHelper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import rx.Observable;
 import s3.service.S3Service;
 import ses.data.DownloadRequest;
@@ -23,7 +21,6 @@ import java.util.List;
  */
 public class AttachmentQueueHandler implements QueueHandler<DownloadRequest> {
 
-    private static final Logger LOG = LoggerFactory.getLogger(AttachmentQueueHandler.class);
     private final SqlDatabase db;
     private final S3Service s3Service;
 
@@ -39,18 +36,25 @@ public class AttachmentQueueHandler implements QueueHandler<DownloadRequest> {
 
     public void download(final DownloadRequest request) {
         getFileEntityObservable(request.getFileId())
-                .doOnError(throwable -> request.getCallBack().onFailure(throwable))
-                .doOnNext(fileEntity -> {
-                    try {
-                        final byte[] data = s3Service.get(fileEntity).get().getBytes();
-                        if (data == null) {
-                            request.getCallBack().onFailure(new Exception("S3 Service Failed to Retrieve File Data."));
-                        }
-                        request.getCallBack().onSuccess(data);
-                    } catch (Exception e) {
-                        request.getCallBack().onFailure(e);
+                .doOnError(throwable -> {
+                    if(request.getCompletionHandler() != null) {
+                        request.getCompletionHandler().handle(Future.failedFuture(throwable));
                     }
-                });
+                })
+                .doOnNext(fileEntity -> s3Service.getObservable(fileEntity)
+                        .doOnError(throwable -> {
+                            if(request.getCompletionHandler() != null) {
+                                request.getCompletionHandler().handle(Future.failedFuture(throwable));
+                            }
+                        })
+                        .doOnNext(buffer -> {
+                            if(request.getCompletionHandler() != null) {
+                                if (buffer == null || buffer.length() <= 0) {
+                                    request.getCompletionHandler().handle(Future.failedFuture(new Exception("S3 Service Failed to Retrieve File Data.")));
+                                }
+                                request.getCompletionHandler().handle(Future.succeededFuture(buffer));
+                            }
+                        }));
     }
 
     public Observable<FileEntity> getFileEntityObservable(String fileId) {

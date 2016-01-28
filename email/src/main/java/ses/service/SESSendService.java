@@ -7,8 +7,6 @@ import io.clickhandler.queue.QueueService;
 import io.clickhandler.queue.QueueServiceConfig;
 import io.clickhandler.sql.db.SqlDatabase;
 import io.vertx.rxjava.core.eventbus.EventBus;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import ses.data.SESSendRequest;
 import ses.handler.SESSendQueueHandler;
 
@@ -18,7 +16,6 @@ import ses.handler.SESSendQueueHandler;
  * @author Brad Behnke
  */
 public class SESSendService extends AbstractIdleService {
-    private final static Logger LOG = LoggerFactory.getLogger(SESSendService.class);
 
     private final QueueService<SESSendRequest> queueService;
     private final SESSendQueueHandler queueHandler;

@@ -6,8 +6,12 @@ import io.clickhandler.queue.QueueFactory;
 import io.clickhandler.queue.QueueService;
 import io.clickhandler.queue.QueueServiceConfig;
 import io.clickhandler.sql.db.SqlDatabase;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import io.vertx.core.AsyncResult;
+import io.vertx.core.Handler;
+import io.vertx.core.buffer.Buffer;
+import io.vertx.rx.java.ObservableFuture;
+import io.vertx.rx.java.RxHelper;
+import rx.Observable;
 import s3.service.S3Service;
 import ses.data.DownloadRequest;
 import ses.handler.AttachmentQueueHandler;
@@ -19,7 +23,6 @@ import ses.handler.AttachmentQueueHandler;
  */
 public class SESAttachmentService extends AbstractIdleService {
 
-    private final static Logger LOG = LoggerFactory.getLogger(SESAttachmentService.class);
     private final QueueService<DownloadRequest> queueService;
 
     public SESAttachmentService(SqlDatabase db, S3Service s3Service) {
@@ -40,7 +43,13 @@ public class SESAttachmentService extends AbstractIdleService {
         this.queueService.stopAsync();
     }
 
-    public void enqueue(DownloadRequest downloadRequest) {
-        this.queueService.add(downloadRequest);
+    public Observable<Buffer> downloadObservable(String fileId) {
+        ObservableFuture<Buffer> observableFuture = RxHelper.observableFuture();
+        download(fileId, observableFuture.toHandler());
+        return observableFuture;
+    }
+
+    private void download(String fileId, Handler<AsyncResult<Buffer>> completionHandler) {
+        this.queueService.add(new DownloadRequest(fileId, completionHandler));
     }
 }

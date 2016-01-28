@@ -1,7 +1,8 @@
 package ses.data;
 
-import com.google.common.base.Preconditions;
-import ses.handler.DownloadCallBack;
+import io.vertx.core.AsyncResult;
+import io.vertx.core.Handler;
+import io.vertx.core.buffer.Buffer;
 
 /**
  *  Request object for ses email attachment downloads.
@@ -10,21 +11,11 @@ import ses.handler.DownloadCallBack;
  */
 public class  DownloadRequest {
     private String fileId;
-    private DownloadCallBack callBack;
+    private Handler<AsyncResult<Buffer>> completionHandler;
 
-    public DownloadRequest(String fileId, DownloadCallBack callBack) {
-        Preconditions.checkNotNull(callBack);
-        Preconditions.checkNotNull(fileId);
-        this.callBack = callBack;
+    public DownloadRequest(String fileId, Handler<AsyncResult<Buffer>> completionHandler) {
         this.fileId = fileId;
-    }
-
-    public DownloadCallBack getCallBack() {
-        return callBack;
-    }
-
-    public void setCallBack(DownloadCallBack callBack) {
-        this.callBack = callBack;
+        this.completionHandler = completionHandler;
     }
 
     public String getFileId() {
@@ -33,5 +24,9 @@ public class  DownloadRequest {
 
     public void setFileId(String fileId) {
         this.fileId = fileId;
+    }
+
+    public Handler<AsyncResult<Buffer>> getCompletionHandler() {
+        return completionHandler;
     }
 }

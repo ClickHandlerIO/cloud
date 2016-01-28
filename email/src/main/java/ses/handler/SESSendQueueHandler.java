@@ -12,9 +12,15 @@ import entity.EmailRecipientEntity;
 import entity.RecipientStatus;
 import io.clickhandler.queue.QueueHandler;
 import io.clickhandler.sql.db.*;
+import io.vertx.core.AsyncResult;
+import io.vertx.core.Future;
+import io.vertx.core.Handler;
+import io.vertx.rx.java.ObservableFuture;
+import io.vertx.rx.java.RxHelper;
 import io.vertx.rxjava.core.eventbus.EventBus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import rx.Observable;
 import ses.config.SESConfig;
 import ses.data.SESSendRequest;
 import ses.event.SESEmailSentEvent;
@@ -59,108 +65,138 @@ public class SESSendQueueHandler implements QueueHandler<SESSendRequest>, Tables
     }
 
     private void sendEmail(final SESSendRequest sendRequest) {
+        getRawRequestObservable(sendRequest)
+                .doOnError(throwable -> {
+                    if(sendRequest.getCompletionHandler() != null) {
+                        sendRequest.getCompletionHandler().handle(Future.failedFuture(throwable));
+                    }
+                })
+                .doOnNext(sendRawEmailRequest -> {
+                    sendRequest.incrementAttempts();
+                    SendRawEmailResult result = client.sendRawEmail(sendRawEmailRequest);
+                    if(result == null || result.getMessageId() == null || result.getMessageId().isEmpty()) {
+                        if(sendRequest.getAttempts() < ALLOWED_ATTEMPTS) {
+                            sendEmail(sendRequest);
+                        } else {
+                            updateRecords(sendRequest.getEmailEntity());
+                            if(sendRequest.getCompletionHandler() != null) {
+                                sendRequest.getCompletionHandler().handle(Future.failedFuture(new Exception("Failed to Send Email Using " + ALLOWED_ATTEMPTS + " Attempts.")));
+                            }
+                            publishEvent(sendRequest.getEmailEntity(), false);
+                        }
+                    } else {
+                        EmailEntity emailEntity = sendRequest.getEmailEntity();
+                        emailEntity.setMessageId(result.getMessageId());
+                        updateRecords(emailEntity);
+                        if(sendRequest.getCompletionHandler() != null) {
+                            sendRequest.getCompletionHandler().handle(Future.succeededFuture(emailEntity));
+                        }
+                        publishEvent(emailEntity, true);
+                    }
+                });
+    }
+
+    private Observable<SendRawEmailRequest> getRawRequestObservable(SESSendRequest sendRequest){
+        ObservableFuture<SendRawEmailRequest> observableFuture = RxHelper.observableFuture();
+        getRawRequest(sendRequest, observableFuture.toHandler());
+        return observableFuture;
+    }
+
+    private void getRawRequest(SESSendRequest sendRequest, Handler<AsyncResult<SendRawEmailRequest>> completionHandler) {
         try {
-            sendRequest.incrementAttempts();
-            SendRawEmailResult result = client.sendRawEmail(buildEmailRequest(sendRequest));
-            // send failed
-            if (result == null || result.getMessageId() == null || result.getMessageId().isEmpty()) {
-                if(sendRequest.getAttempts() < ALLOWED_ATTEMPTS) {
-                    sendEmail(sendRequest);
-                } else {
-                    updateRecords(sendRequest.getEmailEntity(), null);
-                    sendRequest.getSendHandler().onFailure(new Exception("Failed to send."));
-                    publishEvent(sendRequest.getEmailEntity(), false);
-                }
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            sendRequest.getMimeMessage().writeTo(outputStream);
+            RawMessage rawMessage = new RawMessage(ByteBuffer.wrap(outputStream.toByteArray()));
+            if(completionHandler != null) {
+                completionHandler.handle(Future.succeededFuture(new SendRawEmailRequest(rawMessage)));
             }
-            // send success
-            else {
-                EmailEntity emailEntity = updateRecords(sendRequest.getEmailEntity(), result.getMessageId());
-                sendRequest.getSendHandler().onSuccess(emailEntity);
-                publishEvent(emailEntity, true);
-            }
-        } catch (Exception e) {
-            // send or record update failed
-            if(sendRequest.getAttempts() < ALLOWED_ATTEMPTS) {
-                sendEmail(sendRequest);
-            } else {
-                try {
-                    updateRecords(sendRequest.getEmailEntity(), null);
-                    sendRequest.getSendHandler().onFailure(e);
-                } catch (Exception e1) {
-                    // record update failed
-                    sendRequest.getSendHandler().onFailure(e1);
-                }
-                publishEvent(sendRequest.getEmailEntity(), false);
+        } catch (Throwable e) {
+            if(completionHandler != null) {
+                completionHandler.handle(Future.failedFuture(e));
             }
         }
     }
 
-    private SendRawEmailRequest buildEmailRequest(SESSendRequest sendRequest) throws Exception{
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        sendRequest.getMimeMessage().writeTo(outputStream);
-        RawMessage rawMessage = new RawMessage(ByteBuffer.wrap(outputStream.toByteArray()));
-        return new SendRawEmailRequest(rawMessage);
+    private void updateRecords(EmailEntity emailEntity) {
+        final boolean success = emailEntity.getMessageId() != null && !emailEntity.getMessageId().isEmpty();
+        updateEmailEntityObservable(emailEntity)
+                .doOnError(throwable -> LOG.error(throwable.getMessage()))
+                .doOnNext(emailEntity1 -> updateEmailRecipientEntitiesObservable(emailEntity1.getId(), success)
+                        .doOnError(throwable -> LOG.error(throwable.getMessage())));
     }
 
-    private EmailEntity updateRecords(final EmailEntity emailEntity, final String sesMessageId) throws Exception {
-        boolean success = sesMessageId != null && !sesMessageId.isEmpty();
-        // update email record
-        if(success) {
-            emailEntity.setMessageId(sesMessageId);
-            db.writeObservable(session -> new SqlResult<>(session.update(emailEntity) == 1, emailEntity)).subscribe(emailEntitySqlResult -> {
-                if(!emailEntitySqlResult.isSuccess()) {
-                    LOG.error("Email failed to update on send.");
-                }
-            });
-        }
+    private Observable<EmailEntity> updateEmailEntityObservable(EmailEntity emailEntity) {
+        ObservableFuture<EmailEntity> observableFuture = RxHelper.observableFuture();
+        updateEmailEntity(emailEntity, observableFuture.toHandler());
+        return observableFuture;
+    }
 
-        // update recipient records
-        // get recipients
-        final SqlHelper sqlHelper = new SqlHelper();
-        db.readObservable(session -> session.select(EMAIL_RECIPIENT.fields())
-                .where(EMAIL_RECIPIENT.EMAIL_ID.eq(emailEntity.getId()))
-                .fetch().into(EMAIL_RECIPIENT).into(EmailRecipientEntity.class)).subscribe(emailRecipientEntities -> {
-            sqlHelper.setRecipientEntities(emailRecipientEntities);
-            sqlHelper.notify();
-        });
-        sqlHelper.wait();
-        if(sqlHelper.getRecipientEntities() == null || sqlHelper.getRecipientEntities().isEmpty()) {
-            throw new Exception("Email " + (success ? "sent " : "failed ") + "and recipient record(s) update failed.");
-        }
-        // update recipients
-        for(final EmailRecipientEntity recipientEntity:sqlHelper.getRecipientEntities()) {
-            if(success) {
-                recipientEntity.setStatus(RecipientStatus.SENT);
-                recipientEntity.setSent(new Date());
-            } else {
-                recipientEntity.setStatus(RecipientStatus.FAILED);
-                recipientEntity.setFailed(new Date());
-            }
-            db.writeObservable(session -> new SqlResult<>(session.update(recipientEntity) == 1, recipientEntity)).subscribe(recipientEntitySqlResult -> {
-                if (!recipientEntitySqlResult.isSuccess()) {
-                    LOG.error("EmailRecipient failed to update on send.");
-                }
-            });
-        }
-        return emailEntity;
+    private void updateEmailEntity(EmailEntity emailEntity, Handler<AsyncResult<EmailEntity>> completionHandler) {
+        db.writeObservable(session -> new SqlResult<>((session.update(emailEntity) == 1), emailEntity))
+                .doOnError(throwable -> {
+                    if(completionHandler != null) {
+                        completionHandler.handle(Future.failedFuture(throwable));
+                    }
+                })
+                .doOnNext(emailEntitySqlResult -> {
+                    if(completionHandler != null) {
+                        if(emailEntitySqlResult.isSuccess()) {
+                            completionHandler.handle(Future.succeededFuture(emailEntitySqlResult.get()));
+                        } else {
+                            completionHandler.handle(Future.failedFuture(new Exception("Email Entity Update Failed.")));
+                        }
+                    }
+                });
+    }
+
+    private Observable<Integer> updateEmailRecipientEntitiesObservable(String emailId, boolean success) {
+        ObservableFuture<Integer> observableFuture = RxHelper.observableFuture();
+        updateEmailRecipientEntities(emailId, success, observableFuture.toHandler());
+        return observableFuture;
+    }
+
+    private void updateEmailRecipientEntities(String emailId, boolean success, Handler<AsyncResult<Integer>> completionHandler) {
+        db.readObservable(session ->
+                session.select(EMAIL_RECIPIENT.fields()).from(EMAIL_RECIPIENT)
+                        .where(EMAIL_RECIPIENT.EMAIL_ID.eq(emailId))
+                        .fetch().into(EMAIL_RECIPIENT).into(EmailRecipientEntity.class))
+                .doOnError(throwable -> {
+                    if(completionHandler != null) {
+                        completionHandler.handle(Future.failedFuture(throwable));
+                    }
+                })
+                .doOnNext(emailRecipientEntities -> {
+                   for(EmailRecipientEntity recipientEntity:emailRecipientEntities) {
+                       if(success) {
+                           recipientEntity.setStatus(RecipientStatus.SENT);
+                           recipientEntity.setSent(new Date());
+                       } else {
+                           recipientEntity.setStatus(RecipientStatus.FAILED);
+                           recipientEntity.setFailed(new Date());
+                       }
+                       db.writeObservable(session -> {
+                                    Integer result = session.update(recipientEntity);
+                                    return new SqlResult<>(result == 1, result);
+                                })
+                               .doOnError(throwable -> {
+                                   if(completionHandler != null) {
+                                       completionHandler.handle(Future.failedFuture(throwable));
+                                   }
+                               })
+                               .doOnNext(integerSqlResult -> {
+                                   if(completionHandler != null) {
+                                       if (integerSqlResult.isSuccess()) {
+                                            completionHandler.handle(Future.succeededFuture(integerSqlResult.get()));
+                                       } else {
+                                            completionHandler.handle(Future.failedFuture(new Exception("Email Recipient Entity Update Failed.")));
+                                       }
+                                   }
+                               });
+                   }
+                });
     }
 
     private void publishEvent(EmailEntity emailEntity, boolean success) {
         eventBus.publish(SESEmailSentEvent.ADDRESS, new SESEmailSentEvent(emailEntity, success));
-    }
-
-    class SqlHelper {
-        List<EmailRecipientEntity> recipientEntities;
-
-        public SqlHelper() {
-        }
-
-        public List<EmailRecipientEntity> getRecipientEntities() {
-            return recipientEntities;
-        }
-
-        public void setRecipientEntities(List<EmailRecipientEntity> recipientEntities) {
-            this.recipientEntities = recipientEntities;
-        }
     }
 }
