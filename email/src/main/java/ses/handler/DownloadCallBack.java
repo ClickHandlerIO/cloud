@@ -8,5 +8,5 @@ package ses.handler;
 public interface DownloadCallBack {
     void onSuccess(byte[] data);
 
-    void onFailure(Exception e);
+    void onFailure(Throwable e);
 }

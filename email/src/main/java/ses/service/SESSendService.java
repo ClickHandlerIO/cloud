@@ -12,8 +12,6 @@ import org.slf4j.LoggerFactory;
 import ses.data.SESSendRequest;
 import ses.handler.SESSendQueueHandler;
 
-import javax.mail.internet.MimeMessage;
-
 /**
  * SES email sending queue manager.
  *

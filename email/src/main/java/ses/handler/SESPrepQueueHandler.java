@@ -12,10 +12,7 @@ import io.vertx.core.Handler;
 import io.vertx.rx.java.ObservableFuture;
 import io.vertx.rx.java.RxHelper;
 import io.vertx.rxjava.core.eventbus.EventBus;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import rx.Observable;
-import rx.functions.Action1;
 import ses.data.DownloadRequest;
 import ses.data.SESSendRequest;
 import ses.event.SESEmailSentEvent;
@@ -47,7 +44,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class SESPrepQueueHandler  implements QueueHandler<SESSendRequest>, Tables {
 
-    private static final Logger LOG = LoggerFactory.getLogger(SESPrepQueueHandler.class);
     private final EventBus eventBus;
     private final SqlDatabase db;
     private final SESAttachmentService SESAttachmentService;
@@ -64,7 +60,7 @@ public class SESPrepQueueHandler  implements QueueHandler<SESSendRequest>, Table
     public void receive(List<SESSendRequest> sendRequests) {
         for (final SESSendRequest request:sendRequests) {
             try {
-                EmailEntity emailEntity = request.getEmailEntity();
+                final EmailEntity emailEntity = request.getEmailEntity();
                 final MimeMessage message = buildMimeMessage(emailEntity);
                 if(emailEntity.isAttachments()) {
                     processAttachments(emailEntity, (MimeMultipart) message.getContent(), new AttachmentsCallBack() {
@@ -75,13 +71,15 @@ public class SESPrepQueueHandler  implements QueueHandler<SESSendRequest>, Table
                                 request.setMimeMessage(message);
                                 sesSendService.enqueue(request);
                             } catch (Throwable e) {
-                                LOG.error("Failed to set content.", e);
+                                request.getSendHandler().onFailure(e);
+                                eventBus.publish(SESEmailSentEvent.ADDRESS, new SESEmailSentEvent(request.getEmailEntity(), false));
                             }
                         }
 
                         @Override
                         public void onFailure(Throwable e) {
-                            LOG.error("Failed process attachments.", e);
+                            request.getSendHandler().onFailure(e);
+                            eventBus.publish(SESEmailSentEvent.ADDRESS, new SESEmailSentEvent(request.getEmailEntity(), false));
                         }
                     });
                 } else {
@@ -118,66 +116,19 @@ public class SESPrepQueueHandler  implements QueueHandler<SESSendRequest>, Table
     }
 
     private void processAttachments(EmailEntity emailEntity, MimeMultipart content, AttachmentsCallBack callBack) throws Exception {
-        // get attachment info from db
         getAttachmentEntitiesObservable(emailEntity)
                 .doOnError(callBack::onFailure)
-                .doOnNext(emailAttachmentEntities -> {
-                    // tracks number of current waiting downloads
-                    final AtomicInteger activeDownloads = new AtomicInteger();
-                    // tracks if download(s) failed or not, also used for completion notification
-                    final AtomicBoolean failed = new AtomicBoolean();
-                    for (final EmailAttachmentEntity attachmentEntity : emailAttachmentEntities) {
-                        activeDownloads.incrementAndGet();
-                        if (failed.get())
-                            break;
-                        SESAttachmentService.enqueue(new DownloadRequest(attachmentEntity.getFileId(), new DownloadCallBack() {
-                            @Override
-                            public void onSuccess(byte[] data) {
-                                try {
-                                    Preconditions.checkNotNull(data);
-                                    final MimeBodyPart attachmentPart = new MimeBodyPart();
-                                    attachmentPart.setDescription(attachmentEntity.getDescription(), "UTF-8");
-                                    final DataSource ds = new ByteArrayDataSource(data, attachmentEntity.getMimeType());
-                                    attachmentPart.setDataHandler(new DataHandler(ds));
-                                    attachmentPart.setHeader("Content-ID", "<" + attachmentEntity.getId() + ">");
-                                    attachmentPart.setFileName(attachmentEntity.getName());
-                                    content.addBodyPart(attachmentPart);
+                .doOnNext(emailAttachmentEntities -> downloadAttachments(content, emailAttachmentEntities, new AttachmentsCallBack() {
+                    @Override
+                    public void onSuccess(MimeMultipart content) {
+                        callBack.onSuccess(content);
+                    }
 
-                                    if(activeDownloads.decrementAndGet() <=0 && !failed.get()){
-                                        failed.set(false);
-                                        failed.notify();
-                                    }
-                                } catch (Exception e) {
-                                    // break out of loop or if already out of loop stop waiting, and don't send.
-                                    failed.set(true);
-                                    failed.notify();
-                                }
-                            }
-
-                            @Override
-                            public void onFailure(Exception e) {
-                                // break out of loop or if already out of loop stop waiting, and don't send.
-                                failed.set(true);
-                                failed.notify();
-                            }
-                        }));
+                    @Override
+                    public void onFailure(Throwable e) {
+                        callBack.onFailure(e);
                     }
-                    // quick failure, don't wait
-                    if(failed.get()) {
-                        callBack.onFailure(new Exception("Failed to process attachments."));
-                    }
-                    // wait for callbacks
-                    try {
-                        failed.wait();
-                    } catch (InterruptedException e) {
-                        LOG.error(e.getMessage());
-                    }
-                    // failure
-                    if(failed.get()) {
-                        callBack.onFailure(new Exception("Failed to process attachments."));
-                    }
-                    callBack.onSuccess(content);
-                });
+                }));
     }
 
     private Observable<List<EmailAttachmentEntity>> getAttachmentEntitiesObservable(EmailEntity emailEntity) {
@@ -203,6 +154,44 @@ public class SESPrepQueueHandler  implements QueueHandler<SESSendRequest>, Table
                         completionHandler.handle(Future.succeededFuture(emailRecipientEntities));
                     }
                 });
+    }
+
+    private void downloadAttachments(final MimeMultipart content, List<EmailAttachmentEntity> attachmentEntities, final AttachmentsCallBack callBack) {
+        final AtomicInteger activeDownloads = new AtomicInteger();
+        final AtomicBoolean failed = new AtomicBoolean();
+        for (final EmailAttachmentEntity attachmentEntity : attachmentEntities) {
+            if(failed.get())
+                break;
+            activeDownloads.incrementAndGet();
+            SESAttachmentService.enqueue(new DownloadRequest(attachmentEntity.getFileId(), new DownloadCallBack() {
+                @Override
+                public void onSuccess(byte[] data) {
+                    try {
+                        Preconditions.checkNotNull(data);
+                        final MimeBodyPart attachmentPart = new MimeBodyPart();
+                        attachmentPart.setDescription(attachmentEntity.getDescription(), "UTF-8");
+                        final DataSource ds = new ByteArrayDataSource(data, attachmentEntity.getMimeType());
+                        attachmentPart.setDataHandler(new DataHandler(ds));
+                        attachmentPart.setHeader("Content-ID", "<" + attachmentEntity.getId() + ">");
+                        attachmentPart.setFileName(attachmentEntity.getName());
+                        content.addBodyPart(attachmentPart);
+
+                        if(activeDownloads.decrementAndGet() <= 0){
+                            callBack.onSuccess(content);
+                        }
+                    } catch (Exception e) {
+                        failed.set(true);
+                        callBack.onFailure(e);
+                    }
+                }
+
+                @Override
+                public void onFailure(Throwable e) {
+                    failed.set(true);
+                    callBack.onFailure(e);
+                }
+            }));
+        }
     }
 
     interface AttachmentsCallBack {
