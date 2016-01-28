@@ -5,10 +5,10 @@ package event;
  *
  * @author Brad Behnke
  */
-public abstract class AbstractVertxEvent {
+public abstract class VertxEvent {
     public final String eventAddress;
 
-    public AbstractVertxEvent(String eventAddress) {
+    public VertxEvent(String eventAddress) {
         this.eventAddress = eventAddress;
     }
 }

@@ -10,7 +10,7 @@ import rx.Observable;
  *
  * @author Brad Behnke
  */
-public abstract class AbstractFileService {
+public abstract class FileService {
     public abstract Observable<Buffer> getObservable(FileEntity fileEntity);
     public abstract Observable<Integer> putObservable(FileEntity fileEntity, Buffer data);
     public abstract Observable<Integer> putObservable(FileEntity fileEntity, HttpServerFileUpload upload);

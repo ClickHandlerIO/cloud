@@ -49,15 +49,15 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
     private final List<String> emailNotifySubscriptionArnList;
     private final List<String> emailReceivedSubscriptionArnList;
 
-    private final SqlDatabase db;
+    private final SqlExecutor db;
     private final EventBus eventBus;
 
-    public SNSQueueHandler(EventBus eventBus, SqlDatabase db) {
+    public SNSQueueHandler(SNSConfig snsConfig, EventBus eventBus, SqlExecutor db) {
         this.db = db;
         this.eventBus = eventBus;
-        this.generalSubscriptionArnList = SNSConfig.getGeneralSubscriptionArnList();
-        this.emailNotifySubscriptionArnList = SNSConfig.getEmailNotifySubscriptionArnList();
-        this.emailReceivedSubscriptionArnList = SNSConfig.getEmailReceivedSubscriptionArnList();
+        this.generalSubscriptionArnList = snsConfig.getGeneralSubscriptionArnList();
+        this.emailNotifySubscriptionArnList = snsConfig.getEmailNotifySubscriptionArnList();
+        this.emailReceivedSubscriptionArnList = snsConfig.getEmailReceivedSubscriptionArnList();
     }
 
     @Override

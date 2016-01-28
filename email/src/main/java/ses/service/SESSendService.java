@@ -5,8 +5,9 @@ import io.clickhandler.queue.LocalQueueServiceFactory;
 import io.clickhandler.queue.QueueFactory;
 import io.clickhandler.queue.QueueService;
 import io.clickhandler.queue.QueueServiceConfig;
-import io.clickhandler.sql.db.SqlDatabase;
+import io.clickhandler.sql.db.SqlExecutor;
 import io.vertx.rxjava.core.eventbus.EventBus;
+import ses.config.SESConfig;
 import ses.data.SESSendRequest;
 import ses.handler.SESSendQueueHandler;
 
@@ -20,9 +21,9 @@ public class SESSendService extends AbstractIdleService {
     private final QueueService<SESSendRequest> queueService;
     private final SESSendQueueHandler queueHandler;
 
-    public SESSendService(EventBus eventBus, SqlDatabase db) {
-        final QueueServiceConfig<SESSendRequest> config = new QueueServiceConfig<>("SESSendQueue", SESSendRequest.class, true, 2, 10);
-        this.queueHandler = new SESSendQueueHandler(eventBus, db);
+    public SESSendService(SESConfig sesConfig, EventBus eventBus, SqlExecutor db) {
+        final QueueServiceConfig<SESSendRequest> config = new QueueServiceConfig<>("SESSendQueue", SESSendRequest.class, true, sesConfig.getSendParallelism(), sesConfig.getSendBatchSize());
+        this.queueHandler = new SESSendQueueHandler(sesConfig, eventBus, db);
         config.setHandler(this.queueHandler);
 
         QueueFactory factory = new LocalQueueServiceFactory();

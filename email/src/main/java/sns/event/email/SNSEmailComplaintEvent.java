@@ -1,6 +1,6 @@
 package sns.event.email;
 
-import common.event.AbstractEmailNotificationEvent;
+import common.event.EmailNotificationEvent;
 import sns.data.json.email.notify.EmailNotifyMessage;
 
 /**
@@ -8,7 +8,7 @@ import sns.data.json.email.notify.EmailNotifyMessage;
  *
  * @author Brad Behnke
  */
-public class SNSEmailComplaintEvent extends AbstractEmailNotificationEvent {
+public class SNSEmailComplaintEvent extends EmailNotificationEvent {
     public static final String ADDRESS = "sns-email-complaint";
     private EmailNotifyMessage message;
 

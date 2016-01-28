@@ -1,6 +1,6 @@
 package ses.event;
 
-import common.event.AbstractEmailNotificationEvent;
+import common.event.EmailNotificationEvent;
 import entity.EmailEntity;
 
 /**
@@ -8,7 +8,7 @@ import entity.EmailEntity;
  *
  *  @author Brad Behnke
  */
-public class SESEmailSentEvent extends AbstractEmailNotificationEvent {
+public class SESEmailSentEvent extends EmailNotificationEvent {
     public static final String ADDRESS = "sns-email-sent";
     private boolean successful;
     private EmailEntity emailEntity;

@@ -39,20 +39,20 @@ public class SESSendQueueHandler implements QueueHandler<SESSendRequest>, Tables
 
     private final static Logger LOG = LoggerFactory.getLogger(SESSendQueueHandler.class);
     private final EventBus eventBus;
-    private final SqlDatabase db;
+    private final SqlExecutor db;
     private final AmazonSimpleEmailServiceClient client;
     private final int ALLOWED_ATTEMPTS;
 
-    public SESSendQueueHandler(EventBus eventBus, SqlDatabase db){
+    public SESSendQueueHandler(SESConfig sesConfig, EventBus eventBus, SqlExecutor db){
         this.eventBus = eventBus;
         this.db = db;
         final BasicAWSCredentials AWSCredentials = new BasicAWSCredentials(
-                Strings.nullToEmpty(SESConfig.getAwsAccessKey()),
-                Strings.nullToEmpty(SESConfig.getAwsSecretKey())
+                Strings.nullToEmpty(sesConfig.getAwsAccessKey()),
+                Strings.nullToEmpty(sesConfig.getAwsSecretKey())
         );
         this.client = new AmazonSimpleEmailServiceClient(AWSCredentials);
-        this.client.setRegion(SESConfig.getAwsRegion());
-        ALLOWED_ATTEMPTS = SESConfig.getSendRetryMax();
+        this.client.setRegion(sesConfig.getAwsRegion());
+        ALLOWED_ATTEMPTS = sesConfig.getSendRetryMax();
     }
 
     public void shutdown(){

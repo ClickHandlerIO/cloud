@@ -4,7 +4,7 @@ import data.schema.Tables;
 import entity.EmailAttachmentEntity;
 import entity.EmailEntity;
 import io.clickhandler.queue.QueueHandler;
-import io.clickhandler.sql.db.SqlDatabase;
+import io.clickhandler.sql.db.SqlExecutor;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
@@ -14,7 +14,7 @@ import io.vertx.rxjava.core.eventbus.EventBus;
 import rx.Observable;
 import ses.data.SESSendRequest;
 import ses.event.SESEmailSentEvent;
-import ses.service.SESAttachmentService;
+import common.service.FileAttachmentDownloadService;
 import ses.service.SESSendService;
 
 import javax.activation.DataHandler;
@@ -43,14 +43,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class SESPrepQueueHandler  implements QueueHandler<SESSendRequest>, Tables {
 
     private final EventBus eventBus;
-    private final SqlDatabase db;
-    private final SESAttachmentService sesAttachmentService;
+    private final SqlExecutor db;
+    private final FileAttachmentDownloadService fileAttachmentDownloadService;
     private final SESSendService sesSendService;
 
-    public SESPrepQueueHandler(EventBus eventBus, SqlDatabase db, SESAttachmentService sesAttachmentService, SESSendService sesSendService) {
+    public SESPrepQueueHandler(EventBus eventBus, SqlExecutor db, FileAttachmentDownloadService fileAttachmentDownloadService, SESSendService sesSendService) {
         this.eventBus = eventBus;
         this.db = db;
-        this.sesAttachmentService = sesAttachmentService;
+        this.fileAttachmentDownloadService = fileAttachmentDownloadService;
         this.sesSendService = sesSendService;
     }
 
@@ -204,7 +204,7 @@ public class SESPrepQueueHandler  implements QueueHandler<SESSendRequest>, Table
             if(failed.get())
                 break;
             activeDownloads.incrementAndGet();
-            sesAttachmentService.downloadObservable(attachmentEntity.getFileId())
+            fileAttachmentDownloadService.downloadObservable(attachmentEntity.getFileId())
                     .doOnError(throwable -> {
                         if(completionHandler != null) {
                             completionHandler.handle(Future.failedFuture(throwable));

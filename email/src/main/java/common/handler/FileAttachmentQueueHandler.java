@@ -1,16 +1,16 @@
-package ses.handler;
+package common.handler;
 
+import common.service.FileService;
 import entity.FileEntity;
 import io.clickhandler.queue.QueueHandler;
-import io.clickhandler.sql.db.SqlDatabase;
+import io.clickhandler.sql.db.SqlExecutor;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.rx.java.ObservableFuture;
 import io.vertx.rx.java.RxHelper;
 import rx.Observable;
-import s3.service.S3Service;
-import ses.data.DownloadRequest;
+import common.data.DownloadRequest;
 
 import java.util.List;
 
@@ -19,14 +19,14 @@ import java.util.List;
  *
  * @author Brad Behnke
  */
-public class AttachmentQueueHandler implements QueueHandler<DownloadRequest> {
+public class FileAttachmentQueueHandler implements QueueHandler<DownloadRequest> {
 
-    private final SqlDatabase db;
-    private final S3Service s3Service;
+    private final SqlExecutor db;
+    private final FileService fileService;
 
-    public AttachmentQueueHandler(SqlDatabase db, S3Service s3Service) {
+    public FileAttachmentQueueHandler(SqlExecutor db, FileService fileService) {
         this.db = db;
-        this.s3Service = s3Service;
+        this.fileService = fileService;
     }
 
     @Override
@@ -41,7 +41,7 @@ public class AttachmentQueueHandler implements QueueHandler<DownloadRequest> {
                         request.getCompletionHandler().handle(Future.failedFuture(throwable));
                     }
                 })
-                .doOnNext(fileEntity -> s3Service.getObservable(fileEntity)
+                .doOnNext(fileEntity -> fileService.getObservable(fileEntity)
                         .doOnError(throwable -> {
                             if(request.getCompletionHandler() != null) {
                                 request.getCompletionHandler().handle(Future.failedFuture(throwable));

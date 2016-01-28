@@ -1,9 +1,11 @@
 package ses.service;
 
 import com.sun.istack.internal.NotNull;
-import common.service.AbstractEmailService;
+import common.service.EmailService;
+import common.service.FileService;
+import common.service.FileAttachmentDownloadService;
 import entity.EmailEntity;
-import io.clickhandler.sql.db.SqlDatabase;
+import io.clickhandler.sql.db.SqlExecutor;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
@@ -13,7 +15,7 @@ import io.vertx.rxjava.core.eventbus.EventBus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import rx.Observable;
-import s3.service.S3Service;
+import ses.config.SESConfig;
 import ses.data.SESSendRequest;
 
 import javax.inject.Inject;
@@ -25,25 +27,25 @@ import javax.inject.Singleton;
  * @author Brad Behnke
  */
 @Singleton
-public class SESService extends AbstractEmailService<SESSendRequest> {
+public class SESService extends EmailService<SESSendRequest> {
     private final static Logger LOG = LoggerFactory.getLogger(SESService.class);
 
     // ses services
     private final SESSendPrepService sesSendPrepService;
-    private final SESAttachmentService SESAttachmentService;
+    private final FileAttachmentDownloadService fileAttachmentDownloadService;
     private final SESSendService sesSendService;
 
     @Inject
-    public SESService(@NotNull EventBus eventBus, @NotNull SqlDatabase db, @NotNull S3Service s3Service) {
-        this.SESAttachmentService = new SESAttachmentService(db, s3Service);
-        this.sesSendService = new SESSendService(eventBus, db);
-        this.sesSendPrepService = new SESSendPrepService(eventBus, db, SESAttachmentService, sesSendService);
+    public SESService(@NotNull SESConfig config, @NotNull EventBus eventBus, @NotNull SqlExecutor db, @NotNull FileService fileService) {
+        this.fileAttachmentDownloadService = new FileAttachmentDownloadService(config, db, fileService);
+        this.sesSendService = new SESSendService(config, eventBus, db);
+        this.sesSendPrepService = new SESSendPrepService(config, eventBus, db, fileAttachmentDownloadService, sesSendService);
     }
 
     @Override
     protected void startUp() throws Exception {
         this.sesSendService.startAsync();
-        this.SESAttachmentService.startAsync();
+        this.fileAttachmentDownloadService.startAsync();
         this.sesSendPrepService.startAsync();
         LOG.info("SES Service Started");
     }
@@ -51,7 +53,7 @@ public class SESService extends AbstractEmailService<SESSendRequest> {
     @Override
     protected void shutDown() throws Exception {
         this.sesSendPrepService.stopAsync();
-        this.SESAttachmentService.stopAsync();
+        this.fileAttachmentDownloadService.stopAsync();
         this.sesSendService.stopAsync();
         LOG.info("SES Service Shutdown");
     }

@@ -1,7 +1,7 @@
 package common.service;
 
 import com.google.common.util.concurrent.AbstractIdleService;
-import common.data.AbstractSendRequest;
+import common.data.SendRequest;
 import entity.EmailEntity;
 import rx.Observable;
 
@@ -10,7 +10,7 @@ import rx.Observable;
  *
  *  @author Brad Behnke
  */
-public abstract class AbstractEmailService<T extends AbstractSendRequest> extends AbstractIdleService {
+public abstract class EmailService<T extends SendRequest> extends AbstractIdleService {
 
     public abstract Observable<EmailEntity> sendObservable(T sendRequest);
 }

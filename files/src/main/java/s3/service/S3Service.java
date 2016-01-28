@@ -1,6 +1,7 @@
 package s3.service;
 
-import common.service.AbstractFileService;
+import com.sun.istack.internal.NotNull;
+import common.service.FileService;
 import entity.FileEntity;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
@@ -21,13 +22,13 @@ import javax.inject.Singleton;
  * @author Brad Behnke
  */
 @Singleton
-public class S3Service extends AbstractFileService {
+public class S3Service extends FileService {
 
     private final S3Client s3Client;
 
     @Inject
-    public S3Service() {
-        this.s3Client = new S3Client(S3Config.getAwsAccessKey(), S3Config.getAwsSecretKey(), S3Config.getEndPoint());
+    public S3Service(@NotNull S3Config config) {
+        this.s3Client = new S3Client(config.getAwsAccessKey(), config.getAwsSecretKey(), config.getEndPoint());
     }
 
     @Override

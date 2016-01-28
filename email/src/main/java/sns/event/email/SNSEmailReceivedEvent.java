@@ -1,6 +1,6 @@
 package sns.event.email;
 
-import common.event.AbstractEmailNotificationEvent;
+import common.event.EmailNotificationEvent;
 import sns.data.json.email.receive.EmailReceivedMessage;
 
 /**
@@ -8,7 +8,7 @@ import sns.data.json.email.receive.EmailReceivedMessage;
  *
  * @author Brad Behnke
  */
-public class SNSEmailReceivedEvent extends AbstractEmailNotificationEvent {
+public class SNSEmailReceivedEvent extends EmailNotificationEvent {
     public static final String ADDRESS = "sns-email-received";
     private EmailReceivedMessage message;
 

@@ -7,8 +7,8 @@ package common.event;
  *  @see io.vertx.core.eventbus.EventBus
  *  @author Brad Behnke
  */
-public abstract class AbstractEmailNotificationEvent extends AbstractNotificationEvent {
-    public AbstractEmailNotificationEvent(String eventAddress) {
+public abstract class EmailNotificationEvent extends NotificationEvent {
+    public EmailNotificationEvent(String eventAddress) {
         super(eventAddress);
     }
 }

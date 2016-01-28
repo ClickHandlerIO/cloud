@@ -1,36 +1,36 @@
-package ses.service;
+package common.service;
 
 import com.google.common.util.concurrent.AbstractIdleService;
+import common.config.EmailConfig;
 import io.clickhandler.queue.LocalQueueServiceFactory;
 import io.clickhandler.queue.QueueFactory;
 import io.clickhandler.queue.QueueService;
 import io.clickhandler.queue.QueueServiceConfig;
-import io.clickhandler.sql.db.SqlDatabase;
+import io.clickhandler.sql.db.SqlExecutor;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Handler;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.rx.java.ObservableFuture;
 import io.vertx.rx.java.RxHelper;
 import rx.Observable;
-import s3.service.S3Service;
-import ses.data.DownloadRequest;
-import ses.handler.AttachmentQueueHandler;
+import common.data.DownloadRequest;
+import common.handler.FileAttachmentQueueHandler;
 
 /**
- * SES Attachment download queue manager.
+ * File attachment download queue manager.
  *
  * @author Brad Behnke
  */
-public class SESAttachmentService extends AbstractIdleService {
+public class FileAttachmentDownloadService extends AbstractIdleService {
 
     private final QueueService<DownloadRequest> queueService;
 
-    public SESAttachmentService(SqlDatabase db, S3Service s3Service) {
-        final QueueServiceConfig<DownloadRequest> config = new QueueServiceConfig<>("AttachmentDLQueue", DownloadRequest.class, true, 2, 1);
-        config.setHandler(new AttachmentQueueHandler(db, s3Service));
+    public FileAttachmentDownloadService(EmailConfig config, SqlExecutor db, FileService fileService) {
+        final QueueServiceConfig<DownloadRequest> queueConfig = new QueueServiceConfig<>("AttachmentDLQueue", DownloadRequest.class, true, config.getAttachmentParallelism(), config.getAttachmentBatchSize());
+        queueConfig.setHandler(new FileAttachmentQueueHandler(db, fileService));
 
         QueueFactory factory = new LocalQueueServiceFactory();
-        this.queueService = factory.build(config);
+        this.queueService = factory.build(queueConfig);
     }
 
     @Override

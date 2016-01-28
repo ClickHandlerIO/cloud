@@ -9,12 +9,12 @@ import java.util.List;
  * @author Brad Behnke
  */
 public class SNSConfig {
-    private static String name = "SNS";
-    private static int parallelism = 2;
-    private static int batchSize = 10;
-    private static List<String> generalSubscriptionArnList;
-    private static List<String> emailNotifySubscriptionArnList;
-    private static List<String> emailReceivedSubscriptionArnList;
+    private String name = "SNS";
+    private int parallelism = 2;
+    private int batchSize = 10;
+    private List<String> generalSubscriptionArnList;
+    private List<String> emailNotifySubscriptionArnList;
+    private List<String> emailReceivedSubscriptionArnList;
 
     public SNSConfig() {
         generalSubscriptionArnList = new ArrayList<>();
@@ -23,59 +23,57 @@ public class SNSConfig {
         // add subscriptions
     }
 
-    public static int getBatchSize() {
+    public int getBatchSize() {
         return batchSize;
     }
 
-    public static void setBatchSize(int batchSize) {
-        SNSConfig.batchSize = batchSize;
+    public SNSConfig batchSize(int batchSize) {
+        this.batchSize = batchSize;
+        return this;
     }
 
-    public static List<String> getEmailNotifySubscriptionArnList() {
+    public List<String> getEmailNotifySubscriptionArnList() {
         return emailNotifySubscriptionArnList;
     }
 
-    public static void setEmailNotifySubscriptionArnList(List<String> emailNotifySubscriptionArnList) {
-        SNSConfig.emailNotifySubscriptionArnList = emailNotifySubscriptionArnList;
+    public SNSConfig emailNotifySubscriptionArnList(List<String> emailNotifySubscriptionArnList) {
+        this.emailNotifySubscriptionArnList = emailNotifySubscriptionArnList;
+        return this;
     }
 
-    public static List<String> getEmailReceivedSubscriptionArnList() {
+    public List<String> getEmailReceivedSubscriptionArnList() {
         return emailReceivedSubscriptionArnList;
     }
 
-    public static void setEmailReceivedSubscriptionArnList(List<String> emailReceivedSubscriptionArnList) {
-        SNSConfig.emailReceivedSubscriptionArnList = emailReceivedSubscriptionArnList;
+    public SNSConfig emailReceivedSubscriptionArnList(List<String> emailReceivedSubscriptionArnList) {
+        this.emailReceivedSubscriptionArnList = emailReceivedSubscriptionArnList;
+        return this;
     }
 
-    public static void addEmailSubcriptionArn(String arn) {
-        SNSConfig.emailNotifySubscriptionArnList.add(arn);
-    }
-
-    public static List<String> getGeneralSubscriptionArnList() {
+    public List<String> getGeneralSubscriptionArnList() {
         return generalSubscriptionArnList;
     }
 
-    public static void setGeneralSubscriptionArnList(List<String> generalSubscriptionArnList) {
-        SNSConfig.generalSubscriptionArnList = generalSubscriptionArnList;
+    public SNSConfig generalSubscriptionArnList(List<String> generalSubscriptionArnList) {
+        this.generalSubscriptionArnList = generalSubscriptionArnList;
+        return this;
     }
 
-    public static void addGeneralSubcriptionArn(String arn) {
-        SNSConfig.generalSubscriptionArnList.add(arn);
-    }
-
-    public static String getName() {
+    public String getName() {
         return name;
     }
 
-    public static void setName(String name) {
-        SNSConfig.name = name;
+    public SNSConfig name(String name) {
+        this.name = name;
+        return this;
     }
 
-    public static int getParallelism() {
+    public int getParallelism() {
         return parallelism;
     }
 
-    public static void setParallelism(int parallelism) {
-        SNSConfig.parallelism = parallelism;
+    public SNSConfig parallelism(int parallelism) {
+        this.parallelism = parallelism;
+        return this;
     }
 }

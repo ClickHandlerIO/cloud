@@ -2,110 +2,95 @@ package ses.config;
 
 import com.amazonaws.regions.Region;
 import com.amazonaws.regions.Regions;
+import common.config.EmailConfig;
 
 /**
  *  Configuration settings for SES email service.
  *
  *  @author Brad Behnke
  */
-public class SESConfig {
-    private static String name = "SES";
-    private static String awsAccessKey;
-    private static String awsSecretKey;
-    private static Region awsRegion = Region.getRegion(Regions.US_WEST_2);
-    private static int sendParallelism = 2;
-    private static int sendBatchSize = 10;
-    private static int prepParallelism = 2;
-    private static int prepBatchSize = 10;
-    private static int attachmentParallelism = 2;
-    private static int attachmentBatchSize = 10;
-    private static int sendRetryMax = 3;
+public class SESConfig extends EmailConfig {
+    private String awsAccessKey;
+    private String awsSecretKey;
+    private Region awsRegion = Region.getRegion(Regions.US_WEST_2);
+    private int sendParallelism = 2;
+    private int sendBatchSize = 10;
+    private int prepParallelism = 2;
+    private int prepBatchSize = 10;
+    private int sendRetryMax = 3;
 
-    public static int getAttachmentBatchSize() {
-        return attachmentBatchSize;
+    public SESConfig() {
     }
 
-    public static void setAttachmentBatchSize(int attachmentBatchSize) {
-        SESConfig.attachmentBatchSize = attachmentBatchSize;
-    }
-
-    public static int getAttachmentParallelism() {
-        return attachmentParallelism;
-    }
-
-    public static void setAttachmentParallelism(int attachmentParallelism) {
-        SESConfig.attachmentParallelism = attachmentParallelism;
-    }
-
-    public static String getAwsAccessKey() {
+    public String getAwsAccessKey() {
         return awsAccessKey;
     }
 
-    public static void setAwsAccessKey(String awsAccessKey) {
-        SESConfig.awsAccessKey = awsAccessKey;
+    public SESConfig awsAccessKey(String awsAccessKey) {
+        this.awsAccessKey = awsAccessKey;
+        return this;
     }
 
-    public static Region getAwsRegion() {
+    public Region getAwsRegion() {
         return awsRegion;
     }
 
-    public static void setAwsRegion(Region awsRegion) {
-        SESConfig.awsRegion = awsRegion;
+    public SESConfig awsRegion(Region awsRegion) {
+        this.awsRegion = awsRegion;
+        return this;
     }
 
-    public static String getAwsSecretKey() {
+    public String getAwsSecretKey() {
         return awsSecretKey;
     }
 
-    public static void setAwsSecretKey(String awsSecretKey) {
-        SESConfig.awsSecretKey = awsSecretKey;
+    public SESConfig awsSecretKey(String awsSecretKey) {
+        this.awsSecretKey = awsSecretKey;
+        return this;
     }
 
-    public static String getName() {
-        return name;
-    }
-
-    public static void setName(String name) {
-        SESConfig.name = name;
-    }
-
-    public static int getPrepBatchSize() {
+    public int getPrepBatchSize() {
         return prepBatchSize;
     }
 
-    public static void setPrepBatchSize(int prepBatchSize) {
-        SESConfig.prepBatchSize = prepBatchSize;
+    public SESConfig prepBatchSize(int prepBatchSize) {
+        this.prepBatchSize = prepBatchSize;
+        return this;
     }
 
-    public static int getPrepParallelism() {
+    public int getPrepParallelism() {
         return prepParallelism;
     }
 
-    public static void setPrepParallelism(int prepParallelism) {
-        SESConfig.prepParallelism = prepParallelism;
+    public SESConfig prepParallelism(int prepParallelism) {
+        this.prepParallelism = prepParallelism;
+        return this;
     }
 
-    public static int getSendBatchSize() {
+    public int getSendBatchSize() {
         return sendBatchSize;
     }
 
-    public static void setSendBatchSize(int sendBatchSize) {
-        SESConfig.sendBatchSize = sendBatchSize;
+    public SESConfig sendBatchSize(int sendBatchSize) {
+        this.sendBatchSize = sendBatchSize;
+        return this;
     }
 
-    public static int getSendParallelism() {
+    public int getSendParallelism() {
         return sendParallelism;
     }
 
-    public static void setSendParallelism(int sendParallelism) {
-        SESConfig.sendParallelism = sendParallelism;
+    public SESConfig sendParallelism(int sendParallelism) {
+        this.sendParallelism = sendParallelism;
+        return this;
     }
 
-    public static int getSendRetryMax() {
+    public int getSendRetryMax() {
         return sendRetryMax;
     }
 
-    public static void setSendRetryMax(int sendRetryMax) {
-        SESConfig.sendRetryMax = sendRetryMax;
+    public SESConfig sendRetryMax(int sendRetryMax) {
+        this.sendRetryMax = sendRetryMax;
+        return this;
     }
 }

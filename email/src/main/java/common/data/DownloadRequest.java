@@ -1,4 +1,4 @@
-package ses.data;
+package common.data;
 
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Handler;

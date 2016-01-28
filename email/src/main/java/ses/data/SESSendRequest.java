@@ -1,6 +1,6 @@
 package ses.data;
 
-import common.data.AbstractSendRequest;
+import common.data.SendRequest;
 import entity.EmailEntity;
 
 import javax.mail.internet.MimeMessage;
@@ -10,7 +10,7 @@ import javax.mail.internet.MimeMessage;
  *
  *  @author Brad Behnke
  */
-public class SESSendRequest extends AbstractSendRequest {
+public class SESSendRequest extends SendRequest {
 
     private MimeMessage mimeMessage;
     private int attempts = 0;

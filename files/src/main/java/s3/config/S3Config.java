@@ -6,49 +6,34 @@ package s3.config;
  * @author Brad Behnke
  */
 public class S3Config {
-    private static String name = "SES";
-    private static String awsAccessKey;
-    private static String awsSecretKey;
-    private static String endPoint = "s3-us-west-1.amazonaws.com";
-    private static int threads = 10;
+    private String awsAccessKey;
+    private String awsSecretKey;
+    private String endPoint = "s3-us-west-1.amazonaws.com";
 
-    public static String getAwsAccessKey() {
+    public String getAwsAccessKey() {
         return awsAccessKey;
     }
 
-    public static void setAwsAccessKey(String awsAccessKey) {
-        S3Config.awsAccessKey = awsAccessKey;
+    public S3Config awsAccessKey(String awsAccessKey) {
+        this.awsAccessKey = awsAccessKey;
+        return this;
     }
 
-    public static String getAwsSecretKey() {
+    public String getAwsSecretKey() {
         return awsSecretKey;
     }
 
-    public static void setAwsSecretKey(String awsSecretKey) {
-        S3Config.awsSecretKey = awsSecretKey;
+    public S3Config awsSecretKey(String awsSecretKey) {
+        this.awsSecretKey = awsSecretKey;
+        return this;
     }
 
-    public static String getEndPoint() {
+    public String getEndPoint() {
         return endPoint;
     }
 
-    public static void setEndPoint(String endPoint) {
-        S3Config.endPoint = endPoint;
-    }
-
-    public static String getName() {
-        return name;
-    }
-
-    public static void setName(String name) {
-        S3Config.name = name;
-    }
-
-    public static int getThreads() {
-        return threads;
-    }
-
-    public static void setThreads(int threads) {
-        S3Config.threads = threads;
+    public S3Config endPoint(String endPoint) {
+        this.endPoint = endPoint;
+        return this;
     }
 }

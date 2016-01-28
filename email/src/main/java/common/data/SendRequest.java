@@ -12,15 +12,15 @@ import io.vertx.core.Handler;
  *  EmailEntity: Object containing email database record information. Related records for recipients and attachments
  *  must exist in database prior to passing to a email sending service.
  *
- *  SendHandler: Callback to allow for ASync processing.
+ *  Handler: Callback to allow for ASync processing.
  *  </p>
  *  @author Brad behnke
  */
-public abstract class AbstractSendRequest {
+public abstract class SendRequest {
     private EmailEntity emailEntity;
     private Handler<AsyncResult<EmailEntity>> completionHandler;
 
-    public AbstractSendRequest(EmailEntity emailEntity) {
+    public SendRequest(EmailEntity emailEntity) {
         this.emailEntity = emailEntity;
     }
 

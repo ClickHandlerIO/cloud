@@ -2,11 +2,12 @@ package sns.service;
 
 
 import com.google.common.util.concurrent.AbstractIdleService;
+import com.sun.istack.internal.NotNull;
 import io.clickhandler.queue.LocalQueueServiceFactory;
 import io.clickhandler.queue.QueueFactory;
 import io.clickhandler.queue.QueueService;
 import io.clickhandler.queue.QueueServiceConfig;
-import io.clickhandler.sql.db.SqlDatabase;
+import io.clickhandler.sql.db.SqlExecutor;
 import io.vertx.rxjava.core.eventbus.EventBus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,13 +35,13 @@ public class SNSService extends AbstractIdleService {
     private QueueService<Message> queueService;
 
     @Inject
-    public SNSService(EventBus eventBus, SqlDatabase db) {
+    public SNSService(@NotNull SNSConfig snsConfig, @NotNull EventBus eventBus, @NotNull SqlExecutor db) {
 
         // initialize sns queues
         QueueFactory factory = new LocalQueueServiceFactory();
         // main queue and handler
-        final QueueServiceConfig<Message> mainConfig = new QueueServiceConfig<>(SNSConfig.getName(), Message.class, true, SNSConfig.getParallelism(), SNSConfig.getBatchSize());
-        mainConfig.setHandler(new SNSQueueHandler(eventBus, db));
+        final QueueServiceConfig<Message> mainConfig = new QueueServiceConfig<>(snsConfig.getName(), Message.class, true, snsConfig.getParallelism(), snsConfig.getBatchSize());
+        mainConfig.setHandler(new SNSQueueHandler(snsConfig, eventBus, db));
         this.queueService = factory.build(mainConfig);
 
         this.generalRouteHandler = new SNSGeneralRouteHandler(this);
