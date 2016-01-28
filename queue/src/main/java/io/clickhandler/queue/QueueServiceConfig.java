@@ -63,7 +63,7 @@ public class QueueServiceConfig<T> {
         return handler;
     }
 
-    void setHandler(QueueHandler<T> handler) {
+    public void setHandler(QueueHandler<T> handler) {
         this.handler = handler;
     }
 

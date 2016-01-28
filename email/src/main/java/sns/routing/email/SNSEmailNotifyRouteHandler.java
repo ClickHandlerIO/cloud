@@ -1,0 +1,50 @@
+package sns.routing.email;
+
+import io.vertx.rxjava.core.http.HttpServerRequest;
+import org.apache.http.HttpStatus;
+import io.vertx.rxjava.ext.web.RoutingContext;
+import sns.data.json.email.notify.EmailNotifyMessage;
+import sns.routing.common.SNSRouteHandler;
+import sns.service.SNSService;
+
+/**
+ * Vertx route for all email notifications
+ *
+ * @see io.vertx.rxjava.ext.web.Route
+ * @author Brad Behnke
+ */
+
+public class SNSEmailNotifyRouteHandler extends SNSRouteHandler<EmailNotifyMessage> {
+
+    public SNSEmailNotifyRouteHandler(SNSService snsService) {
+        super(snsService, EmailNotifyMessage.class);
+    }
+
+    @Override
+    public void handle(RoutingContext routingContext) {
+
+        // get header info
+        HttpServerRequest request = routingContext.request();
+        HeaderInfo headerInfo = processHeaders(request.headers());
+        if(!headerInfo.isComplete()) {
+            routingContext.fail(HttpStatus.SC_BAD_REQUEST);
+            return;
+        }
+
+        // get message from body json
+        EmailNotifyMessage message = getMessage(routingContext.getBody().toString());
+        if (message == null /*|| !isMessageSignatureValid(message)*/) {
+            routingContext.fail(HttpStatus.SC_BAD_REQUEST);
+            return;
+        }
+
+        passToService(message);
+        request.response().setStatusCode(HttpStatus.SC_OK).end();
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Message Validation
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    // TODO
+}
