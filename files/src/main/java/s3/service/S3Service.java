@@ -9,8 +9,6 @@ import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpServerFileUpload;
 import io.vertx.rx.java.ObservableFuture;
 import io.vertx.rx.java.RxHelper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import rx.Observable;
 import s3.config.S3Config;
 
@@ -24,7 +22,6 @@ import javax.inject.Singleton;
  */
 @Singleton
 public class S3Service extends AbstractFileService {
-    private final static Logger LOG = LoggerFactory.getLogger(S3Service.class);
 
     private final S3Client s3Client;
 

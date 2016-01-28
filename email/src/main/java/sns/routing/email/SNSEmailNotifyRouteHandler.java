@@ -2,9 +2,7 @@ package sns.routing.email;
 
 import io.vertx.rxjava.core.http.HttpServerRequest;
 import org.apache.http.HttpStatus;
-import org.slf4j.Logger;
 import io.vertx.rxjava.ext.web.RoutingContext;
-import org.slf4j.LoggerFactory;
 import sns.data.json.email.notify.EmailNotifyMessage;
 import sns.routing.common.SNSRouteHandler;
 import sns.service.SNSService;
@@ -17,7 +15,6 @@ import sns.service.SNSService;
  */
 
 public class SNSEmailNotifyRouteHandler extends SNSRouteHandler<EmailNotifyMessage> {
-    private final static Logger LOG = LoggerFactory.getLogger(SNSEmailNotifyRouteHandler.class);
 
     public SNSEmailNotifyRouteHandler(SNSService snsService) {
         super(snsService, EmailNotifyMessage.class);

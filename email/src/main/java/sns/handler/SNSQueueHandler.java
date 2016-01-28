@@ -18,7 +18,6 @@ import sns.event.email.SNSEmailReceivedEvent;
 import sns.event.general.SNSNotificationEvent;
 import sns.event.general.SNSSubscriptionConfirmEvent;
 import sns.event.general.SNSUnsubscribeConfirmEvent;
-import org.jooq.Record;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import sns.config.SNSConfig;
@@ -107,6 +106,7 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
                 }
                 break;
             default:
+                LOG.error("Invalid GeneralMessage Received with Type: " + message.getType());
                 break;
         }
     }
@@ -122,7 +122,7 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
             }
             // TODO ensure XML body reflects successful confirmation.
         } catch (Exception e) {
-            LOG.error("Failed to confirm subscription to topic ARN: " + message.getTopicArn());
+            LOG.error("Failed to Confirm Subscription to Topic ARN: " + message.getTopicArn());
         }
         eventBus.publish(SNSSubscriptionConfirmEvent.ADDRESS, new SNSSubscriptionConfirmEvent(message));
     }
@@ -138,7 +138,7 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
             }
             // TODO ensure XML body reflects successful unsubcribe or subscribe.
         } catch (Exception e) {
-            LOG.error("Failed to handle unsubscribe to topic ARN: " + message.getTopicArn());
+            LOG.error("Failed to Confirm Unsubscribe to Topic ARN: " + message.getTopicArn());
         }
         eventBus.publish(SNSUnsubscribeConfirmEvent.ADDRESS, new SNSUnsubscribeConfirmEvent(message));
     }
@@ -179,11 +179,12 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
         final NotifyMail mail = message.getMail();
         final Delivery delivery = message.getDelivery();
         getRecipientsObservable(mail)
-                .doOnError(e -> LOG.error("Failed to retrieve email recipients", e))
+                .doOnError(e -> LOG.error(e.getMessage()))
                 .doOnNext(emailRecipientEntities -> emailRecipientEntities.stream().filter(recipientEntity -> delivery.getRecipients().contains(recipientEntity.getAddress())).forEach(recipientEntity -> {
                     recipientEntity.setStatus(RecipientStatus.DELIVERED);
                     recipientEntity.setDelivered(new Date());
-                    updateRecipient(recipientEntity);
+                    updateRecipientObservable(recipientEntity)
+                            .doOnError(throwable -> LOG.error(throwable.getMessage()));
                 }));
         eventBus.publish(SNSEmailDeliveryEvent.ADDRESS, new SNSEmailDeliveryEvent(message));
     }
@@ -194,13 +195,13 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
         final List<String> bouncedRecipients = bounce.getRecipientsStrings();
 
         getRecipientsObservable(mail)
-                .doOnError(e -> LOG.error("Failed to retrieve email recipients", e))
+                .doOnError(e -> LOG.error(e.getMessage()))
                 .doOnNext(emailRecipientEntities -> emailRecipientEntities.stream().filter(recipientEntity -> bouncedRecipients.contains(recipientEntity.getAddress())).forEach(recipientEntity -> {
                     recipientEntity.setStatus(RecipientStatus.BOUNCED);
                     recipientEntity.setBounced(new Date());
-                    updateRecipient(recipientEntity);
+                    updateRecipientObservable(recipientEntity)
+                            .doOnError(throwable -> LOG.error(throwable.getMessage()));
                 }));
-
         eventBus.publish(SNSEmailBounceEvent.ADDRESS, new SNSEmailBounceEvent(message));
     }
 
@@ -209,11 +210,12 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
         final Complaint complaint = message.getComplaint();
         final List<String> complainedRecipients = complaint.getRecipientsStrings();
         getRecipientsObservable(mail)
-                .doOnError(e -> LOG.error("Failed to retrieve email recipients", e))
+                .doOnError(e -> LOG.error(e.getMessage()))
                 .doOnNext(emailRecipientEntities -> emailRecipientEntities.stream().filter(recipientEntity -> complainedRecipients.contains(recipientEntity.getAddress())).forEach(recipientEntity -> {
-                    recipientEntity.setStatus(RecipientStatus.BOUNCED);
-                    recipientEntity.setBounced(new Date());
-                    updateRecipient(recipientEntity);
+                    recipientEntity.setStatus(RecipientStatus.COMPLAINT);
+                    recipientEntity.setComplaint(new Date());
+                    updateRecipientObservable(recipientEntity)
+                            .doOnError(throwable -> LOG.error(throwable.getMessage()));
                 }));
         eventBus.publish(SNSEmailComplaintEvent.ADDRESS, new SNSEmailComplaintEvent(message));
     }
@@ -225,39 +227,52 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
     }
 
     private void getRecipients(NotifyMail mail, Handler<AsyncResult<List<EmailRecipientEntity>>> completionHandler) {
-        db.readObservable(session -> {
-            Record record = session.select(EMAIL.fields()).from(EMAIL).where(EMAIL.MESSAGE_ID.eq(mail.getMessageId())).fetchAny();
-            if (record == null) {
-                LOG.error("Email Record Not Found for MessageId: " + mail.getMessageId());
-                return null;
-            }
-            return record.into(EMAIL).into(EmailEntity.class);
-        }).subscribe(emailEntity -> {
-            db.readObservable(session ->
-                    session.select(EMAIL_RECIPIENT.fields()).from(EMAIL_RECIPIENT)
-                            .where(EMAIL_RECIPIENT.EMAIL_ID.eq(emailEntity.getId()))
-                            .fetch()
-                            .into(EMAIL_RECIPIENT)
-                            .into(EmailRecipientEntity.class))
-                    .doOnError(e -> {
-                        if (completionHandler != null) {
-                            completionHandler.handle(Future.failedFuture(e));
-                        }
-                    })
-                    .subscribe(emailRecipientEntities -> {
-                        if (completionHandler != null) {
-                            completionHandler.handle(Future.succeededFuture(emailRecipientEntities));
-                        }
-                    });
-        });
+        db.readObservable(session -> session.select(EMAIL.fields()).from(EMAIL).where(EMAIL.MESSAGE_ID.eq(mail.getMessageId())).fetchAny().into(EMAIL).into(EmailEntity.class))
+                .doOnError(throwable -> {
+                    if(completionHandler != null) {
+                        completionHandler.handle(Future.failedFuture(throwable));
+                    }
+                })
+                .doOnNext(emailEntity -> db.readObservable(session -> session.select(EMAIL_RECIPIENT.fields()).from(EMAIL_RECIPIENT)
+                        .where(EMAIL_RECIPIENT.EMAIL_ID.eq(emailEntity.getId()))
+                        .fetch().into(EMAIL_RECIPIENT).into(EmailRecipientEntity.class))
+                        .doOnError(throwable -> {
+                            if(completionHandler != null) {
+                                completionHandler.handle(Future.failedFuture(throwable));
+                            }
+                        })
+                        .doOnNext(emailRecipientEntities -> {
+                            if(completionHandler != null){
+                                completionHandler.handle(Future.succeededFuture(emailRecipientEntities));
+                            }
+                        }));
     }
 
-    private void updateRecipient(final EmailRecipientEntity recipientEntity) {
-        db.writeObservable(session -> new SqlResult<>(session.update(recipientEntity) == 1, recipientEntity)).subscribe(result -> {
-            if (!result.isSuccess()) {
-                LOG.error("Failed to update email recipient.");
-            }
-        });
+    private Observable<EmailRecipientEntity> updateRecipientObservable(EmailRecipientEntity recipientEntity) {
+        ObservableFuture<EmailRecipientEntity> observableFuture = RxHelper.observableFuture();
+        updateRecipient(recipientEntity, observableFuture.toHandler());
+        return observableFuture;
+    }
+
+    private void updateRecipient(final EmailRecipientEntity recipientEntity, Handler<AsyncResult<EmailRecipientEntity>> completionHandler) {
+        db.writeObservable(session -> {
+                        Integer result = session.update(recipientEntity);
+                        return new SqlResult<>(result == 1, recipientEntity);
+                })
+                .doOnError(throwable -> {
+                    if(completionHandler != null) {
+                        completionHandler.handle(Future.failedFuture(throwable));
+                    }
+                })
+                .doOnNext(recipientEntitySqlResult -> {
+                    if(completionHandler != null) {
+                        if (recipientEntitySqlResult.isSuccess()) {
+                            completionHandler.handle(Future.succeededFuture(recipientEntitySqlResult.get()));
+                        } else {
+                            completionHandler.handle(Future.failedFuture(new Exception("EmailRecipientEntity Update Failed.")));
+                        }
+                    }
+                });
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

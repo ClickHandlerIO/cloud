@@ -63,8 +63,7 @@ public class SESService extends AbstractEmailService<SESSendRequest> {
         return observableFuture;
     }
 
-    @Override
-    protected void send(SESSendRequest sendRequest, Handler<AsyncResult<EmailEntity>> completionHandler) {
+    private void send(SESSendRequest sendRequest, Handler<AsyncResult<EmailEntity>> completionHandler) {
         if(sendRequest.getEmailEntity() == null) {
             completionHandler.handle(Future.failedFuture(new Exception("Null EmailEntity.")));
             return;

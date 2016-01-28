@@ -5,8 +5,6 @@ import io.vertx.core.Handler;
 
 import io.vertx.rxjava.core.MultiMap;
 import io.vertx.rxjava.ext.web.RoutingContext;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import sns.data.json.common.Message;
 import sns.service.SNSService;
 
@@ -18,7 +16,6 @@ import sns.service.SNSService;
  */
 public abstract class SNSRouteHandler<T extends Message> implements Handler<RoutingContext> {
 
-    private final static Logger LOG = LoggerFactory.getLogger(SNSRouteHandler.class);
     protected final SNSService snsService;
     private final Class<T> messageClass;
 
@@ -45,7 +42,6 @@ public abstract class SNSRouteHandler<T extends Message> implements Handler<Rout
         try {
             return mapper.readValue(content, messageClass);
         } catch (Exception e) {
-            LOG.error("Failed to process SNS Message", e);
             return null;
         }
     }

@@ -5,8 +5,6 @@ import io.vertx.rxjava.core.http.HttpServerRequest;
 import io.vertx.rxjava.ext.web.RoutingContext;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.http.HttpStatus;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import sns.data.json.general.GeneralMessage;
 import sns.routing.common.SNSRouteHandler;
 import sns.service.SNSService;
@@ -25,7 +23,6 @@ import java.security.cert.X509Certificate;
  */
 
 public class SNSGeneralRouteHandler extends SNSRouteHandler<GeneralMessage> {
-    private final static Logger LOG = LoggerFactory.getLogger(SNSGeneralRouteHandler.class);
 
     public SNSGeneralRouteHandler(SNSService snsService) {
         super(snsService, GeneralMessage.class);
@@ -36,7 +33,6 @@ public class SNSGeneralRouteHandler extends SNSRouteHandler<GeneralMessage> {
         // get header info
         HttpServerRequest request = routingContext.request();
         if(!request.method().equals(HttpMethod.POST)) {
-            LOG.error("Invalid HttpMethod Caught: " + request.method().toString());
             routingContext.fail(HttpStatus.SC_BAD_REQUEST);
             return;
         }
