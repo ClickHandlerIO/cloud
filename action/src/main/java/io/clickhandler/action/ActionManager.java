@@ -1,6 +1,7 @@
 package io.clickhandler.action;
 
 import com.google.common.util.concurrent.AbstractExecutionThreadService;
+import com.netflix.hystrix.Hystrix;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;

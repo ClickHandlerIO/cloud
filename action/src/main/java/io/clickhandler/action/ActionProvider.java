@@ -1,17 +1,25 @@
 package io.clickhandler.action;
 
 import com.netflix.hystrix.*;
+import io.vertx.rxjava.core.RxHelper;
+import io.vertx.rxjava.core.Vertx;
 import javaslang.control.Try;
 import rx.Observable;
+import rx.Scheduler;
 
 import javax.inject.Inject;
 import javax.inject.Provider;
 
 /**
- * Handles providing
+ * Builds and invokes a single type of Action.
+ *
+ * @author Clay Molocznik
  */
 public class ActionProvider<A, IN, OUT> {
     static final long DEFAULT_TIMEOUT_MILLIS = 5000;
+    @Inject
+    Vertx vertx;
+    Scheduler scheduler;
     private ActionConfig actionConfig;
     private HystrixCommand.Setter defaultSetter;
     private HystrixObservableCommand.Setter defaultObservableSetter;
@@ -85,6 +93,7 @@ public class ActionProvider<A, IN, OUT> {
     }
 
     protected void init() {
+        scheduler = initScheduler();
         // Get default config.
         actionConfig = actionClass.getAnnotation(ActionConfig.class);
 
@@ -206,6 +215,7 @@ public class ActionProvider<A, IN, OUT> {
      */
     protected OUT execute(final IN request) {
         return Try.of(() -> observe(
+            null,
             request,
             create()
         ).toBlocking().toFuture().get()).get();
@@ -226,6 +236,17 @@ public class ActionProvider<A, IN, OUT> {
     protected Observable<OUT> observe(
         final IN request) {
         return observe(
+            null,
+            request,
+            create()
+        );
+    }
+
+    protected Observable<OUT> observe(
+        final Object context,
+        final IN request) {
+        return observe(
+            context,
             request,
             create()
         );
@@ -235,17 +256,34 @@ public class ActionProvider<A, IN, OUT> {
      * @param request\
      */
     protected Observable<OUT> observe(
+        final Object context,
         final IN request,
         final A action) {
         final AbstractAction<IN, OUT> abstractAction;
         try {
             abstractAction = (AbstractAction<IN, OUT>) action;
+            abstractAction.setContext(context);
             abstractAction.setRequest(request);
         } catch (Exception e) {
             // Ignore.
             return Observable.error(e);
         }
 
-        return abstractAction.observe();
+        final Observable observable = abstractAction.toObservable();
+        observable.observeOn(observeOnScheduler());
+        observable.subscribeOn(subscribeOnScheduler());
+        return observable;
+    }
+
+    protected Scheduler observeOnScheduler() {
+        return scheduler;
+    }
+
+    protected Scheduler subscribeOnScheduler() {
+        return scheduler;
+    }
+
+    protected Scheduler initScheduler() {
+        return RxHelper.scheduler(vertx);
     }
 }

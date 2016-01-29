@@ -98,7 +98,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         this.entityPackageNames = entityPackageNames;
         this.jooqPackageNames = jooqPackageNames;
 
-        observableScheduler = io.vertx.rxjava.core.RxHelper.blockingScheduler(vertx);
+        observableScheduler = io.vertx.rxjava.core.RxHelper.scheduler(vertx);
 
         final List<Reflections> entityReflections = new ArrayList<>();
         final List<Reflections> jooqReflections = new ArrayList<>();
@@ -656,23 +656,11 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 });
 
                 if (handler != null) {
-                    vertx.executeBlocking(
-                        event -> {
-                            handler.handle(Future.succeededFuture());
-                        },
-                        event -> {
-                        }
-                    );
+                    vertx.runOnContext(event -> handler.handle(Future.succeededFuture()));
                 }
             } catch (Exception e) {
                 if (handler != null) {
-                    vertx.executeBlocking(
-                        event -> {
-                            handler.handle(Future.failedFuture(e));
-                        },
-                        event -> {
-                        }
-                    );
+                    vertx.runOnContext(event -> handler.handle(Future.failedFuture(e)));
                 }
             }
         });
@@ -690,7 +678,9 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                         subscriber.onNext(result.result());
                         subscriber.onCompleted();
                     }
-                })).observeOn(observableScheduler);
+                }))
+            .subscribeOn(observableScheduler)
+            .observeOn(observableScheduler);
     }
 
     /**
@@ -704,19 +694,11 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 final SqlResult<T> result = executeWrite(task);
 
                 if (handler != null) {
-                    vertx.executeBlocking(
-                        event -> handler.handle(Future.succeededFuture(result)),
-                        event -> {
-                        }
-                    );
+                    vertx.runOnContext(event -> handler.handle(Future.succeededFuture(result)));
                 }
             } catch (Exception e) {
                 if (handler != null) {
-                    vertx.executeBlocking(
-                        event -> handler.handle(Future.failedFuture(e)),
-                        event -> {
-                        }
-                    );
+                    vertx.runOnContext(event -> handler.handle(Future.failedFuture(e)));
                 }
             }
         });
@@ -730,7 +712,9 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                         subscriber.onNext(result.result());
                         subscriber.onCompleted();
                     }
-                })).observeOn(observableScheduler);
+                }))
+            .subscribeOn(observableScheduler)
+            .observeOn(observableScheduler);
     }
 
     /**
@@ -742,21 +726,12 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         readExecutor.submit(() -> {
             try {
                 final T result = executeRead(task);
-
                 if (handler != null) {
-                    vertx.executeBlocking(
-                        event -> handler.handle(Future.succeededFuture(result)),
-                        event -> {
-                        }
-                    );
+                    vertx.runOnContext(event -> handler.handle(Future.succeededFuture(result)));
                 }
             } catch (Exception e) {
                 if (handler != null) {
-                    vertx.executeBlocking(
-                        event -> handler.handle(Future.failedFuture(e)),
-                        event -> {
-                        }
-                    );
+                    vertx.runOnContext(event -> handler.handle(Future.failedFuture(e)));
                 }
             }
         });

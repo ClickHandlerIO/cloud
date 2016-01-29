@@ -5,6 +5,7 @@ import dagger.Module;
 import dagger.Provides;
 import io.Action_LocatorRoot;
 import io.Io_Locator;
+import io.vertx.rxjava.core.Vertx;
 import rx.Observable;
 
 import javax.inject.Singleton;
@@ -14,6 +15,7 @@ import javax.inject.Singleton;
  */
 public class Main {
     public static void main(String[] args) {
+
         Observable<String> observable = actions().myAsyncAction().observe("HI");
         observable.subscribe(result -> {
             System.err.println("Another Subscriber: " + result);
@@ -43,6 +45,12 @@ public class Main {
         @Provides
         String string() {
             return "";
+        }
+
+        @Provides
+        @Singleton
+        Vertx vertx() {
+            return Vertx.vertx();
         }
     }
 }
