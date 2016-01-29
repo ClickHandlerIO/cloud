@@ -10,11 +10,11 @@ import javax.mail.internet.MimeMessage;
  *
  *  @author Brad Behnke
  */
-public class SESSendRequest extends SendRequest {
+public class MimeSendRequest extends SendRequest {
 
     private MimeMessage mimeMessage;
 
-    public SESSendRequest(EmailEntity emailEntity) {
+    public MimeSendRequest(EmailEntity emailEntity) {
         super(emailEntity);
     }
 

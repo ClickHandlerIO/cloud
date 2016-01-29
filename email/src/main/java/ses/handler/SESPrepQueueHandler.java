@@ -11,7 +11,7 @@ import io.vertx.rx.java.ObservableFuture;
 import io.vertx.rx.java.RxHelper;
 import io.vertx.rxjava.core.eventbus.EventBus;
 import rx.Observable;
-import ses.data.SESSendRequest;
+import ses.data.MimeSendRequest;
 import ses.event.SESEmailSentEvent;
 import common.service.FileAttachmentDownloadService;
 import ses.service.SESSendService;
@@ -39,7 +39,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * @author Brad Behnke
  */
-public class SESPrepQueueHandler extends EmailSendPrepQueueHandler<SESSendRequest>{
+public class SESPrepQueueHandler extends EmailSendPrepQueueHandler<MimeSendRequest>{
 
     private final EventBus eventBus;
     private final SqlExecutor db;
@@ -55,11 +55,11 @@ public class SESPrepQueueHandler extends EmailSendPrepQueueHandler<SESSendReques
     }
 
     @Override
-    public void receive(List<SESSendRequest> sendRequests) {
+    public void receive(List<MimeSendRequest> sendRequests) {
         sendRequests.forEach(this::processRequest);
     }
 
-    private void processRequest(SESSendRequest request) {
+    private void processRequest(MimeSendRequest request) {
         final EmailEntity emailEntity = request.getEmailEntity();
         buildMimeMessageObservable(emailEntity)
                 .doOnError(throwable -> {

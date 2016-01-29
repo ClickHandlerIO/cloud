@@ -9,7 +9,7 @@ import io.clickhandler.queue.QueueServiceConfig;
 import io.clickhandler.sql.db.SqlExecutor;
 import io.vertx.rxjava.core.eventbus.EventBus;
 import ses.config.SESConfig;
-import ses.data.SESSendRequest;
+import ses.data.MimeSendRequest;
 import ses.handler.SESPrepQueueHandler;
 
 /**
@@ -19,10 +19,10 @@ import ses.handler.SESPrepQueueHandler;
  */
 public class SESSendPrepService extends AbstractIdleService {
 
-    private final QueueService<SESSendRequest> queueService;
+    private final QueueService<MimeSendRequest> queueService;
 
     public SESSendPrepService(SESConfig sesConfig, EventBus eventBus, SqlExecutor db, FileAttachmentDownloadService fileAttachmentDownloadService, SESSendService sesSendService) {
-        final QueueServiceConfig<SESSendRequest> config = new QueueServiceConfig<>("SESPrepQueue", SESSendRequest.class, true, sesConfig.getPrepParallelism(), sesConfig.getPrepBatchSize());
+        final QueueServiceConfig<MimeSendRequest> config = new QueueServiceConfig<>("SESPrepQueue", MimeSendRequest.class, true, sesConfig.getPrepParallelism(), sesConfig.getPrepBatchSize());
         config.setHandler(new SESPrepQueueHandler(eventBus, db, fileAttachmentDownloadService, sesSendService));
 
         QueueFactory factory = new LocalQueueServiceFactory();
@@ -39,7 +39,7 @@ public class SESSendPrepService extends AbstractIdleService {
         this.queueService.stopAsync();
     }
 
-    public void enqueue(SESSendRequest sendRequest) {
+    public void enqueue(MimeSendRequest sendRequest) {
         this.queueService.add(sendRequest);
     }
 }

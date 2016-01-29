@@ -16,7 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import rx.Observable;
 import ses.config.SESConfig;
-import ses.data.SESSendRequest;
+import ses.data.MimeSendRequest;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -27,7 +27,7 @@ import javax.inject.Singleton;
  * @author Brad Behnke
  */
 @Singleton
-public class SESService extends EmailService<SESSendRequest> {
+public class SESService extends EmailService<MimeSendRequest> {
     private final static Logger LOG = LoggerFactory.getLogger(SESService.class);
 
     // ses services
@@ -59,13 +59,13 @@ public class SESService extends EmailService<SESSendRequest> {
     }
 
     @Override
-    public Observable<EmailEntity> sendObservable(SESSendRequest sendRequest) {
+    public Observable<EmailEntity> sendObservable(MimeSendRequest sendRequest) {
         ObservableFuture<EmailEntity> observableFuture = RxHelper.observableFuture();
         send(sendRequest, observableFuture.toHandler());
         return observableFuture;
     }
 
-    private void send(SESSendRequest sendRequest, Handler<AsyncResult<EmailEntity>> completionHandler) {
+    private void send(MimeSendRequest sendRequest, Handler<AsyncResult<EmailEntity>> completionHandler) {
         if(sendRequest.getEmailEntity() == null) {
             completionHandler.handle(Future.failedFuture(new Exception("Null EmailEntity.")));
             return;

@@ -19,7 +19,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import rx.Observable;
 import ses.config.SESConfig;
-import ses.data.SESSendRequest;
+import ses.data.MimeSendRequest;
 import ses.event.SESEmailSentEvent;
 
 import java.io.ByteArrayOutputStream;
@@ -31,7 +31,7 @@ import java.util.List;
  *
  * @author Brad Behnke
  */
-public class SESSendQueueHandler extends EmailSendQueueHandler<SESSendRequest> {
+public class SESSendQueueHandler extends EmailSendQueueHandler<MimeSendRequest> {
 
     private final static Logger LOG = LoggerFactory.getLogger(SESSendQueueHandler.class);
     private final EventBus eventBus;
@@ -55,11 +55,11 @@ public class SESSendQueueHandler extends EmailSendQueueHandler<SESSendRequest> {
     }
 
     @Override
-    public void receive(List<SESSendRequest> sendRequests) {
+    public void receive(List<MimeSendRequest> sendRequests) {
         sendRequests.forEach(this::sendEmail);
     }
 
-    private void sendEmail(final SESSendRequest sendRequest) {
+    private void sendEmail(final MimeSendRequest sendRequest) {
         getRawRequestObservable(sendRequest)
                 .doOnError(throwable -> {
                     failure(sendRequest, throwable);
@@ -85,13 +85,13 @@ public class SESSendQueueHandler extends EmailSendQueueHandler<SESSendRequest> {
                 });
     }
 
-    private Observable<SendRawEmailRequest> getRawRequestObservable(SESSendRequest sendRequest){
+    private Observable<SendRawEmailRequest> getRawRequestObservable(MimeSendRequest sendRequest){
         ObservableFuture<SendRawEmailRequest> observableFuture = RxHelper.observableFuture();
         getRawRequest(sendRequest, observableFuture.toHandler());
         return observableFuture;
     }
 
-    private void getRawRequest(SESSendRequest sendRequest, Handler<AsyncResult<SendRawEmailRequest>> completionHandler) {
+    private void getRawRequest(MimeSendRequest sendRequest, Handler<AsyncResult<SendRawEmailRequest>> completionHandler) {
         try {
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             sendRequest.getMimeMessage().writeTo(outputStream);

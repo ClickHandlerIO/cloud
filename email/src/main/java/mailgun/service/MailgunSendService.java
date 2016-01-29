@@ -1,6 +1,8 @@
 package mailgun.service;
 
 import com.google.common.util.concurrent.AbstractIdleService;
+import common.service.FileAttachmentDownloadService;
+import common.service.FileService;
 import io.clickhandler.queue.LocalQueueServiceFactory;
 import io.clickhandler.queue.QueueFactory;
 import io.clickhandler.queue.QueueService;
@@ -19,9 +21,9 @@ public class MailgunSendService extends AbstractIdleService {
     private final QueueService<MailgunSendRequest> queueService;
     private final MailgunSendQueueHandler queueHandler;
 
-    public MailgunSendService(MailgunConfig mailgunConfig, EventBus eventBus, SqlExecutor db) {
+    public MailgunSendService(MailgunConfig mailgunConfig, EventBus eventBus, SqlExecutor db, FileAttachmentDownloadService downloadService) {
         final QueueServiceConfig<MailgunSendRequest> config = new QueueServiceConfig<>("MailgunSendQueue", MailgunSendRequest.class, true, mailgunConfig.getSendParallelism(), mailgunConfig.getSendBatchSize());
-        this.queueHandler = new MailgunSendQueueHandler(mailgunConfig, eventBus, db);
+        this.queueHandler = new MailgunSendQueueHandler(mailgunConfig, eventBus, db, downloadService);
         config.setHandler(this.queueHandler);
 
         QueueFactory factory = new LocalQueueServiceFactory();

@@ -2,6 +2,7 @@ package common.handler;
 
 import common.data.SendRequest;
 import data.schema.Tables;
+import entity.EmailAttachmentEntity;
 import entity.EmailEntity;
 import entity.EmailRecipientEntity;
 import entity.RecipientStatus;
@@ -18,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import rx.Observable;
 
 import java.util.Date;
+import java.util.List;
 
 /**
  * @author Brad Behnke
@@ -41,6 +43,31 @@ public abstract class EmailSendQueueHandler<T extends SendRequest> implements Qu
         if(sendRequest.getCompletionHandler() != null) {
             sendRequest.getCompletionHandler().handle(Future.succeededFuture(emailEntity));
         }
+    }
+
+    protected Observable<List<EmailAttachmentEntity>> getAttachmentEntitiesObservable(EmailEntity emailEntity) {
+        ObservableFuture<List<EmailAttachmentEntity>> observableFuture = RxHelper.observableFuture();
+        getEmailAttachmentEntities(emailEntity, observableFuture.toHandler());
+        return observableFuture;
+    }
+
+    private void getEmailAttachmentEntities(EmailEntity emailEntity, Handler<AsyncResult<List<EmailAttachmentEntity>>> completionHandler) {
+        db.readObservable(session ->
+                session.select(EMAIL_ATTACHMENT.fields()).from(EMAIL_ATTACHMENT)
+                        .where(EMAIL_ATTACHMENT.EMAIL_ID.eq(emailEntity.getId()))
+                        .fetch()
+                        .into(EMAIL_ATTACHMENT)
+                        .into(EmailAttachmentEntity.class))
+                .doOnError(e -> {
+                    if (completionHandler != null) {
+                        completionHandler.handle(Future.failedFuture(e));
+                    }
+                })
+                .subscribe(emailRecipientEntities -> {
+                    if (completionHandler != null) {
+                        completionHandler.handle(Future.succeededFuture(emailRecipientEntities));
+                    }
+                });
     }
 
     protected void updateRecords(EmailEntity emailEntity) {
