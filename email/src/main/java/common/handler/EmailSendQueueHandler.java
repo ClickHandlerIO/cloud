@@ -1,5 +1,6 @@
 package common.handler;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import common.data.SendRequest;
 import data.schema.Tables;
 import entity.EmailAttachmentEntity;
@@ -27,6 +28,7 @@ import java.util.List;
 public abstract class EmailSendQueueHandler<T extends SendRequest> implements QueueHandler<T>, Tables {
 
     private final static Logger LOG = LoggerFactory.getLogger(EmailSendQueueHandler.class);
+    protected final static ObjectMapper jsonMapper = new ObjectMapper();
     private SqlExecutor db;
 
     public EmailSendQueueHandler(SqlExecutor db) {

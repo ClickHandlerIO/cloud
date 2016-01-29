@@ -70,20 +70,18 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
     }
 
     private void sendEmail(MailgunSendRequest sendRequest) {
-        MultiPartUtility mpu = new MultiPartUtility();
         sendRequest.incrementAttempts();
         HttpClientRequest clientRequest = client.post("/"+domain+"/messages")
                 .handler(new HttpResponseHandler(sendRequest))
                 .exceptionHandler(throwable -> failure(sendRequest,throwable))
                 .setChunked(true);
         clientRequest.putHeader(HttpHeaders.AUTHORIZATION, "api:"+apiKey);
-        clientRequest.putHeader(HttpHeaders.CONTENT_TYPE, ContentType.MULTIPART_FORM_DATA.getMimeType() + "; boundary=" + mpu.getBoundary());
-        writeBodyObservable(clientRequest, sendRequest, mpu)
+        clientRequest.putHeader(HttpHeaders.CONTENT_TYPE, ContentType.MULTIPART_FORM_DATA.getMimeType() + "; boundary=" + MultiPartUtility.BOUNDARY);
+        writeBodyObservable(clientRequest, sendRequest)
                 .doOnError(throwable -> failure(sendRequest,throwable))
                 .doOnNext(clientRequest1 -> {
                     if(sendRequest.getEmailEntity().isAttachments()) {
-                        mpu.clear();
-                        writeAttachmentsObservable(clientRequest1, sendRequest, mpu)
+                        writeAttachmentsObservable(clientRequest1, sendRequest)
                                 .doOnError(throwable -> failure(sendRequest,throwable))
                                 .doOnNext(HttpClientRequest::end);
                     } else {
@@ -92,26 +90,27 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
                 });
     }
 
-    private Observable<HttpClientRequest> writeBodyObservable(HttpClientRequest clientRequest, MailgunSendRequest sendRequest, MultiPartUtility mpu) {
+    private Observable<HttpClientRequest> writeBodyObservable(HttpClientRequest clientRequest, MailgunSendRequest sendRequest) {
         ObservableFuture<HttpClientRequest> observableFuture = RxHelper.observableFuture();
-        writeBody(clientRequest, sendRequest, mpu, observableFuture.toHandler());
+        writeBody(clientRequest, sendRequest, observableFuture.toHandler());
         return observableFuture;
     }
 
-    private void writeBody(HttpClientRequest clientRequest, MailgunSendRequest sendRequest, MultiPartUtility mpu, Handler<AsyncResult<HttpClientRequest>> completionHandler) {
-        // TODO build
+    private void writeBody(HttpClientRequest clientRequest, MailgunSendRequest sendRequest, Handler<AsyncResult<HttpClientRequest>> completionHandler) {
+        MultiPartUtility mpu = new MultiPartUtility();
+        // TODO build with mpu
 
         // write body
         clientRequest.write(mpu.get());
     }
 
-    private Observable<HttpClientRequest> writeAttachmentsObservable(HttpClientRequest clientRequest, MailgunSendRequest sendRequest, MultiPartUtility mpu) {
+    private Observable<HttpClientRequest> writeAttachmentsObservable(HttpClientRequest clientRequest, MailgunSendRequest sendRequest) {
         ObservableFuture<HttpClientRequest> observableFuture = RxHelper.observableFuture();
-        writeAttachments(clientRequest, sendRequest, mpu, observableFuture.toHandler());
+        writeAttachments(clientRequest, sendRequest, observableFuture.toHandler());
         return observableFuture;
     }
 
-    private void writeAttachments(HttpClientRequest clientRequest, MailgunSendRequest sendRequest, MultiPartUtility mpu, Handler<AsyncResult<HttpClientRequest>> completionHandler) {
+    private void writeAttachments(HttpClientRequest clientRequest, MailgunSendRequest sendRequest, Handler<AsyncResult<HttpClientRequest>> completionHandler) {
         getAttachmentEntitiesObservable(sendRequest.getEmailEntity())
                 .doOnError(throwable -> {
                     if(completionHandler != null) {
@@ -132,7 +131,9 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
                                     }
                                 })
                                 .doOnNext(buffer -> {
+                                    MultiPartUtility mpu = new MultiPartUtility();
                                     // TODO build with mpu
+                                    mpu.attachment(attachmentEntity.getName(), buffer);
 
                                     // write attachment
                                     clientRequest.write(mpu.get());
@@ -151,19 +152,18 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
     }
 
     protected class MultiPartUtility {
-        private final String boundary;
+        public final static String BOUNDARY = "===boundary===";
         private static final String LINE_FEED = "\r\n";
         private String charset = "UTF-8";
         private Buffer buffer;
         private String attachmentName = "attachment";
 
         public MultiPartUtility() {
-            this.boundary = "===" + System.currentTimeMillis() + "===";
             this.buffer = Buffer.buffer();
         }
 
         public MultiPartUtility formField(String name, String value) {
-            buffer.appendString("--" + boundary).appendString(LINE_FEED);
+            buffer.appendString("--" + BOUNDARY).appendString(LINE_FEED);
             buffer.appendString("Content-Disposition: form-data; name=\"" + name + "\"").appendString(LINE_FEED);
             buffer.appendString("Content-Type: text/plain; charset=" + charset).appendString(LINE_FEED);
             buffer.appendString(LINE_FEED);
@@ -171,20 +171,16 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
             return this;
         }
 
-        public MultiPartUtility attachment(String fileName, Buffer data) {
-            buffer.appendString("--" + boundary).appendString(LINE_FEED);
+        public MultiPartUtility attachment(String fileName, Buffer firstBuffer) {
+            buffer.appendString("--" + BOUNDARY).appendString(LINE_FEED);
             buffer.appendString("Content-Disposition: form-data; name=\"" + attachmentName + "\"; filename=\"" + fileName + "\"")
                     .appendString(LINE_FEED);
             buffer.appendString("Content-Type: " + URLConnection.guessContentTypeFromName(fileName))
                     .appendString(LINE_FEED);
             buffer.appendString("Content-Transfer-Encoding: binary").appendString(LINE_FEED);
             buffer.appendString(LINE_FEED);
-            buffer.appendBuffer(data);
+            buffer.appendBuffer(firstBuffer);
             return this;
-        }
-
-        public String getBoundary() {
-            return boundary;
         }
 
         public Buffer get() {
@@ -200,17 +196,23 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
     protected class HttpResponseHandler implements Handler<HttpClientResponse> {
 
         private MailgunSendRequest sendRequest;
+        private Buffer totalBuffer;
 
         public HttpResponseHandler(MailgunSendRequest sendRequest) {
             this.sendRequest = sendRequest;
+            this.totalBuffer = Buffer.buffer();
         }
 
         @Override
         public void handle(HttpClientResponse httpClientResponse) {
             if(httpClientResponse.statusCode() == HttpStatus.SC_OK) {
                 httpClientResponse.bodyHandler(buffer -> {
+                    totalBuffer.appendBuffer(buffer);
+                });
+                httpClientResponse.endHandler(aVoid -> {
                     try {
-                        MailgunSendResponse response = new ObjectMapper().readValue(buffer.toString(), MailgunSendResponse.class);
+                        // todo make mapper global static
+                        MailgunSendResponse response = new ObjectMapper().readValue(totalBuffer.toString(), MailgunSendResponse.class);
                         if(response == null || response.getId() == null || response.getId().isEmpty()) {
                             failure(sendRequest, new Exception("Invalid Response to Send Request"));
                             return;

@@ -32,7 +32,7 @@ public class MailgunService extends EmailService<SendRequest>{
     @Inject
     public MailgunService(@NotNull MailgunConfig config, @NotNull EventBus eventBus, @NotNull SqlExecutor db, @NotNull FileService fileService) {
         this.fileAttachmentDownloadService = new FileAttachmentDownloadService(config, db, fileService);
-        this.sendService = new MailgunSendService(config, eventBus, db);
+        this.sendService = new MailgunSendService(config, eventBus, db, fileAttachmentDownloadService);
         this.sendPrepService = new MailgunSendPrepService(config, eventBus, db, fileAttachmentDownloadService, sendService);
     }
 

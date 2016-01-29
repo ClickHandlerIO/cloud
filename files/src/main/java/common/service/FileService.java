@@ -1,9 +1,9 @@
 package common.service;
 
+import common.handler.FileGetHandler;
+import common.handler.FileStatusHandler;
 import entity.FileEntity;
 import io.vertx.core.buffer.Buffer;
-import io.vertx.core.http.HttpServerFileUpload;
-import rx.Observable;
 
 /**
  * Abstraction for all cloud file services
@@ -11,8 +11,7 @@ import rx.Observable;
  * @author Brad Behnke
  */
 public abstract class FileService {
-    public abstract Observable<Buffer> getObservable(FileEntity fileEntity);
-    public abstract Observable<Integer> putObservable(FileEntity fileEntity, Buffer data);
-    public abstract Observable<Integer> putObservable(FileEntity fileEntity, HttpServerFileUpload upload);
-    public abstract Observable<Integer> deleteObservable(FileEntity fileEntity);
+    public abstract void getAsync(FileEntity fileEntity, FileGetHandler handler);
+    public abstract void putAsync(FileEntity fileEntity, Buffer data, FileStatusHandler handler);
+    public abstract void deleteAsync(FileEntity fileEntity, FileStatusHandler handler);
 }
