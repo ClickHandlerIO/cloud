@@ -2,11 +2,9 @@ package common.handler;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import common.data.SendRequest;
+import common.service.FileService;
 import data.schema.Tables;
-import entity.EmailAttachmentEntity;
-import entity.EmailEntity;
-import entity.EmailRecipientEntity;
-import entity.RecipientStatus;
+import entity.*;
 import io.clickhandler.queue.QueueHandler;
 import io.clickhandler.sql.db.SqlExecutor;
 import io.clickhandler.sql.db.SqlResult;
@@ -29,10 +27,12 @@ public abstract class EmailSendQueueHandler<T extends SendRequest> implements Qu
 
     private final static Logger LOG = LoggerFactory.getLogger(EmailSendQueueHandler.class);
     protected final static ObjectMapper jsonMapper = new ObjectMapper();
-    private SqlExecutor db;
+    private final SqlExecutor db;
+    private final FileService fileService;
 
-    public EmailSendQueueHandler(SqlExecutor db) {
+    public EmailSendQueueHandler(SqlExecutor db, FileService fileService) {
         this.db = db;
+        this.fileService = fileService;
     }
 
     protected void failure(SendRequest sendRequest, Throwable throwable) {
@@ -68,6 +68,37 @@ public abstract class EmailSendQueueHandler<T extends SendRequest> implements Qu
                 .subscribe(emailRecipientEntities -> {
                     if (completionHandler != null) {
                         completionHandler.handle(Future.succeededFuture(emailRecipientEntities));
+                    }
+                });
+    }
+
+    protected void downloadFile(String fileId, FileGetHandler handler) {
+        getFileEntityObservable(fileId)
+                .doOnError(throwable -> {
+                    if(handler != null) {
+                        handler.onFailure(throwable);
+                    }
+                })
+                .doOnNext(fileEntity -> fileService.getAsync(fileEntity, handler));
+    }
+
+    private Observable<FileEntity> getFileEntityObservable(String fileId) {
+        ObservableFuture<FileEntity> observableFuture = RxHelper.observableFuture();
+        getFileEntity(fileId, observableFuture.toHandler());
+        return observableFuture;
+    }
+
+    private void getFileEntity(String fileId, Handler<AsyncResult<FileEntity>> completionHandler){
+        db.readObservable(session ->
+                session.getEntity(FileEntity.class, fileId))
+                .doOnError(e -> {
+                    if (completionHandler != null) {
+                        completionHandler.handle(Future.failedFuture(e));
+                    }
+                })
+                .subscribe(fileEntity -> {
+                    if (completionHandler != null) {
+                        completionHandler.handle(Future.succeededFuture(fileEntity));
                     }
                 });
     }

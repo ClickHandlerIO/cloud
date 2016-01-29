@@ -37,24 +37,11 @@ public class FileAttachmentQueueHandler implements QueueHandler<DownloadRequest>
     public void download(final DownloadRequest request) {
         getFileEntityObservable(request.getFileId())
                 .doOnError(throwable -> {
-                    if(request.getCompletionHandler() != null) {
-                        request.getCompletionHandler().handle(Future.failedFuture(throwable));
+                    if(request.getHandler() != null) {
+                        request.getHandler().onFailure(throwable);
                     }
                 })
-                .doOnNext(fileEntity -> fileService.getObservable(fileEntity)
-                        .doOnError(throwable -> {
-                            if(request.getCompletionHandler() != null) {
-                                request.getCompletionHandler().handle(Future.failedFuture(throwable));
-                            }
-                        })
-                        .doOnNext(buffer -> {
-                            if(request.getCompletionHandler() != null) {
-                                if (buffer == null || buffer.length() <= 0) {
-                                    request.getCompletionHandler().handle(Future.failedFuture(new Exception("S3 Service Failed to Retrieve File Data.")));
-                                }
-                                request.getCompletionHandler().handle(Future.succeededFuture(buffer));
-                            }
-                        }));
+                .doOnNext(fileEntity -> fileService.getAsync(fileEntity, request.getHandler()));
     }
 
     public Observable<FileEntity> getFileEntityObservable(String fileId) {

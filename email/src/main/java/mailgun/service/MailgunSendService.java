@@ -21,9 +21,9 @@ public class MailgunSendService extends AbstractIdleService {
     private final QueueService<MailgunSendRequest> queueService;
     private final MailgunSendQueueHandler queueHandler;
 
-    public MailgunSendService(MailgunConfig mailgunConfig, EventBus eventBus, SqlExecutor db, FileAttachmentDownloadService downloadService) {
+    public MailgunSendService(MailgunConfig mailgunConfig, EventBus eventBus, SqlExecutor db, FileService fileService) {
         final QueueServiceConfig<MailgunSendRequest> config = new QueueServiceConfig<>("MailgunSendQueue", MailgunSendRequest.class, true, mailgunConfig.getSendParallelism(), mailgunConfig.getSendBatchSize());
-        this.queueHandler = new MailgunSendQueueHandler(mailgunConfig, eventBus, db, downloadService);
+        this.queueHandler = new MailgunSendQueueHandler(mailgunConfig, eventBus, db, fileService);
         config.setHandler(this.queueHandler);
 
         QueueFactory factory = new LocalQueueServiceFactory();

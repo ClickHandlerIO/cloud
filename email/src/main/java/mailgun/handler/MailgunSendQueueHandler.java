@@ -2,22 +2,23 @@ package mailgun.handler;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import common.handler.EmailSendQueueHandler;
-import common.service.FileAttachmentDownloadService;
+import common.handler.FileGetHandler;
+import common.service.FileService;
 import entity.EmailAttachmentEntity;
 import entity.EmailEntity;
 import io.clickhandler.sql.db.SqlExecutor;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
+import io.vertx.core.Vertx;
+import io.vertx.core.buffer.Buffer;
+import io.vertx.core.eventbus.EventBus;
+import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientOptions;
+import io.vertx.core.http.HttpClientRequest;
+import io.vertx.core.http.HttpClientResponse;
 import io.vertx.rx.java.ObservableFuture;
 import io.vertx.rx.java.RxHelper;
-import io.vertx.rxjava.core.Vertx;
-import io.vertx.rxjava.core.buffer.Buffer;
-import io.vertx.rxjava.core.eventbus.EventBus;
-import io.vertx.rxjava.core.http.HttpClient;
-import io.vertx.rxjava.core.http.HttpClientRequest;
-import io.vertx.rxjava.core.http.HttpClientResponse;
 import mailgun.config.MailgunConfig;
 import mailgun.data.MailgunSendRequest;
 import mailgun.data.json.MailgunSendResponse;
@@ -41,17 +42,15 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
 
     private final static Logger LOG = LoggerFactory.getLogger(MailgunSendQueueHandler.class);
     private final EventBus eventBus;
-    private final FileAttachmentDownloadService downloadService;
     private final HttpClient client;
     private final String host;
     private final String domain;
     private final String apiKey;
     private final int ALLOWED_ATTEMPTS;
 
-    public MailgunSendQueueHandler(MailgunConfig config, EventBus eventBus, SqlExecutor db, FileAttachmentDownloadService downloadService) {
-        super(db);
+    public MailgunSendQueueHandler(MailgunConfig config, EventBus eventBus, SqlExecutor db, FileService fileService) {
+        super(db, fileService);
         this.eventBus = eventBus;
-        this.downloadService = downloadService;
         this.domain = config.getDomain();
         this.host = "api.mailgun.net/v3";
         this.apiKey = config.getApiKey();
@@ -69,34 +68,38 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
         sendRequests.forEach(this::sendEmail);
     }
 
-    private void sendEmail(MailgunSendRequest sendRequest) {
+    private void sendEmail(final MailgunSendRequest sendRequest) {
         sendRequest.incrementAttempts();
-        HttpClientRequest clientRequest = client.post("/"+domain+"/messages")
+        final HttpClientRequest clientRequest = client.post("/"+domain+"/messages")
                 .handler(new HttpResponseHandler(sendRequest))
                 .exceptionHandler(throwable -> failure(sendRequest,throwable))
                 .setChunked(true);
         clientRequest.putHeader(HttpHeaders.AUTHORIZATION, "api:"+apiKey);
         clientRequest.putHeader(HttpHeaders.CONTENT_TYPE, ContentType.MULTIPART_FORM_DATA.getMimeType() + "; boundary=" + MultiPartUtility.BOUNDARY);
         writeBodyObservable(clientRequest, sendRequest)
-                .doOnError(throwable -> failure(sendRequest,throwable))
-                .doOnNext(clientRequest1 -> {
+                .doOnError(throwable -> {
+                    if(sendRequest.getCompletionHandler() != null) {
+                        sendRequest.getCompletionHandler().handle(Future.failedFuture(throwable));
+                    }
+                })
+                .doOnNext(aVoid -> {
                     if(sendRequest.getEmailEntity().isAttachments()) {
-                        writeAttachmentsObservable(clientRequest1, sendRequest)
+                        writeAttachmentsObservable(clientRequest, sendRequest)
                                 .doOnError(throwable -> failure(sendRequest,throwable))
-                                .doOnNext(HttpClientRequest::end);
+                                .doOnNext(aVoid1 -> clientRequest.end());
                     } else {
-                        clientRequest1.end();
+                        clientRequest.end();
                     }
                 });
     }
 
-    private Observable<HttpClientRequest> writeBodyObservable(HttpClientRequest clientRequest, MailgunSendRequest sendRequest) {
-        ObservableFuture<HttpClientRequest> observableFuture = RxHelper.observableFuture();
+    private Observable<Void> writeBodyObservable(HttpClientRequest clientRequest, MailgunSendRequest sendRequest) {
+        ObservableFuture<Void> observableFuture = RxHelper.observableFuture();
         writeBody(clientRequest, sendRequest, observableFuture.toHandler());
         return observableFuture;
     }
 
-    private void writeBody(HttpClientRequest clientRequest, MailgunSendRequest sendRequest, Handler<AsyncResult<HttpClientRequest>> completionHandler) {
+    private void writeBody(HttpClientRequest clientRequest, MailgunSendRequest sendRequest, Handler<AsyncResult<Void>> completionHandler) {
         MultiPartUtility mpu = new MultiPartUtility();
         // TODO build with mpu
 
@@ -104,13 +107,13 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
         clientRequest.write(mpu.get());
     }
 
-    private Observable<HttpClientRequest> writeAttachmentsObservable(HttpClientRequest clientRequest, MailgunSendRequest sendRequest) {
-        ObservableFuture<HttpClientRequest> observableFuture = RxHelper.observableFuture();
+    private Observable<Void> writeAttachmentsObservable(HttpClientRequest clientRequest, MailgunSendRequest sendRequest) {
+        ObservableFuture<Void> observableFuture = RxHelper.observableFuture();
         writeAttachments(clientRequest, sendRequest, observableFuture.toHandler());
         return observableFuture;
     }
 
-    private void writeAttachments(HttpClientRequest clientRequest, MailgunSendRequest sendRequest, Handler<AsyncResult<HttpClientRequest>> completionHandler) {
+    private void writeAttachments(HttpClientRequest clientRequest, MailgunSendRequest sendRequest, Handler<AsyncResult<Void>> completionHandler) {
         getAttachmentEntitiesObservable(sendRequest.getEmailEntity())
                 .doOnError(throwable -> {
                     if(completionHandler != null) {
@@ -120,29 +123,37 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
                 .doOnNext(attachmentEntities -> {
                     final AtomicInteger activeDownloads = new AtomicInteger();
                     final AtomicBoolean failed = new AtomicBoolean();
-                    for(EmailAttachmentEntity attachmentEntity:attachmentEntities) {
+                    for(final EmailAttachmentEntity attachmentEntity:attachmentEntities) {
                         if(failed.get())
                             break;
+                        final MultiPartUtility mpu = new MultiPartUtility();
                         activeDownloads.incrementAndGet();
-                        downloadService.downloadObservable(attachmentEntity.getFileId())
-                                .doOnError(throwable -> {
-                                    if(completionHandler != null) {
-                                        completionHandler.handle(Future.failedFuture(throwable));
-                                    }
-                                })
-                                .doOnNext(buffer -> {
-                                    MultiPartUtility mpu = new MultiPartUtility();
-                                    // TODO build with mpu
-                                    mpu.attachment(attachmentEntity.getName(), buffer);
+                        downloadFile(attachmentEntity.getFileId(), new FileGetHandler() {
+                            @Override
+                            public void chunkReceived(Buffer chunk) {
+                                if(mpu.length() == 0) {
+                                    mpu.attachment(attachmentEntity.getName(), chunk);
+                                    return;
+                                }
+                                mpu.append(chunk);
+                            }
 
-                                    // write attachment
-                                    clientRequest.write(mpu.get());
-                                    if(activeDownloads.decrementAndGet() <= 0){
-                                        if(completionHandler != null) {
-                                            completionHandler.handle(Future.succeededFuture(clientRequest));
-                                        }
-                                    }
-                                });
+                            @Override
+                            public void onComplete() {
+                                clientRequest.write(mpu.get());
+                                if(activeDownloads.decrementAndGet() <= 0 && completionHandler != null) {
+                                    completionHandler.handle(Future.succeededFuture());
+                                }
+                            }
+
+                            @Override
+                            public void onFailure(Throwable throwable) {
+                                failed.set(true);
+                                if (completionHandler != null) {
+                                    completionHandler.handle(Future.failedFuture(throwable));
+                                }
+                            }
+                        });
                     }
                 });
     }
@@ -183,12 +194,17 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
             return this;
         }
 
+        public MultiPartUtility append(Buffer chunk) {
+            buffer.appendBuffer(chunk);
+            return  this;
+        }
+
         public Buffer get() {
             return buffer;
         }
 
-        public void clear() {
-            buffer = Buffer.buffer();
+        public int length() {
+            return buffer.length();
         }
     }
 

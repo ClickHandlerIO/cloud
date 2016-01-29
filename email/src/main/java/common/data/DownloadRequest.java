@@ -1,8 +1,6 @@
 package common.data;
 
-import io.vertx.core.AsyncResult;
-import io.vertx.core.Handler;
-import io.vertx.core.buffer.Buffer;
+import common.handler.FileGetHandler;
 
 /**
  *  Request object for ses email attachment downloads.
@@ -11,11 +9,11 @@ import io.vertx.core.buffer.Buffer;
  */
 public class  DownloadRequest {
     private String fileId;
-    private Handler<AsyncResult<Buffer>> completionHandler;
+    private FileGetHandler handler;
 
-    public DownloadRequest(String fileId, Handler<AsyncResult<Buffer>> completionHandler) {
+    public DownloadRequest(String fileId, FileGetHandler handler) {
         this.fileId = fileId;
-        this.completionHandler = completionHandler;
+        this.handler = handler;
     }
 
     public String getFileId() {
@@ -26,7 +24,7 @@ public class  DownloadRequest {
         this.fileId = fileId;
     }
 
-    public Handler<AsyncResult<Buffer>> getCompletionHandler() {
-        return completionHandler;
+    public FileGetHandler getHandler() {
+        return handler;
     }
 }
