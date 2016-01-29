@@ -272,6 +272,12 @@ http://www.w3.org/2001/XMLSchema-instance ">
             </dependency>
 
             <dependency>
+                <groupId>io.vertx</groupId>
+                <artifactId>vertx-mail-client</artifactId>
+                <version>3.2.0</version>
+            </dependency>
+
+            <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-codec-haproxy</artifactId>
                 <version>4.0.32.Final</version>

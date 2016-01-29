@@ -1,9 +1,8 @@
 package ses.handler;
 
-import data.schema.Tables;
+import common.handler.EmailSendPrepQueueHandler;
 import entity.EmailAttachmentEntity;
 import entity.EmailEntity;
-import io.clickhandler.queue.QueueHandler;
 import io.clickhandler.sql.db.SqlExecutor;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
@@ -40,7 +39,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * @author Brad Behnke
  */
-public class SESPrepQueueHandler  implements QueueHandler<SESSendRequest>, Tables {
+public class SESPrepQueueHandler extends EmailSendPrepQueueHandler<SESSendRequest>{
 
     private final EventBus eventBus;
     private final SqlExecutor db;
@@ -48,6 +47,7 @@ public class SESPrepQueueHandler  implements QueueHandler<SESSendRequest>, Table
     private final SESSendService sesSendService;
 
     public SESPrepQueueHandler(EventBus eventBus, SqlExecutor db, FileAttachmentDownloadService fileAttachmentDownloadService, SESSendService sesSendService) {
+        super(db);
         this.eventBus = eventBus;
         this.db = db;
         this.fileAttachmentDownloadService = fileAttachmentDownloadService;
@@ -164,32 +164,6 @@ public class SESPrepQueueHandler  implements QueueHandler<SESSendRequest>, Table
                             }
                         }));
     }
-
-    private Observable<List<EmailAttachmentEntity>> getAttachmentEntitiesObservable(EmailEntity emailEntity) {
-        ObservableFuture<List<EmailAttachmentEntity>> observableFuture = RxHelper.observableFuture();
-        getEmailAttachmentEntities(emailEntity, observableFuture.toHandler());
-        return observableFuture;
-    }
-
-    private void getEmailAttachmentEntities(EmailEntity emailEntity, Handler<AsyncResult<List<EmailAttachmentEntity>>> completionHandler) {
-        db.readObservable(session ->
-                session.select(EMAIL_ATTACHMENT.fields()).from(EMAIL_ATTACHMENT)
-                        .where(EMAIL_ATTACHMENT.EMAIL_ID.eq(emailEntity.getId()))
-                        .fetch()
-                        .into(EMAIL_ATTACHMENT)
-                        .into(EmailAttachmentEntity.class))
-                .doOnError(e -> {
-                    if (completionHandler != null) {
-                        completionHandler.handle(Future.failedFuture(e));
-                    }
-                })
-                .subscribe(emailRecipientEntities -> {
-                    if (completionHandler != null) {
-                        completionHandler.handle(Future.succeededFuture(emailRecipientEntities));
-                    }
-                });
-    }
-
 
     private Observable<MimeMultipart> downloadAndBuildAttachmentsObservable(MimeMultipart content, List<EmailAttachmentEntity> attachmentEntities) {
         ObservableFuture<MimeMultipart> observableFuture = RxHelper.observableFuture();

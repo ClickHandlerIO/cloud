@@ -13,7 +13,6 @@ import javax.mail.internet.MimeMessage;
 public class SESSendRequest extends SendRequest {
 
     private MimeMessage mimeMessage;
-    private int attempts = 0;
 
     public SESSendRequest(EmailEntity emailEntity) {
         super(emailEntity);
@@ -25,17 +24,5 @@ public class SESSendRequest extends SendRequest {
 
     public void setMimeMessage(MimeMessage mimeMessage) {
         this.mimeMessage = mimeMessage;
-    }
-
-    public int getAttempts() {
-        return attempts;
-    }
-
-    public void setAttempts(int attempts) {
-        this.attempts = attempts;
-    }
-
-    public void incrementAttempts() {
-        this.attempts++;
     }
 }

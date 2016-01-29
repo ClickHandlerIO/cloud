@@ -19,6 +19,7 @@ import io.vertx.core.Handler;
 public abstract class SendRequest {
     private EmailEntity emailEntity;
     private Handler<AsyncResult<EmailEntity>> completionHandler;
+    private int attempts = 0;
 
     public SendRequest(EmailEntity emailEntity) {
         this.emailEntity = emailEntity;
@@ -38,5 +39,17 @@ public abstract class SendRequest {
 
     public void setCompletionHandler(Handler<AsyncResult<EmailEntity>> completionHandler) {
         this.completionHandler = completionHandler;
+    }
+
+    public int getAttempts() {
+        return attempts;
+    }
+
+    public void setAttempts(int attempts) {
+        this.attempts = attempts;
+    }
+
+    public void incrementAttempts() {
+        this.attempts++;
     }
 }

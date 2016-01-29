@@ -18,6 +18,7 @@ import ses.handler.SESPrepQueueHandler;
  * @author Brad Behnke
  */
 public class SESSendPrepService extends AbstractIdleService {
+
     private final QueueService<SESSendRequest> queueService;
 
     public SESSendPrepService(SESConfig sesConfig, EventBus eventBus, SqlExecutor db, FileAttachmentDownloadService fileAttachmentDownloadService, SESSendService sesSendService) {

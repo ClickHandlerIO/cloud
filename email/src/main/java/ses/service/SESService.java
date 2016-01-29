@@ -47,7 +47,7 @@ public class SESService extends EmailService<SESSendRequest> {
         this.sesSendService.startAsync();
         this.fileAttachmentDownloadService.startAsync();
         this.sesSendPrepService.startAsync();
-        LOG.info("SES Service Started");
+        LOG.info("SES Service Started.");
     }
 
     @Override
@@ -55,7 +55,7 @@ public class SESService extends EmailService<SESSendRequest> {
         this.sesSendPrepService.stopAsync();
         this.fileAttachmentDownloadService.stopAsync();
         this.sesSendService.stopAsync();
-        LOG.info("SES Service Shutdown");
+        LOG.info("SES Service Shutdown.");
     }
 
     @Override
