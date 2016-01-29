@@ -56,8 +56,12 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     private static final String ENTITY_PACKAGE = "io.clickhandler.sql.evolution";
     private static final Logger LOG = LoggerFactory.getLogger(SqlDatabase.class);
 
-    private final SqlConfig config;
-    private final String name;
+    protected final SqlConfig config;
+    protected final String name;
+    protected final HikariConfig hikariConfig;
+    protected final HikariConfig hikariReadConfig;
+    protected final Set<Class<?>> entityClasses = new HashSet<>();
+    protected final Vertx vertx;
     private final ThreadLocal<SqlSession> sessionLocal = new ThreadLocal<>();
     private final Map<Class, Mapping> mappings = new HashMap<>();
     private final Map<String, TableMapping> tableMappingsByName = Maps.newHashMap();
@@ -69,21 +73,17 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     private final Map<String, Table> jooqMap = Maps.newHashMap();
     private final Reflections[] entityReflections;
     private final Reflections[] jooqReflections;
-    private final HikariConfig hikariConfig;
-    private final HikariConfig hikariReadConfig;
-    private final Set<Class<?>> entityClasses = new HashSet<>();
-    private final Vertx vertx;
-    private Configuration configuration;
-    private Configuration readConfiguration;
-    private HikariDataSource dataSource;
-    private HikariDataSource readDataSource;
-    private SqlSchema sqlSchema;
-    private SqlPlatform dbPlatform;
-    private Settings settings;
-    private H2Server h2Server;
-    private ExecutorService writeExecutor;
-    private ExecutorService readExecutor;
-    private Scheduler observableScheduler;
+    protected Configuration configuration;
+    protected Configuration readConfiguration;
+    protected HikariDataSource dataSource;
+    protected HikariDataSource readDataSource;
+    protected SqlSchema sqlSchema;
+    protected SqlPlatform dbPlatform;
+    protected Settings settings;
+    protected H2Server h2Server;
+    protected ExecutorService writeExecutor;
+    protected ExecutorService readExecutor;
+    protected Scheduler observableScheduler;
 
     public SqlDatabase(
         Vertx vertx,
@@ -336,6 +336,13 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         return configuration.derive();
     }
 
+    protected HikariDataSource buildWriteDataSource() {
+        return new HikariDataSource(hikariConfig);
+    }
+
+    protected HikariDataSource buildReadDataSource() {
+        return new HikariDataSource(hikariReadConfig);
+    }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////
     // Start Up
@@ -355,14 +362,14 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
 //        }
 
         try {
-            dataSource = new HikariDataSource(hikariConfig);
+            dataSource = buildWriteDataSource();
         } catch (Throwable e) {
             LOG.error("Could not create a Hikari connection pool.", e);
             throw new PersistException(e);
         }
 
         try {
-            readDataSource = new HikariDataSource(hikariReadConfig);
+            readDataSource = buildReadDataSource();
         } catch (Throwable e) {
             LOG.error("Could not create a Hikari read connection pool.", e);
             throw new PersistException(e);
@@ -444,7 +451,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             if (tableAnnotation == null) {
                 continue;
             }
-
             final TableMapping mapping = TableMapping.create(
                 sqlSchema.getTable(TableMapping.tableName(cls, tableAnnotation.name(), false)),
                 sqlSchema.getTable(TableMapping.tableName(cls, tableAnnotation.name(), true)),
@@ -452,10 +458,10 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 cls,
                 jooqMap
             );
-
             mappingMap.put(cls, mapping);
         }
 
+        // Rebind.
         rebindMappings(mappingMap);
     }
 
@@ -666,8 +672,8 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         });
     }
 
-    public <T> void write(SqlCallable<T> task) {
-        write(task, null);
+    public <T> Observable<SqlResult<T>> write(SqlCallable<T> task) {
+        return writeObservable(task);
     }
 
     public <T> Observable<SqlResult<T>> writeObservable(SqlCallable<T> task) {
@@ -702,6 +708,10 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 }
             }
         });
+    }
+
+    public <T> Observable<T> read(SqlReadCallable<T> task) {
+        return readObservable(task);
     }
 
     public <T> Observable<T> readObservable(SqlReadCallable<T> task) {

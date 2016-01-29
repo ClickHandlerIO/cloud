@@ -18,6 +18,13 @@ public interface SqlExecutor {
 
     /**
      * @param task
+     * @param <T>
+     * @return
+     */
+    <T> Observable<SqlResult<T>> write(SqlCallable<T> task);
+
+    /**
+     * @param task
      * @param handler
      * @param <T>
      */
@@ -45,6 +52,13 @@ public interface SqlExecutor {
      * @throws InterruptedException
      */
     <T> SqlResult<T> writeBlocking(SqlCallable<T> task);
+
+    /**
+     * @param task
+     * @param <T>
+     * @return
+     */
+    <T> Observable<T> read(SqlReadCallable<T> task);
 
     /**
      * @param task
