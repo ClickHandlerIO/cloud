@@ -1,14 +1,13 @@
 package mailgun.service;
 
 import com.google.common.util.concurrent.AbstractIdleService;
-import common.service.FileAttachmentDownloadService;
 import common.service.FileService;
 import io.clickhandler.queue.LocalQueueServiceFactory;
 import io.clickhandler.queue.QueueFactory;
 import io.clickhandler.queue.QueueService;
 import io.clickhandler.queue.QueueServiceConfig;
 import io.clickhandler.sql.db.SqlExecutor;
-import io.vertx.rxjava.core.eventbus.EventBus;
+import io.vertx.core.eventbus.EventBus;
 import mailgun.config.MailgunConfig;
 import mailgun.data.MailgunSendRequest;
 import mailgun.handler.MailgunSendQueueHandler;

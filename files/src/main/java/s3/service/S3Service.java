@@ -5,7 +5,10 @@ import common.handler.FileGetHandler;
 import common.handler.FileStatusHandler;
 import common.service.FileService;
 import entity.FileEntity;
+import io.vertx.core.Handler;
 import io.vertx.core.buffer.Buffer;
+import io.vertx.core.http.HttpClientRequest;
+import io.vertx.core.streams.Pump;
 import s3.config.S3Config;
 
 import javax.inject.Inject;
@@ -34,6 +37,23 @@ public class S3Service extends FileService {
                 if (httpClientResponse.statusCode() == 200) {
                     httpClientResponse
                             .bodyHandler(handler::chunkReceived)
+                            .endHandler(aVoid -> handler.onComplete());
+                } else {
+                    handler.onFailure(new Exception("Response code " + httpClientResponse.statusCode() +
+                            " on GET using Bucket: " + fileEntity.getStoreBucket() + " StoreId: " + fileEntity.getStoreId()));
+                }
+            }
+        });
+    }
+
+    @Override
+    public void getAsyncPipe(FileEntity fileEntity, HttpClientRequest clientRequest, FileGetHandler handler) {
+        s3Client.get(fileEntity.getStoreBucket(), fileEntity.getStoreId(), httpClientResponse -> {
+            if(handler != null) {
+                httpClientResponse.exceptionHandler(handler::onFailure);
+                if (httpClientResponse.statusCode() == 200) {
+                    Pump.pump(httpClientResponse, clientRequest).start();
+                    httpClientResponse
                             .endHandler(aVoid -> handler.onComplete());
                 } else {
                     handler.onFailure(new Exception("Response code " + httpClientResponse.statusCode() +
