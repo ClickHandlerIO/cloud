@@ -1,17 +1,25 @@
 package io.clickhandler.action;
 
 import com.netflix.hystrix.*;
+import io.vertx.rxjava.core.RxHelper;
+import io.vertx.rxjava.core.Vertx;
 import javaslang.control.Try;
 import rx.Observable;
+import rx.Scheduler;
 
 import javax.inject.Inject;
 import javax.inject.Provider;
 
 /**
- * Handles providing
+ * Builds and invokes a single type of Action.
+ *
+ * @author Clay Molocznik
  */
 public class ActionProvider<A, IN, OUT> {
     static final long DEFAULT_TIMEOUT_MILLIS = 5000;
+    @Inject
+    Vertx vertx;
+    Scheduler scheduler;
     private ActionConfig actionConfig;
     private HystrixCommand.Setter defaultSetter;
     private HystrixObservableCommand.Setter defaultObservableSetter;
@@ -85,6 +93,7 @@ public class ActionProvider<A, IN, OUT> {
     }
 
     protected void init() {
+        scheduler = initScheduler();
         // Get default config.
         actionConfig = actionClass.getAnnotation(ActionConfig.class);
 
@@ -116,6 +125,7 @@ public class ActionProvider<A, IN, OUT> {
             // Determine Hystrix isolation strategy.
             HystrixCommandProperties.ExecutionIsolationStrategy hystrixIsolation;
             switch (isolationStrategy) {
+                // Default to SEMAPHORE
                 default:
                 case SEMAPHORE:
                 case BEST:
@@ -133,8 +143,11 @@ public class ActionProvider<A, IN, OUT> {
             final String groupKey = actionConfig != null ? actionConfig.groupKey() : "";
             defaultObservableSetter =
                 HystrixObservableCommand.Setter
+                    // Set Group Key
                     .withGroupKey(HystrixCommandGroupKey.Factory.asKey(groupKey))
+                    // Set default command props
                     .andCommandPropertiesDefaults(commandPropertiesDefaults)
+                    // Set command key
                     .andCommandKey(HystrixCommandKey.Factory.asKey(actionClass.getName()));
         }
 
@@ -206,6 +219,7 @@ public class ActionProvider<A, IN, OUT> {
      */
     protected OUT execute(final IN request) {
         return Try.of(() -> observe(
+            null,
             request,
             create()
         ).toBlocking().toFuture().get()).get();
@@ -226,6 +240,17 @@ public class ActionProvider<A, IN, OUT> {
     protected Observable<OUT> observe(
         final IN request) {
         return observe(
+            null,
+            request,
+            create()
+        );
+    }
+
+    protected Observable<OUT> observe(
+        final Object context,
+        final IN request) {
+        return observe(
+            context,
             request,
             create()
         );
@@ -235,17 +260,37 @@ public class ActionProvider<A, IN, OUT> {
      * @param request\
      */
     protected Observable<OUT> observe(
+        final Object context,
         final IN request,
         final A action) {
         final AbstractAction<IN, OUT> abstractAction;
         try {
             abstractAction = (AbstractAction<IN, OUT>) action;
+            abstractAction.setContext(context);
             abstractAction.setRequest(request);
         } catch (Exception e) {
             // Ignore.
             return Observable.error(e);
         }
 
-        return abstractAction.observe();
+        // Build observable.
+        final Observable observable = abstractAction.toObservable();
+        // Set the observe on scheduler.
+        observable.observeOn(observeOnScheduler());
+        // Set the subscribe on scheduler.
+        observable.subscribeOn(subscribeOnScheduler());
+        return observable;
+    }
+
+    protected Scheduler observeOnScheduler() {
+        return scheduler;
+    }
+
+    protected Scheduler subscribeOnScheduler() {
+        return scheduler;
+    }
+
+    protected Scheduler initScheduler() {
+        return RxHelper.scheduler(vertx);
     }
 }

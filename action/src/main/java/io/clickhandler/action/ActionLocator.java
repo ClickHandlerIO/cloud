@@ -86,11 +86,10 @@ public abstract class ActionLocator {
      * @return
      */
     public Map<String, RemoteActionProvider> getRemotePathMap() {
+        ensureActionMap();
         final Map<String, RemoteActionProvider> map = new HashMap<>();
         remoteActionMap.forEach((key, value) -> {
-            if (key instanceof String) {
-                map.put((String) key, value);
-            }
+            map.put(value.getRemoteAction().path(), value);
         });
         return map;
     }

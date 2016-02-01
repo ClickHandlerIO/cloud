@@ -88,6 +88,7 @@ public class ActionProcessor extends AbstractProcessor {
                 elements.addAll(internalElements);
             }
 
+            boolean allGood = true;
             for (Element annotatedElement : elements) {
                 final RemoteAction remoteAction = annotatedElement.getAnnotation(RemoteAction.class);
                 final QueueAction queueAction = annotatedElement.getAnnotation(QueueAction.class);

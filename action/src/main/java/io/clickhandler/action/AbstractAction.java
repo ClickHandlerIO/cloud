@@ -12,11 +12,6 @@ public abstract class AbstractAction<IN, OUT> implements Action<IN, OUT> {
     private Object context;
     private AtomicReference<IN> request = new AtomicReference<>();
 
-    public ActionDescriptor<?, IN, OUT> getDescriptor() {
-        // TODO: Fix
-        return null;
-    }
-
     public Object getContext() {
         return context;
     }
@@ -63,6 +58,7 @@ public abstract class AbstractAction<IN, OUT> implements Action<IN, OUT> {
      * @param <OUT>
      * @return
      */
+    @Deprecated
     public <A extends Action<IN, OUT>, IN, OUT> OUT execute(
         final IN request) {
         try {
