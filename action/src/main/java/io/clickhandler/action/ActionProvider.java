@@ -125,6 +125,7 @@ public class ActionProvider<A, IN, OUT> {
             // Determine Hystrix isolation strategy.
             HystrixCommandProperties.ExecutionIsolationStrategy hystrixIsolation;
             switch (isolationStrategy) {
+                // Default to SEMAPHORE
                 default:
                 case SEMAPHORE:
                 case BEST:
@@ -142,8 +143,11 @@ public class ActionProvider<A, IN, OUT> {
             final String groupKey = actionConfig != null ? actionConfig.groupKey() : "";
             defaultObservableSetter =
                 HystrixObservableCommand.Setter
+                    // Set Group Key
                     .withGroupKey(HystrixCommandGroupKey.Factory.asKey(groupKey))
+                    // Set default command props
                     .andCommandPropertiesDefaults(commandPropertiesDefaults)
+                    // Set command key
                     .andCommandKey(HystrixCommandKey.Factory.asKey(actionClass.getName()));
         }
 
@@ -269,8 +273,11 @@ public class ActionProvider<A, IN, OUT> {
             return Observable.error(e);
         }
 
+        // Build observable.
         final Observable observable = abstractAction.toObservable();
+        // Set the observe on scheduler.
         observable.observeOn(observeOnScheduler());
+        // Set the subscribe on scheduler.
         observable.subscribeOn(subscribeOnScheduler());
         return observable;
     }
