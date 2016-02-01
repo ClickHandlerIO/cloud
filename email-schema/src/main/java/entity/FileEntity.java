@@ -1,8 +1,7 @@
 package entity;
 
 import com.google.common.base.Strings;
-import io.clickhandler.sql.annotations.*;
-import io.clickhandler.sql.entity.AbstractEntity;
+import io.clickhandler.sql.*;
 
 @Table
 @Indexes({

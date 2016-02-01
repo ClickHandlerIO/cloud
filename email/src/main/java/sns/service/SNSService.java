@@ -7,7 +7,7 @@ import io.clickhandler.queue.LocalQueueServiceFactory;
 import io.clickhandler.queue.QueueFactory;
 import io.clickhandler.queue.QueueService;
 import io.clickhandler.queue.QueueServiceConfig;
-import io.clickhandler.sql.db.SqlExecutor;
+import io.clickhandler.sql.SqlExecutor;
 import io.vertx.rxjava.core.eventbus.EventBus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

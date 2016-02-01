@@ -4,7 +4,7 @@ import com.sun.istack.internal.NotNull;
 import common.service.EmailService;
 import common.service.FileService;
 import entity.EmailEntity;
-import io.clickhandler.sql.db.SqlExecutor;
+import io.clickhandler.sql.SqlExecutor;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;

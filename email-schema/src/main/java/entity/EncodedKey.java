@@ -1,7 +1,8 @@
 package entity;
 
 
-import io.clickhandler.sql.annotations.Column;
+
+import io.clickhandler.sql.Column;
 
 import java.io.Serializable;
 

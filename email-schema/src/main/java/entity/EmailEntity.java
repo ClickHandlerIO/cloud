@@ -1,8 +1,9 @@
 package entity;
 
-import io.clickhandler.sql.annotations.Column;
-import io.clickhandler.sql.annotations.Table;
-import io.clickhandler.sql.entity.AbstractEntity;
+
+import io.clickhandler.sql.AbstractEntity;
+import io.clickhandler.sql.Column;
+import io.clickhandler.sql.Table;
 
 /**
  *

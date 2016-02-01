@@ -1,8 +1,8 @@
 package jooq;
 
-import io.clickhandler.sql.db.SchemaGenerator;
-import io.clickhandler.sql.db.SqlConfig;
-import io.clickhandler.sql.db.SqlDatabase;
+import io.clickhandler.sql.SchemaGenerator;
+import io.clickhandler.sql.SqlConfig;
+import io.clickhandler.sql.SqlDatabase;
 import io.vertx.rxjava.core.Vertx;
 import org.jooq.util.GenerationTool;
 
