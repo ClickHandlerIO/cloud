@@ -22,7 +22,6 @@ public class SNSEmailNotifyRouteHandler extends SNSRouteHandler<EmailNotifyMessa
 
     @Override
     public void handle(RoutingContext routingContext) {
-
         // get header info
         HttpServerRequest request = routingContext.request();
         HeaderInfo headerInfo = processHeaders(request.headers());
@@ -30,21 +29,9 @@ public class SNSEmailNotifyRouteHandler extends SNSRouteHandler<EmailNotifyMessa
             routingContext.fail(HttpStatus.SC_BAD_REQUEST);
             return;
         }
-
-        // get message from body json
-        EmailNotifyMessage message = getMessage(routingContext.getBody().toString());
-        if (message == null /*|| !isMessageSignatureValid(message)*/) {
-            routingContext.fail(HttpStatus.SC_BAD_REQUEST);
-            return;
-        }
-
-        passToService(message);
-        request.response().setStatusCode(HttpStatus.SC_OK).end();
+        MessageBuilder messageBuilder = new MessageBuilder(routingContext);
+        request.bodyHandler(messageBuilder::chunkReceived)
+                .endHandler(aVoid -> messageBuilder.onComplete())
+                .exceptionHandler(throwable -> messageBuilder.onFailure());
     }
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Message Validation
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-    // TODO
 }

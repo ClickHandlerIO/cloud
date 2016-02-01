@@ -4,8 +4,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.vertx.core.Handler;
 
 import io.vertx.rxjava.core.MultiMap;
+import io.vertx.rxjava.core.buffer.Buffer;
 import io.vertx.rxjava.ext.web.RoutingContext;
 import common.data.Message;
+import org.apache.http.HttpStatus;
 import sns.service.SNSService;
 
 /**
@@ -18,6 +20,7 @@ public abstract class SNSRouteHandler<T extends Message> implements Handler<Rout
 
     protected final SNSService snsService;
     private final Class<T> messageClass;
+    private final static ObjectMapper jsonMapper = new ObjectMapper();
 
     // SNS Header Keys
     protected static final String TYPE_HEADER = "x-amz-sns-message-type";
@@ -38,9 +41,8 @@ public abstract class SNSRouteHandler<T extends Message> implements Handler<Rout
     public abstract void handle(RoutingContext routingContext);
 
     protected T getMessage(String content) {
-        ObjectMapper mapper = new ObjectMapper();
         try {
-            return mapper.readValue(content, messageClass);
+            return jsonMapper.readValue(content, messageClass);
         } catch (Exception e) {
             return null;
         }
@@ -65,6 +67,11 @@ public abstract class SNSRouteHandler<T extends Message> implements Handler<Rout
     protected void passToService(Message message) {
         snsService.enqueueMessage(message);
     }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Validation
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // todo
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Helper Classes
@@ -117,5 +124,42 @@ public abstract class SNSRouteHandler<T extends Message> implements Handler<Rout
                     && topicArn != null && !topicArn.isEmpty()
                     && subscriptionArn != null && !subscriptionArn.isEmpty());
         }
+    }
+
+    protected class MessageBuilder implements BuildMessageHandler {
+        private Buffer buffer;
+        private RoutingContext routingContext;
+
+        public MessageBuilder(RoutingContext routingContext) {
+            this.buffer = Buffer.buffer();
+            this.routingContext = routingContext;
+        }
+
+        @Override
+        public void chunkReceived(Buffer chunk) {
+            this.buffer.appendBuffer(chunk);
+        }
+
+        @Override
+        public void onComplete() {
+            T message = getMessage(buffer.toString());
+            if (message == null /*|| !isMessageSignatureValid(message)*/) {
+                routingContext.request().response().setStatusCode(HttpStatus.SC_BAD_REQUEST).end();
+                return;
+            }
+            passToService(message);
+            routingContext.request().response().setStatusCode(HttpStatus.SC_OK).end();
+        }
+
+        @Override
+        public void onFailure() {
+            routingContext.request().response().setStatusCode(HttpStatus.SC_BAD_REQUEST).end();
+        }
+    }
+
+    protected interface BuildMessageHandler {
+        void chunkReceived(Buffer chunk);
+        void onComplete();
+        void onFailure();
     }
 }
