@@ -17,9 +17,11 @@ import io.vertx.rx.java.RxHelper;
 import mailgun.data.BounceMessage;
 import mailgun.data.DeliveryMessage;
 import mailgun.data.FailureMessage;
+import mailgun.data.ReceiveMessage;
 import mailgun.event.MailgunEmailBounceEvent;
 import mailgun.event.MailgunEmailDeliveryEvent;
 import mailgun.event.MailgunEmailFailureEvent;
+import mailgun.event.MailgunEmailReceiveEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import rx.Observable;
@@ -64,6 +66,9 @@ public class MailgunMessageQueueHandler implements QueueHandler<Message>, Tables
         if (message instanceof FailureMessage) {
             handleFailure((FailureMessage) message);
         }
+        if (message instanceof ReceiveMessage) {
+            handleReceive((ReceiveMessage) message);
+        }
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -87,10 +92,14 @@ public class MailgunMessageQueueHandler implements QueueHandler<Message>, Tables
         eventBus.publish(MailgunEmailBounceEvent.ADDRESS, new MailgunEmailBounceEvent(message));
     }
 
-
     private void handleFailure(FailureMessage message) {
         // todo what to update ? no message id comes over in notification
         eventBus.publish(MailgunEmailFailureEvent.ADDRESS, new MailgunEmailFailureEvent(message));
+    }
+
+    private void handleReceive(ReceiveMessage message) {
+        // todo create record of email received?
+        eventBus.publish(MailgunEmailReceiveEvent.ADDRESS, new MailgunEmailReceiveEvent(message));
     }
 
     private Observable<List<EmailRecipientEntity>> getRecipientsObservable(String messageId) {

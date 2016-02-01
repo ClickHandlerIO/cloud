@@ -17,6 +17,7 @@ import mailgun.data.MailgunSendRequest;
 import mailgun.routing.MailgunBounceRouteHandler;
 import mailgun.routing.MailgunDeliveryRouteHandler;
 import mailgun.routing.MailgunFailureRouteHandler;
+import mailgun.routing.MailgunReceiveRouteHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import rx.Observable;
@@ -38,6 +39,7 @@ public class MailgunService extends EmailService<MailgunSendRequest>{
     private final MailgunDeliveryRouteHandler deliveryRouteHandler;
     private final MailgunBounceRouteHandler bounceRouteHandler;
     private final MailgunFailureRouteHandler failureRouteHandler;
+    private final MailgunReceiveRouteHandler receiveRouteHandler;
 
     @Inject
     public MailgunService(@NotNull MailgunConfig config, @NotNull EventBus eventBus, @NotNull SqlExecutor db, @NotNull FileService fileService) {
@@ -46,6 +48,7 @@ public class MailgunService extends EmailService<MailgunSendRequest>{
         this.deliveryRouteHandler = new MailgunDeliveryRouteHandler(config, this);
         this.bounceRouteHandler = new MailgunBounceRouteHandler(config, this);
         this.failureRouteHandler = new MailgunFailureRouteHandler(config, this);
+        this.receiveRouteHandler = new MailgunReceiveRouteHandler(config, this);
     }
 
     @Override
@@ -96,5 +99,9 @@ public class MailgunService extends EmailService<MailgunSendRequest>{
 
     public MailgunFailureRouteHandler getFailureRouteHandler() {
         return failureRouteHandler;
+    }
+
+    public MailgunReceiveRouteHandler getReceiveRouteHandler() {
+        return receiveRouteHandler;
     }
 }
