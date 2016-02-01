@@ -1,6 +1,5 @@
 package mailgun.handler;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import common.handler.EmailSendQueueHandler;
 import common.handler.FileGetHandler;
 import common.service.FileService;
@@ -26,22 +25,18 @@ import mailgun.event.MailgunEmailSentEvent;
 import org.apache.http.HttpHeaders;
 import org.apache.http.HttpStatus;
 import org.apache.http.entity.ContentType;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import rx.Observable;
+import ses.event.SESEmailSentEvent;
 
 import java.net.URLConnection;
 import java.util.Iterator;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * @author Brad Behnke
  */
 public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRequest> {
 
-    private final static Logger LOG = LoggerFactory.getLogger(MailgunSendQueueHandler.class);
     private final EventBus eventBus;
     private final HttpClient client;
     private final String host;
@@ -90,12 +85,13 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
                                 .doOnNext(attachmentEntities -> new FilePipeIterator(clientRequest, attachmentEntities.iterator(), new FileGetHandler() {
                                     @Override
                                     public void chunkReceived(Buffer chunk) {
-                                        // todo remove
+                                        // unused for pipe.
                                     }
 
                                     @Override
                                     public void onComplete() {
                                         clientRequest.end();
+
                                     }
 
                                     @Override
@@ -116,14 +112,55 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
     }
 
     private void writeBody(HttpClientRequest clientRequest, MailgunSendRequest sendRequest, Handler<AsyncResult<Void>> completionHandler) {
+        EmailEntity emailEntity = sendRequest.getEmailEntity();
+        if(emailEntity == null) {
+            if(completionHandler != null) {
+                completionHandler.handle(Future.failedFuture(new Exception("Null Email Entity.")));
+            }
+            return;
+        }
+        if(emailEntity.getFrom() == null || emailEntity.getFrom().isEmpty()) {
+            if(completionHandler != null) {
+                completionHandler.handle(Future.failedFuture(new Exception("Null or Empty From Field.")));
+            }
+            return;
+        }
+        if(emailEntity.getTo() == null || emailEntity.getTo().isEmpty()) {
+            if(completionHandler != null) {
+                completionHandler.handle(Future.failedFuture(new Exception("Null or Empty To Field.")));
+            }
+            return;
+        }
         MultiPartUtility mpu = new MultiPartUtility();
-        // TODO build with mpu
-
-        // write body
+        // from
+        mpu.formField("from", emailEntity.getFrom());
+        // to
+        String[] toList = emailEntity.getTo().split(";|,|\\s");
+        for (String to : toList) {
+            mpu.formField("to", to);
+        }
+        // cc
+        if(emailEntity.getCc() != null && !emailEntity.getCc().isEmpty()) {
+            String[] ccList = emailEntity.getCc().split(";|,|\\s");
+            for (String cc : ccList) {
+                mpu.formField("cc", cc);
+            }
+        }
+        // subject
+        mpu.formField("subject", (emailEntity.getSubject() == null ? "":sendRequest.getEmailEntity().getSubject()));
+        // text
+        if(emailEntity.getTextBody() != null && !emailEntity.getTextBody().isEmpty()) {
+            mpu.formField("text", emailEntity.getTextBody());
+        }
+        // html
+        if(emailEntity.getHtmlBody() != null && !emailEntity.getHtmlBody().isEmpty()) {
+            mpu.formField("html", emailEntity.getHtmlBody());
+        }
+        // write to client
         clientRequest.write(mpu.get());
     }
 
-    class FilePipeIterator implements FileGetHandler {
+    private class FilePipeIterator implements FileGetHandler {
 
         private Iterator<EmailAttachmentEntity> it;
         private HttpClientRequest clientRequest;
@@ -137,7 +174,7 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
 
         @Override
         public void chunkReceived(Buffer chunk) {
-            // todo remove
+            // unused for pipe.
         }
 
         @Override
@@ -157,7 +194,7 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
         public void next() {
             if(it.hasNext()) {
                 EmailAttachmentEntity attachmentEntity = it.next();
-                clientRequest.write(new MultiPartUtility().attachementHead(attachmentEntity.getName()).get());
+                clientRequest.write(new MultiPartUtility().attachmentHead(attachmentEntity.getName()).get());
                 writeAttachment(clientRequest, attachmentEntity, this);
                 return;
             }
@@ -173,46 +210,6 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
                 ownerHandler.onFailure(new Exception("Null Attachment List."));
             }
         }
-
-    }
-
-    private void writeAttachments(HttpClientRequest clientRequest, List<EmailAttachmentEntity> attachmentEntities, FileGetHandler handler) {
-        final AtomicBoolean failed = new AtomicBoolean();
-        for(EmailAttachmentEntity attachmentEntity:attachmentEntities) {
-            try {
-                if (failed.get())
-                    return;
-                // write header for file
-                clientRequest.write(new MultiPartUtility().attachementHead(attachmentEntity.getName()).get());
-                // write file data
-                writeAttachment(clientRequest, attachmentEntity, new FileGetHandler() {
-                    @Override
-                    public void chunkReceived(Buffer chunk) {
-
-                    }
-
-                    @Override
-                    public void onComplete() {
-                        failed.notify();
-                    }
-
-                    @Override
-                    public void onFailure(Throwable throwable) {
-                        failed.set(true);
-                        if (handler != null) {
-                            handler.onFailure(throwable);
-                        }
-                        failed.notify();
-                    }
-                });
-                // wait to start next
-                failed.wait();
-            } catch (Throwable throwable) {
-                handler.onFailure(throwable);
-                return;
-            }
-        }
-        handler.onComplete();
     }
 
     private void writeAttachment(HttpClientRequest clientRequest, EmailAttachmentEntity attachmentEntity, FileGetHandler handler) {
@@ -224,57 +221,6 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
                 })
                 .doOnNext(fileEntity -> getFileService().getAsyncPipe(fileEntity, clientRequest, handler));
     }
-//
-//    private Observable<Void> writeAttachmentsObservable(HttpClientRequest clientRequest, MailgunSendRequest sendRequest) {
-//        ObservableFuture<Void> observableFuture = RxHelper.observableFuture();
-//        writeAttachments(clientRequest, sendRequest, observableFuture.toHandler());
-//        return observableFuture;
-//    }
-//
-//    private void writeAttachments(HttpClientRequest clientRequest, MailgunSendRequest sendRequest, Handler<AsyncResult<Void>> completionHandler) {
-//        getAttachmentEntitiesObservable(sendRequest.getEmailEntity())
-//                .doOnError(throwable -> {
-//                    if(completionHandler != null) {
-//                        completionHandler.handle(Future.failedFuture(throwable));
-//                    }
-//                })
-//                .doOnNext(attachmentEntities -> {
-//                    final AtomicInteger activeDownloads = new AtomicInteger();
-//                    final AtomicBoolean failed = new AtomicBoolean();
-//                    for(final EmailAttachmentEntity attachmentEntity:attachmentEntities) {
-//                        if(failed.get())
-//                            break;
-//                        final MultiPartUtility mpu = new MultiPartUtility();
-//                        activeDownloads.incrementAndGet();
-//                        downloadFile(attachmentEntity.getFileId(), new FileGetHandler() {
-//                            @Override
-//                            public void chunkReceived(Buffer chunk) {
-//                                if(mpu.length() == 0) {
-//                                    mpu.attachment(attachmentEntity.getName(), chunk);
-//                                    return;
-//                                }
-//                                mpu.append(chunk);
-//                            }
-//
-//                            @Override
-//                            public void onComplete() {
-//                                clientRequest.write(mpu.get());
-//                                if(activeDownloads.decrementAndGet() <= 0 && completionHandler != null) {
-//                                    completionHandler.handle(Future.succeededFuture());
-//                                }
-//                            }
-//
-//                            @Override
-//                            public void onFailure(Throwable throwable) {
-//                                failed.set(true);
-//                                if (completionHandler != null) {
-//                                    completionHandler.handle(Future.failedFuture(throwable));
-//                                }
-//                            }
-//                        });
-//                    }
-//                });
-//    }
 
     private void publishEvent(EmailEntity emailEntity, boolean success) {
         eventBus.publish(MailgunEmailSentEvent.ADDRESS, new MailgunEmailSentEvent(emailEntity, success));
@@ -300,7 +246,7 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
             return this;
         }
 
-        public MultiPartUtility attachementHead(String fileName) {
+        public MultiPartUtility attachmentHead(String fileName) {
             buffer.appendString("--" + BOUNDARY).appendString(LINE_FEED);
             buffer.appendString("Content-Disposition: form-data; name=\"" + attachmentName + "\"; filename=\"" + fileName + "\"")
                     .appendString(LINE_FEED);
@@ -309,36 +255,14 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
             buffer.appendString("Content-Transfer-Encoding: binary").appendString(LINE_FEED);
             buffer.appendString(LINE_FEED);
             return this;
-        }
-
-        public MultiPartUtility attachment(String fileName, Buffer firstBuffer) {
-            buffer.appendString("--" + BOUNDARY).appendString(LINE_FEED);
-            buffer.appendString("Content-Disposition: form-data; name=\"" + attachmentName + "\"; filename=\"" + fileName + "\"")
-                    .appendString(LINE_FEED);
-            buffer.appendString("Content-Type: " + URLConnection.guessContentTypeFromName(fileName))
-                    .appendString(LINE_FEED);
-            buffer.appendString("Content-Transfer-Encoding: binary").appendString(LINE_FEED);
-            buffer.appendString(LINE_FEED);
-            buffer.appendBuffer(firstBuffer);
-            return this;
-        }
-
-        public MultiPartUtility append(Buffer chunk) {
-            buffer.appendBuffer(chunk);
-            return  this;
         }
 
         public Buffer get() {
             return buffer;
         }
-
-        public int length() {
-            return buffer.length();
-        }
     }
 
-
-    protected class HttpResponseHandler implements Handler<HttpClientResponse> {
+    private class HttpResponseHandler implements Handler<HttpClientResponse> {
 
         private MailgunSendRequest sendRequest;
         private Buffer totalBuffer;
@@ -356,7 +280,6 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
                 });
                 httpClientResponse.endHandler(aVoid -> {
                     try {
-                        // todo make mapper global static
                         MailgunSendResponse response = jsonMapper.readValue(totalBuffer.toString(), MailgunSendResponse.class);
                         if(response == null || response.getId() == null || response.getId().isEmpty()) {
                             failure(sendRequest, new Exception("Invalid Response to Send Request"));

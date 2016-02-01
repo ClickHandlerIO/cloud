@@ -30,7 +30,7 @@ public class S3Service extends FileService {
     }
 
     @Override
-    public void getAsync(FileEntity fileEntity, FileGetHandler handler) {
+    public void getAsyncChunks(FileEntity fileEntity, FileGetHandler handler) {
         s3Client.get(fileEntity.getStoreBucket(), fileEntity.getStoreId(), httpClientResponse -> {
             if(handler != null) {
                 httpClientResponse.exceptionHandler(handler::onFailure);

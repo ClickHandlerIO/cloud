@@ -12,7 +12,7 @@ import io.vertx.core.http.HttpClientRequest;
  * @author Brad Behnke
  */
 public abstract class FileService {
-    public abstract void getAsync(FileEntity fileEntity, FileGetHandler handler);
+    public abstract void getAsyncChunks(FileEntity fileEntity, FileGetHandler handler);
     public abstract void getAsyncPipe(FileEntity fileEntity, HttpClientRequest clientRequest, FileGetHandler handler);
     public abstract void putAsync(FileEntity fileEntity, Buffer data, FileStatusHandler handler);
     public abstract void deleteAsync(FileEntity fileEntity, FileStatusHandler handler);

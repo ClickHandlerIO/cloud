@@ -79,7 +79,7 @@ public abstract class EmailSendQueueHandler<T extends SendRequest> implements Qu
 //                        handler.onFailure(throwable);
 //                    }
 //                })
-//                .doOnNext(fileEntity -> fileService.getAsync(fileEntity, handler));
+//                .doOnNext(fileEntity -> fileService.getAsyncChunks(fileEntity, handler));
 //    }
 
     protected Observable<FileEntity> getFileEntityObservable(String fileId) {
