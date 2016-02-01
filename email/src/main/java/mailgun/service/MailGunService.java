@@ -1,6 +1,7 @@
 package mailgun.service;
 
 import com.sun.istack.internal.NotNull;
+import common.data.Message;
 import common.service.EmailService;
 import common.service.FileService;
 import entity.EmailEntity;
@@ -13,6 +14,9 @@ import io.vertx.rx.java.ObservableFuture;
 import io.vertx.rx.java.RxHelper;
 import mailgun.config.MailgunConfig;
 import mailgun.data.MailgunSendRequest;
+import mailgun.routing.MailgunBounceRouteHandler;
+import mailgun.routing.MailgunDeliveryRouteHandler;
+import mailgun.routing.MailgunFailureRouteHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import rx.Observable;
@@ -30,21 +34,31 @@ public class MailgunService extends EmailService<MailgunSendRequest>{
     private final static Logger LOG = LoggerFactory.getLogger(MailgunService.class);
 
     private final MailgunSendService sendService;
+    private final MailgunMessageService messageService;
+    private final MailgunDeliveryRouteHandler deliveryRouteHandler;
+    private final MailgunBounceRouteHandler bounceRouteHandler;
+    private final MailgunFailureRouteHandler failureRouteHandler;
 
     @Inject
     public MailgunService(@NotNull MailgunConfig config, @NotNull EventBus eventBus, @NotNull SqlExecutor db, @NotNull FileService fileService) {
         this.sendService = new MailgunSendService(config, eventBus, db, fileService);
+        this.messageService = new MailgunMessageService(config, eventBus, db);
+        this.deliveryRouteHandler = new MailgunDeliveryRouteHandler(config, this);
+        this.bounceRouteHandler = new MailgunBounceRouteHandler(config, this);
+        this.failureRouteHandler = new MailgunFailureRouteHandler(config, this);
     }
 
     @Override
     protected void startUp() throws Exception {
         this.sendService.startAsync();
+        this.messageService.startAsync();
         LOG.info("Mailgun Service Started.");
     }
 
     @Override
     protected void shutDown() throws Exception {
         this.sendService.stopAsync();
+        this.messageService.stopAsync();
         LOG.info("Mailgun Service Shutdown.");
     }
 
@@ -66,5 +80,21 @@ public class MailgunService extends EmailService<MailgunSendRequest>{
         }
         sendRequest.setCompletionHandler(completionHandler);
         this.sendService.enqueue(sendRequest);
+    }
+
+    public void enqueueMessage(Message message) {
+        this.messageService.enqueueMessage(message);
+    }
+
+    public MailgunBounceRouteHandler getBounceRouteHandler() {
+        return bounceRouteHandler;
+    }
+
+    public MailgunDeliveryRouteHandler getDeliveryRouteHandler() {
+        return deliveryRouteHandler;
+    }
+
+    public MailgunFailureRouteHandler getFailureRouteHandler() {
+        return failureRouteHandler;
     }
 }
