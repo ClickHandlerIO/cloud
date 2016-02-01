@@ -52,26 +52,30 @@ public class MailgunBounceRouteHandler extends MailgunRouteHandler<BounceMessage
 
     @Override
     protected void buildMessage(HttpServerRequest request, BuildCallback<BounceMessage> callback) {
-        MultiMap params = request.params();
-        BounceMessage bounceMessage = new BounceMessage();
-        bounceMessage.setEvent(params.get("event"));
-        bounceMessage.setRecipient(params.get("recipient"));
-        bounceMessage.setDomain(params.get("domain"));
-        bounceMessage.setMessageHeaders(params.get("message-headers"));
-        bounceMessage.setCode(params.get("code"));
-        bounceMessage.setError(params.get("error"));
-        bounceMessage.setNotification(params.get("notification"));
-        bounceMessage.setCampaignId(params.get("campaign-id"));
-        bounceMessage.setCampaignName(params.get("campaign-name"));
-        bounceMessage.setTag(params.get("tag"));
-        bounceMessage.setMailingList(params.get("mailing-list"));
-        bounceMessage.setTimestamp(params.get("timestamp"));
-        bounceMessage.setToken(params.get("token"));
-        bounceMessage.setSignature(params.get("signature"));
-        if (!bounceMessage.getEvent().equals("bounced")) {
-            callback.failure(new Exception("Invalid Event Type: " + bounceMessage.getEvent()));
-            return;
+        try {
+            MultiMap params = request.params();
+            BounceMessage bounceMessage = new BounceMessage();
+            bounceMessage.setEvent(params.get("event"));
+            bounceMessage.setRecipient(params.get("recipient"));
+            bounceMessage.setDomain(params.get("domain"));
+            bounceMessage.setMessageHeaders(params.get("message-headers"));
+            bounceMessage.setCode(params.get("code"));
+            bounceMessage.setError(params.get("error"));
+            bounceMessage.setNotification(params.get("notification"));
+            bounceMessage.setCampaignId(params.get("campaign-id"));
+            bounceMessage.setCampaignName(params.get("campaign-name"));
+            bounceMessage.setTag(params.get("tag"));
+            bounceMessage.setMailingList(params.get("mailing-list"));
+            bounceMessage.setTimestamp(params.get("timestamp"));
+            bounceMessage.setToken(params.get("token"));
+            bounceMessage.setSignature(params.get("signature"));
+            if (!bounceMessage.getEvent().equals("bounced")) {
+                callback.failure(new Exception("Invalid Event Type: " + bounceMessage.getEvent()));
+                return;
+            }
+            callback.success(bounceMessage);
+        } catch (Exception e) {
+            callback.failure(e);
         }
-        callback.success(bounceMessage);
     }
 }

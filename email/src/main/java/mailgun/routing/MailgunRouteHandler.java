@@ -39,6 +39,9 @@ public abstract class MailgunRouteHandler<T extends Message> implements Handler<
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     protected void verifyRequest(HttpServerRequest request, VerifyCallback callback) {
+        if(callback == null) {
+            return;
+        }
         if(request == null) {
             callback.isInvalid();
             return;

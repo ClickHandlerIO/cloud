@@ -26,7 +26,7 @@ public class SNSEmailNotifyRouteHandler extends SNSRouteHandler<EmailNotifyMessa
         HttpServerRequest request = routingContext.request();
         HeaderInfo headerInfo = processHeaders(request.headers());
         if(!headerInfo.isComplete()) {
-            routingContext.fail(HttpStatus.SC_BAD_REQUEST);
+            routingContext.response().setStatusCode(HttpStatus.SC_BAD_REQUEST).end();
             return;
         }
         MessageBuilder messageBuilder = new MessageBuilder(routingContext);

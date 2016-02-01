@@ -58,6 +58,10 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
                 .setKeepAlive(true));
     }
 
+    public void shutdown(){
+        this.client.close();
+    }
+
     @Override
     public void receive(List<MailgunSendRequest> sendRequests) {
         sendRequests.forEach(this::sendEmail);
@@ -81,7 +85,7 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
                     if(sendRequest.getEmailEntity().isAttachments()) {
                         getAttachmentEntitiesObservable(sendRequest.getEmailEntity())
                                 .doOnError(throwable -> failure(sendRequest,throwable))
-                                .doOnNext(attachmentEntities -> new FilePipeIteratorChunks(clientRequest, attachmentEntities.iterator(), new FileGetPipeHandler() {
+                                .doOnNext(attachmentEntities -> new FilePipeIterator(clientRequest, attachmentEntities.iterator(), new FileGetPipeHandler() {
                                     @Override
                                     public void onComplete() {
                                         clientRequest.end();
@@ -154,13 +158,13 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
         clientRequest.write(mpu.get());
     }
 
-    private class FilePipeIteratorChunks implements FileGetPipeHandler {
+    private class FilePipeIterator implements FileGetPipeHandler {
 
         private Iterator<EmailAttachmentEntity> it;
         private HttpClientRequest clientRequest;
         private FileGetPipeHandler ownerHandler;
 
-        public FilePipeIteratorChunks(HttpClientRequest clientRequest, Iterator<EmailAttachmentEntity> it, FileGetPipeHandler ownerHandler) {
+        public FilePipeIterator(HttpClientRequest clientRequest, Iterator<EmailAttachmentEntity> it, FileGetPipeHandler ownerHandler) {
             this.clientRequest = clientRequest;
             this.it = it;
             this.ownerHandler = ownerHandler;
@@ -278,6 +282,8 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
                         publishEvent(emailEntity, true);
                         success(sendRequest, emailEntity);
                     } catch (Throwable throwable) {
+                        updateRecords(sendRequest.getEmailEntity());
+                        publishEvent(sendRequest.getEmailEntity(), false);
                         failure(sendRequest, throwable);
                     }
                 });

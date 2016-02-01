@@ -18,9 +18,7 @@ public class MailgunMessageService extends AbstractIdleService {
     private QueueService<Message> queueService;
 
     public MailgunMessageService(@NotNull MailgunConfig config, @NotNull EventBus eventBus, @NotNull SqlExecutor db) {
-        // initialize sns queues
         QueueFactory factory = new LocalQueueServiceFactory();
-        // main queue and handler
         final QueueServiceConfig<Message> mainConfig = new QueueServiceConfig<>("MailgunMessageQueue", Message.class, true, config.getMessageParallelism(), config.getMessageBatchSize());
         mainConfig.setHandler(new MailgunMessageQueueHandler(eventBus, db));
         this.queueService = factory.build(mainConfig);

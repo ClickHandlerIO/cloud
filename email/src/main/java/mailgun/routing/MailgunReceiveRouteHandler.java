@@ -55,30 +55,34 @@ public class MailgunReceiveRouteHandler extends MailgunRouteHandler<ReceiveMessa
 
     @Override
     protected void buildMessage(HttpServerRequest request, BuildCallback<ReceiveMessage> callback) {
-        MultiMap params = request.params();
-        ReceiveMessage receiveMessage = new ReceiveMessage();
-        receiveMessage.setRecipient(params.get("recipient"));
-        receiveMessage.setSender(params.get("sender"));
-        receiveMessage.setFrom(params.get("from"));
-        receiveMessage.setSubject(params.get("subject"));
-        receiveMessage.setBodyPlain(params.get("body-plain"));
-        receiveMessage.setStrippedText(params.get("stripped-text"));
-        receiveMessage.setStrippedSignature(params.get("stripped-signature"));
-        receiveMessage.setBodyHtml(params.get("body-html"));
-        receiveMessage.setStrippedHtml(params.get("stripped-html"));
-        receiveMessage.setAttachmentCount(Integer.valueOf(params.get("attachment-count")));
-        receiveMessage.setAttachmentX(new ArrayList<>());
-        if(receiveMessage.getAttachmentCount() > 0) {
-            List<String> uploads = receiveMessage.getAttachmentX();
-            for(int i = 1; i <= receiveMessage.getAttachmentCount(); i++) {
-                uploads.add(params.get("attachment-"+i));
+        try {
+            MultiMap params = request.params();
+            ReceiveMessage receiveMessage = new ReceiveMessage();
+            receiveMessage.setRecipient(params.get("recipient"));
+            receiveMessage.setSender(params.get("sender"));
+            receiveMessage.setFrom(params.get("from"));
+            receiveMessage.setSubject(params.get("subject"));
+            receiveMessage.setBodyPlain(params.get("body-plain"));
+            receiveMessage.setStrippedText(params.get("stripped-text"));
+            receiveMessage.setStrippedSignature(params.get("stripped-signature"));
+            receiveMessage.setBodyHtml(params.get("body-html"));
+            receiveMessage.setStrippedHtml(params.get("stripped-html"));
+            receiveMessage.setAttachmentCount(Integer.valueOf(params.get("attachment-count")));
+            receiveMessage.setAttachmentX(new ArrayList<>());
+            if(receiveMessage.getAttachmentCount() > 0) {
+                List<String> uploads = receiveMessage.getAttachmentX();
+                for(int i = 1; i <= receiveMessage.getAttachmentCount(); i++) {
+                    uploads.add(params.get("attachment-"+i));
+                }
             }
+            receiveMessage.setTimestamp(params.get("timestamp"));
+            receiveMessage.setToken(params.get("token"));
+            receiveMessage.setSignature(params.get("signature"));
+            receiveMessage.setMessageHeaders(params.get("message-headers"));
+            receiveMessage.setContentIdMap(params.get("content-id-map"));
+            callback.success(receiveMessage);
+        } catch (Exception e) {
+            callback.failure(e);
         }
-        receiveMessage.setTimestamp(params.get("timestamp"));
-        receiveMessage.setToken(params.get("token"));
-        receiveMessage.setSignature(params.get("signature"));
-        receiveMessage.setMessageHeaders(params.get("message-headers"));
-        receiveMessage.setContentIdMap(params.get("content-id-map"));
-        callback.success(receiveMessage);
     }
 }

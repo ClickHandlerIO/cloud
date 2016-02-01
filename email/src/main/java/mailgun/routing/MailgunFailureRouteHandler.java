@@ -44,7 +44,7 @@ public class MailgunFailureRouteHandler extends MailgunRouteHandler<FailureMessa
 
             @Override
             public void isInvalid() {
-                LOG.error("Mailgun Bounce Notification Verification Failed.");
+                LOG.error("Mailgun Failure Notification Verification Failed.");
                 routingContext.response().setStatusCode(HttpStatus.SC_UNAUTHORIZED).end();
             }
         });
@@ -52,22 +52,26 @@ public class MailgunFailureRouteHandler extends MailgunRouteHandler<FailureMessa
 
     @Override
     protected void buildMessage(HttpServerRequest request, BuildCallback<FailureMessage> callback) {
-        MultiMap params = request.params();
-        FailureMessage failureMessage = new FailureMessage();
-        failureMessage.setEvent(params.get("event"));
-        failureMessage.setRecipient(params.get("recipient"));
-        failureMessage.setDomain(params.get("domain"));
-        failureMessage.setMessageHeaders(params.get("message-headers"));
-        failureMessage.setReason(params.get("reason"));
-        failureMessage.setCode(params.get("code"));
-        failureMessage.setDescription(params.get("description"));
-        failureMessage.setTimestamp(params.get("timestamp"));
-        failureMessage.setToken(params.get("token"));
-        failureMessage.setSignature(params.get("signature"));
-        if (!failureMessage.getEvent().equals("dropped")) {
-            callback.failure(new Exception("Invalid Event Type: " + failureMessage.getEvent()));
-            return;
+        try {
+            MultiMap params = request.params();
+            FailureMessage failureMessage = new FailureMessage();
+            failureMessage.setEvent(params.get("event"));
+            failureMessage.setRecipient(params.get("recipient"));
+            failureMessage.setDomain(params.get("domain"));
+            failureMessage.setMessageHeaders(params.get("message-headers"));
+            failureMessage.setReason(params.get("reason"));
+            failureMessage.setCode(params.get("code"));
+            failureMessage.setDescription(params.get("description"));
+            failureMessage.setTimestamp(params.get("timestamp"));
+            failureMessage.setToken(params.get("token"));
+            failureMessage.setSignature(params.get("signature"));
+            if (!failureMessage.getEvent().equals("dropped")) {
+                callback.failure(new Exception("Invalid Event Type: " + failureMessage.getEvent()));
+                return;
+            }
+            callback.success(failureMessage);
+        } catch (Exception e) {
+            callback.failure(e);
         }
-        callback.success(failureMessage);
     }
 }

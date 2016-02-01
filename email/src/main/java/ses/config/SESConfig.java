@@ -15,8 +15,6 @@ public class SESConfig extends EmailConfig {
     private Region awsRegion = Region.getRegion(Regions.US_WEST_2);
     private int sendParallelism = 2;
     private int sendBatchSize = 10;
-    private int prepParallelism = 2;
-    private int prepBatchSize = 10;
     private int sendRetryMax = 3;
 
     public SESConfig() {
@@ -46,24 +44,6 @@ public class SESConfig extends EmailConfig {
 
     public SESConfig awsSecretKey(String awsSecretKey) {
         this.awsSecretKey = awsSecretKey;
-        return this;
-    }
-
-    public int getPrepBatchSize() {
-        return prepBatchSize;
-    }
-
-    public SESConfig prepBatchSize(int prepBatchSize) {
-        this.prepBatchSize = prepBatchSize;
-        return this;
-    }
-
-    public int getPrepParallelism() {
-        return prepParallelism;
-    }
-
-    public SESConfig prepParallelism(int prepParallelism) {
-        this.prepParallelism = prepParallelism;
         return this;
     }
 

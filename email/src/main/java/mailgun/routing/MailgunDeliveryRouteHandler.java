@@ -52,20 +52,24 @@ public class MailgunDeliveryRouteHandler extends MailgunRouteHandler<DeliveryMes
 
     @Override
     protected void buildMessage(HttpServerRequest request, BuildCallback<DeliveryMessage> callback) {
-        MultiMap params = request.params();
-        DeliveryMessage deliveryMessage = new DeliveryMessage();
-        deliveryMessage.setEvent(params.get("event"));
-        deliveryMessage.setRecipient(params.get("recipient"));
-        deliveryMessage.setDomain(params.get("domain"));
-        deliveryMessage.setMessageHeaders(params.get("message-headers"));
-        deliveryMessage.setMessageId(params.get("Message-Id"));
-        deliveryMessage.setTimestamp(params.get("timestamp"));
-        deliveryMessage.setToken(params.get("token"));
-        deliveryMessage.setSignature(params.get("signature"));
-        if (!deliveryMessage.getEvent().equals("delivered")) {
-            callback.failure(new Exception("Invalid Event Type: " + deliveryMessage.getEvent()));
-            return;
+        try {
+            MultiMap params = request.params();
+            DeliveryMessage deliveryMessage = new DeliveryMessage();
+            deliveryMessage.setEvent(params.get("event"));
+            deliveryMessage.setRecipient(params.get("recipient"));
+            deliveryMessage.setDomain(params.get("domain"));
+            deliveryMessage.setMessageHeaders(params.get("message-headers"));
+            deliveryMessage.setMessageId(params.get("Message-Id"));
+            deliveryMessage.setTimestamp(params.get("timestamp"));
+            deliveryMessage.setToken(params.get("token"));
+            deliveryMessage.setSignature(params.get("signature"));
+            if (!deliveryMessage.getEvent().equals("delivered")) {
+                callback.failure(new Exception("Invalid Event Type: " + deliveryMessage.getEvent()));
+                return;
+            }
+            callback.success(deliveryMessage);
+        } catch (Exception e) {
+            callback.failure(e);
         }
-        callback.success(deliveryMessage);
     }
 }

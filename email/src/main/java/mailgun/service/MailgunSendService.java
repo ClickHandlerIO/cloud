@@ -37,6 +37,7 @@ public class MailgunSendService extends AbstractIdleService {
     @Override
     protected void shutDown() throws Exception {
         this.queueService.stopAsync();
+        this.queueHandler.shutdown();
     }
 
     public void enqueue(MailgunSendRequest sendRequest) {

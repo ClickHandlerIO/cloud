@@ -87,7 +87,7 @@ public class SESSendQueueHandler extends EmailSendQueueHandler<MimeSendRequest> 
                         if (emailEntity.isAttachments()) {
                             getAttachmentEntitiesObservable(request.getEmailEntity())
                                     .doOnError(throwable -> failure(request,throwable))
-                                    .doOnNext(attachmentEntities -> new FileAttachmentIteratorChunks(request, attachmentEntities.iterator()).start());
+                                    .doOnNext(attachmentEntities -> new FileChunksIterator(request, attachmentEntities.iterator()).start());
                         } else {
                             sendEmail(request);
                         }
@@ -134,14 +134,14 @@ public class SESSendQueueHandler extends EmailSendQueueHandler<MimeSendRequest> 
         }
     }
 
-    private class FileAttachmentIteratorChunks implements FileGetChunksHandler {
+    private class FileChunksIterator implements FileGetChunksHandler {
 
         private Iterator<EmailAttachmentEntity> it;
         private EmailAttachmentEntity currentAttachment;
         private MimeSendRequest sendRequest;
         private Buffer buffer;
 
-        public FileAttachmentIteratorChunks(MimeSendRequest sendRequest, Iterator<EmailAttachmentEntity> it) {
+        public FileChunksIterator(MimeSendRequest sendRequest, Iterator<EmailAttachmentEntity> it) {
             this.sendRequest = sendRequest;
             this.it = it;
         }
@@ -165,9 +165,10 @@ public class SESSendQueueHandler extends EmailSendQueueHandler<MimeSendRequest> 
                 content.addBodyPart(attachmentPart);
                 message.setContent(content);
                 sendRequest.setMimeMessage(message);
-                sendEmail(sendRequest);
                 if(it.hasNext()) {
                     next();
+                } else {
+                    sendEmail(sendRequest);
                 }
             } catch (Throwable throwable) {
                 failure(sendRequest, throwable);
