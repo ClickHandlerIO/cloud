@@ -1,7 +1,7 @@
 package mailgun.handler;
 
 import common.handler.EmailSendQueueHandler;
-import common.handler.FileGetHandler;
+import common.handler.FileGetPipeHandler;
 import common.service.FileService;
 import entity.EmailAttachmentEntity;
 import entity.EmailEntity;
@@ -26,7 +26,6 @@ import org.apache.http.HttpHeaders;
 import org.apache.http.HttpStatus;
 import org.apache.http.entity.ContentType;
 import rx.Observable;
-import ses.event.SESEmailSentEvent;
 
 import java.net.URLConnection;
 import java.util.Iterator;
@@ -82,12 +81,7 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
                     if(sendRequest.getEmailEntity().isAttachments()) {
                         getAttachmentEntitiesObservable(sendRequest.getEmailEntity())
                                 .doOnError(throwable -> failure(sendRequest,throwable))
-                                .doOnNext(attachmentEntities -> new FilePipeIterator(clientRequest, attachmentEntities.iterator(), new FileGetHandler() {
-                                    @Override
-                                    public void chunkReceived(Buffer chunk) {
-                                        // unused for pipe.
-                                    }
-
+                                .doOnNext(attachmentEntities -> new FilePipeIteratorChunks(clientRequest, attachmentEntities.iterator(), new FileGetPipeHandler() {
                                     @Override
                                     public void onComplete() {
                                         clientRequest.end();
@@ -160,21 +154,16 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
         clientRequest.write(mpu.get());
     }
 
-    private class FilePipeIterator implements FileGetHandler {
+    private class FilePipeIteratorChunks implements FileGetPipeHandler {
 
         private Iterator<EmailAttachmentEntity> it;
         private HttpClientRequest clientRequest;
-        private FileGetHandler ownerHandler;
+        private FileGetPipeHandler ownerHandler;
 
-        public FilePipeIterator(HttpClientRequest clientRequest, Iterator<EmailAttachmentEntity> it, FileGetHandler ownerHandler) {
+        public FilePipeIteratorChunks(HttpClientRequest clientRequest, Iterator<EmailAttachmentEntity> it, FileGetPipeHandler ownerHandler) {
             this.clientRequest = clientRequest;
             this.it = it;
             this.ownerHandler = ownerHandler;
-        }
-
-        @Override
-        public void chunkReceived(Buffer chunk) {
-            // unused for pipe.
         }
 
         @Override
@@ -212,7 +201,7 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
         }
     }
 
-    private void writeAttachment(HttpClientRequest clientRequest, EmailAttachmentEntity attachmentEntity, FileGetHandler handler) {
+    private void writeAttachment(HttpClientRequest clientRequest, EmailAttachmentEntity attachmentEntity, FileGetPipeHandler handler) {
         getFileEntityObservable(attachmentEntity.getFileId())
                 .doOnError(throwable -> {
                     if (handler != null) {
@@ -275,9 +264,7 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
         @Override
         public void handle(HttpClientResponse httpClientResponse) {
             if(httpClientResponse.statusCode() == HttpStatus.SC_OK) {
-                httpClientResponse.bodyHandler(buffer -> {
-                    totalBuffer.appendBuffer(buffer);
-                });
+                httpClientResponse.bodyHandler(buffer -> totalBuffer.appendBuffer(buffer));
                 httpClientResponse.endHandler(aVoid -> {
                     try {
                         MailgunSendResponse response = jsonMapper.readValue(totalBuffer.toString(), MailgunSendResponse.class);

@@ -7,7 +7,7 @@ import com.amazonaws.services.simpleemail.model.SendRawEmailRequest;
 import com.amazonaws.services.simpleemail.model.SendRawEmailResult;
 import com.google.common.base.Strings;
 import common.handler.EmailSendQueueHandler;
-import common.handler.FileGetHandler;
+import common.handler.FileGetChunksHandler;
 import common.service.FileService;
 import entity.EmailAttachmentEntity;
 import entity.EmailEntity;
@@ -74,14 +74,11 @@ public class SESSendQueueHandler extends EmailSendQueueHandler<MimeSendRequest> 
         sendRequests.forEach(this::processRequest);
     }
 
-
     private void processRequest(MimeSendRequest request) {
         final EmailEntity emailEntity = request.getEmailEntity();
         buildMimeMessageObservable(emailEntity)
                 .doOnError(throwable -> {
-                    if(request.getCompletionHandler() != null) {
-                        request.getCompletionHandler().handle(Future.failedFuture(throwable));
-                    }
+                    failure(request, throwable);
                     publishEvent(request.getEmailEntity(), false);
                 })
                 .doOnNext(message -> {
@@ -90,7 +87,7 @@ public class SESSendQueueHandler extends EmailSendQueueHandler<MimeSendRequest> 
                         if (emailEntity.isAttachments()) {
                             getAttachmentEntitiesObservable(request.getEmailEntity())
                                     .doOnError(throwable -> failure(request,throwable))
-                                    .doOnNext(attachmentEntities -> new FileAttachmentIterator(request, attachmentEntities.iterator()).start());
+                                    .doOnNext(attachmentEntities -> new FileAttachmentIteratorChunks(request, attachmentEntities.iterator()).start());
                         } else {
                             sendEmail(request);
                         }
@@ -137,14 +134,14 @@ public class SESSendQueueHandler extends EmailSendQueueHandler<MimeSendRequest> 
         }
     }
 
-    private class FileAttachmentIterator implements FileGetHandler {
+    private class FileAttachmentIteratorChunks implements FileGetChunksHandler {
 
         private Iterator<EmailAttachmentEntity> it;
         private EmailAttachmentEntity currentAttachment;
         private MimeSendRequest sendRequest;
         private Buffer buffer;
 
-        public FileAttachmentIterator(MimeSendRequest sendRequest, Iterator<EmailAttachmentEntity> it) {
+        public FileAttachmentIteratorChunks(MimeSendRequest sendRequest, Iterator<EmailAttachmentEntity> it) {
             this.sendRequest = sendRequest;
             this.it = it;
         }
@@ -197,7 +194,7 @@ public class SESSendQueueHandler extends EmailSendQueueHandler<MimeSendRequest> 
         }
     }
 
-    private void getAttachmentFile(EmailAttachmentEntity attachmentEntity, FileGetHandler handler) {
+    private void getAttachmentFile(EmailAttachmentEntity attachmentEntity, FileGetChunksHandler handler) {
         getFileEntityObservable(attachmentEntity.getFileId())
                 .doOnError(throwable -> {
                     if (handler != null) {
@@ -206,7 +203,6 @@ public class SESSendQueueHandler extends EmailSendQueueHandler<MimeSendRequest> 
                 })
                 .doOnNext(fileEntity -> getFileService().getAsyncChunks(fileEntity, handler));
     }
-
 
     private void sendEmail(final MimeSendRequest sendRequest) {
         getRawRequestObservable(sendRequest)

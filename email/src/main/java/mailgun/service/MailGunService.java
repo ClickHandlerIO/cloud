@@ -1,14 +1,18 @@
 package mailgun.service;
 
 import com.sun.istack.internal.NotNull;
-import common.data.SendRequest;
 import common.service.EmailService;
-import common.service.FileAttachmentDownloadService;
 import common.service.FileService;
 import entity.EmailEntity;
 import io.clickhandler.sql.db.SqlExecutor;
-import io.vertx.rxjava.core.eventbus.EventBus;
+import io.vertx.core.AsyncResult;
+import io.vertx.core.Future;
+import io.vertx.core.Handler;
+import io.vertx.core.eventbus.EventBus;
+import io.vertx.rx.java.ObservableFuture;
+import io.vertx.rx.java.RxHelper;
 import mailgun.config.MailgunConfig;
+import mailgun.data.MailgunSendRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import rx.Observable;
@@ -22,38 +26,45 @@ import javax.inject.Singleton;
  * @author Brad Behnke
  */
 @Singleton
-public class MailgunService extends EmailService<SendRequest>{
+public class MailgunService extends EmailService<MailgunSendRequest>{
     private final static Logger LOG = LoggerFactory.getLogger(MailgunService.class);
 
-    private final MailgunSendPrepService sendPrepService;
     private final MailgunSendService sendService;
-    private final FileAttachmentDownloadService fileAttachmentDownloadService;
 
     @Inject
     public MailgunService(@NotNull MailgunConfig config, @NotNull EventBus eventBus, @NotNull SqlExecutor db, @NotNull FileService fileService) {
-        this.fileAttachmentDownloadService = new FileAttachmentDownloadService(config, db, fileService);
         this.sendService = new MailgunSendService(config, eventBus, db, fileService);
-        this.sendPrepService = new MailgunSendPrepService(config, eventBus, db, fileAttachmentDownloadService, sendService);
     }
 
     @Override
     protected void startUp() throws Exception {
         this.sendService.startAsync();
-        this.fileAttachmentDownloadService.startAsync();
-        this.sendPrepService.startAsync();
         LOG.info("Mailgun Service Started.");
     }
 
     @Override
     protected void shutDown() throws Exception {
-        this.sendPrepService.stopAsync();
-        this.fileAttachmentDownloadService.stopAsync();
         this.sendService.stopAsync();
         LOG.info("Mailgun Service Shutdown.");
     }
 
     @Override
-    public Observable<EmailEntity> sendObservable(SendRequest sendRequest) {
-        return null;
+    public Observable<EmailEntity> sendObservable(MailgunSendRequest sendRequest) {
+        ObservableFuture<EmailEntity> observableFuture = RxHelper.observableFuture();
+        send(sendRequest, observableFuture.toHandler());
+        return observableFuture;
+    }
+
+    private void send(MailgunSendRequest sendRequest, Handler<AsyncResult<EmailEntity>> completionHandler) {
+        if(sendRequest.getEmailEntity() == null) {
+            completionHandler.handle(Future.failedFuture(new Exception("Null EmailEntity.")));
+            return;
+        }
+        if(sendRequest.getEmailEntity().getId() == null || sendRequest.getEmailEntity().getId().isEmpty()) {
+            completionHandler.handle(Future.failedFuture(new Exception("Null or Empty EmailEntity Id")));
+            return;
+        }
+        sendRequest.setCompletionHandler(completionHandler);
+        this.sendService.enqueue(sendRequest);
     }
 }

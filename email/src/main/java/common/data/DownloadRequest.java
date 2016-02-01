@@ -1,6 +1,6 @@
 package common.data;
 
-import common.handler.FileGetHandler;
+import common.handler.FileGetChunksHandler;
 
 /**
  *  Request object for ses email attachment downloads.
@@ -9,9 +9,9 @@ import common.handler.FileGetHandler;
  */
 public class  DownloadRequest {
     private String fileId;
-    private FileGetHandler handler;
+    private FileGetChunksHandler handler;
 
-    public DownloadRequest(String fileId, FileGetHandler handler) {
+    public DownloadRequest(String fileId, FileGetChunksHandler handler) {
         this.fileId = fileId;
         this.handler = handler;
     }
@@ -24,7 +24,7 @@ public class  DownloadRequest {
         this.fileId = fileId;
     }
 
-    public FileGetHandler getHandler() {
+    public FileGetChunksHandler getHandler() {
         return handler;
     }
 }

@@ -1,11 +1,11 @@
 package s3.service;
 
 import com.sun.istack.internal.NotNull;
-import common.handler.FileGetHandler;
+import common.handler.FileGetChunksHandler;
+import common.handler.FileGetPipeHandler;
 import common.handler.FileStatusHandler;
 import common.service.FileService;
 import entity.FileEntity;
-import io.vertx.core.Handler;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpClientRequest;
 import io.vertx.core.streams.Pump;
@@ -30,7 +30,7 @@ public class S3Service extends FileService {
     }
 
     @Override
-    public void getAsyncChunks(FileEntity fileEntity, FileGetHandler handler) {
+    public void getAsyncChunks(FileEntity fileEntity, FileGetChunksHandler handler) {
         s3Client.get(fileEntity.getStoreBucket(), fileEntity.getStoreId(), httpClientResponse -> {
             if(handler != null) {
                 httpClientResponse.exceptionHandler(handler::onFailure);
@@ -47,7 +47,7 @@ public class S3Service extends FileService {
     }
 
     @Override
-    public void getAsyncPipe(FileEntity fileEntity, HttpClientRequest clientRequest, FileGetHandler handler) {
+    public void getAsyncPipe(FileEntity fileEntity, HttpClientRequest clientRequest, FileGetPipeHandler handler) {
         s3Client.get(fileEntity.getStoreBucket(), fileEntity.getStoreId(), httpClientResponse -> {
             if(handler != null) {
                 httpClientResponse.exceptionHandler(handler::onFailure);

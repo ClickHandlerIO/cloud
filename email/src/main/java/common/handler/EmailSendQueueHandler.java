@@ -72,16 +72,6 @@ public abstract class EmailSendQueueHandler<T extends SendRequest> implements Qu
                 });
     }
 
-//    protected void downloadFile(String fileId, FileGetHandler handler) {
-//        getFileEntityObservable(fileId)
-//                .doOnError(throwable -> {
-//                    if (handler != null) {
-//                        handler.onFailure(throwable);
-//                    }
-//                })
-//                .doOnNext(fileEntity -> fileService.getAsyncChunks(fileEntity, handler));
-//    }
-
     protected Observable<FileEntity> getFileEntityObservable(String fileId) {
         ObservableFuture<FileEntity> observableFuture = RxHelper.observableFuture();
         getFileEntity(fileId, observableFuture.toHandler());
