@@ -1,4 +1,4 @@
-package sns.data.json.common;
+package common.data;
 
 /**
  * Abstract SNS JSON object

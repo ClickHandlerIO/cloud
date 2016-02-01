@@ -9,7 +9,7 @@ import com.fasterxml.jackson.annotation.JsonSetter;
  *
  * @author Brad Behnke
  */
-public class GeneralMessage extends sns.data.json.common.Message {
+public class GeneralMessage extends common.data.Message {
     
     @JsonProperty
     private String Type;

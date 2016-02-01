@@ -21,7 +21,7 @@ import sns.event.general.SNSUnsubscribeConfirmEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import sns.config.SNSConfig;
-import sns.data.json.common.Message;
+import common.data.Message;
 import sns.data.json.common.MessageType;
 import sns.data.json.email.notify.*;
 import sns.data.json.email.receive.EmailReceivedMessage;

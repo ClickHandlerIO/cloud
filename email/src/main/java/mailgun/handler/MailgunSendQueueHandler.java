@@ -267,7 +267,7 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
                 httpClientResponse.bodyHandler(buffer -> totalBuffer.appendBuffer(buffer));
                 httpClientResponse.endHandler(aVoid -> {
                     try {
-                        MailgunSendResponse response = jsonMapper.readValue(totalBuffer.toString(), MailgunSendResponse.class);
+                        MailgunSendResponse response = jsonMapper.readValue(totalBuffer.getBytes(), MailgunSendResponse.class);
                         if(response == null || response.getId() == null || response.getId().isEmpty()) {
                             failure(sendRequest, new Exception("Invalid Response to Send Request"));
                             return;

@@ -5,7 +5,7 @@ import io.vertx.core.Handler;
 
 import io.vertx.rxjava.core.MultiMap;
 import io.vertx.rxjava.ext.web.RoutingContext;
-import sns.data.json.common.Message;
+import common.data.Message;
 import sns.service.SNSService;
 
 /**
