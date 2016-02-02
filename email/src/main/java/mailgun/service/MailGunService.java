@@ -74,11 +74,13 @@ public class MailgunService extends EmailService<MailgunSendRequest>{
 
     private void send(MailgunSendRequest sendRequest, Handler<AsyncResult<EmailEntity>> completionHandler) {
         if(sendRequest.getEmailEntity() == null) {
-            completionHandler.handle(Future.failedFuture(new Exception("Null EmailEntity.")));
+            if(completionHandler != null)
+                completionHandler.handle(Future.failedFuture(new Exception("Null EmailEntity.")));
             return;
         }
         if(sendRequest.getEmailEntity().getId() == null || sendRequest.getEmailEntity().getId().isEmpty()) {
-            completionHandler.handle(Future.failedFuture(new Exception("Null or Empty EmailEntity Id")));
+            if(completionHandler != null)
+                completionHandler.handle(Future.failedFuture(new Exception("Null or Empty EmailEntity Id")));
             return;
         }
         sendRequest.setCompletionHandler(completionHandler);

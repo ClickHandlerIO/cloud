@@ -216,7 +216,7 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
     }
 
     private void publishEvent(EmailEntity emailEntity, boolean success) {
-        eventBus.publish(MailgunEmailSentEvent.ADDRESS, new MailgunEmailSentEvent(emailEntity, success));
+        eventBus.publish(MailgunEmailSentEvent.ADDRESS, new MailgunEmailSentEvent(emailEntity, success).toJson());
     }
 
     protected class MultiPartUtility {

@@ -8,24 +8,14 @@ import sns.data.json.general.GeneralMessage;
  *
  * @author Brad Behnke
  */
-public class SNSSubscriptionConfirmEvent extends NotificationEvent {
+public class SNSSubscriptionConfirmEvent extends NotificationEvent<GeneralMessage> {
     public static final String ADDRESS = "sns-subscribe";
-    private GeneralMessage message;
 
     public SNSSubscriptionConfirmEvent() {
-        super(ADDRESS);
+        super(null, GeneralMessage.class);
     }
 
     public SNSSubscriptionConfirmEvent(GeneralMessage message) {
-        super(ADDRESS);
-        this.message = message;
-    }
-
-    public GeneralMessage getMessage() {
-        return message;
-    }
-
-    public void setMessage(GeneralMessage message) {
-        this.message = message;
+        super(message, GeneralMessage.class);
     }
 }

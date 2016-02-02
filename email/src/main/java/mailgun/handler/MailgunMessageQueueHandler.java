@@ -84,22 +84,22 @@ public class MailgunMessageQueueHandler implements QueueHandler<Message>, Tables
                     updateRecipientObservable(recipientEntity)
                             .doOnError(throwable -> LOG.error(throwable.getMessage()));
                 }));
-        eventBus.publish(MailgunEmailDeliveryEvent.ADDRESS, new MailgunEmailDeliveryEvent(message));
+        eventBus.publish(MailgunEmailDeliveryEvent.ADDRESS, new MailgunEmailDeliveryEvent(message).toJson());
     }
 
     private void handleBounce(BounceMessage message) {
         // todo what to update ? no message id comes over in notification
-        eventBus.publish(MailgunEmailBounceEvent.ADDRESS, new MailgunEmailBounceEvent(message));
+        eventBus.publish(MailgunEmailBounceEvent.ADDRESS, new MailgunEmailBounceEvent(message).toJson());
     }
 
     private void handleFailure(FailureMessage message) {
         // todo what to update ? no message id comes over in notification
-        eventBus.publish(MailgunEmailFailureEvent.ADDRESS, new MailgunEmailFailureEvent(message));
+        eventBus.publish(MailgunEmailFailureEvent.ADDRESS, new MailgunEmailFailureEvent(message).toJson());
     }
 
     private void handleReceive(ReceiveMessage message) {
         // todo create record of email received?
-        eventBus.publish(MailgunEmailReceiveEvent.ADDRESS, new MailgunEmailReceiveEvent(message));
+        eventBus.publish(MailgunEmailReceiveEvent.ADDRESS, new MailgunEmailReceiveEvent(message).toJson());
     }
 
     private Observable<List<EmailRecipientEntity>> getRecipientsObservable(String messageId) {

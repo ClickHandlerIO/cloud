@@ -1,7 +1,6 @@
 package mailgun.event;
 
 import common.event.EmailNotificationEvent;
-import mailgun.data.BounceMessage;
 import mailgun.data.FailureMessage;
 
 /**
@@ -9,24 +8,14 @@ import mailgun.data.FailureMessage;
  *
  * @author Brad Behnke
  */
-public class MailgunEmailFailureEvent extends EmailNotificationEvent {
+public class MailgunEmailFailureEvent extends EmailNotificationEvent<FailureMessage> {
     public static final String ADDRESS = "mailgun-email-failure";
-    private FailureMessage message;
 
     public MailgunEmailFailureEvent() {
-        super(ADDRESS);
+        super(null, FailureMessage.class);
     }
 
     public MailgunEmailFailureEvent(FailureMessage message) {
-        super(ADDRESS);
-        this.message = message;
-    }
-
-    public FailureMessage getMessage() {
-        return message;
-    }
-
-    public void setMessage(FailureMessage message) {
-        this.message = message;
+        super(message, FailureMessage.class);
     }
 }

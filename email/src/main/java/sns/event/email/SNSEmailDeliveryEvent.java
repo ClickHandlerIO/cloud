@@ -8,24 +8,14 @@ import sns.data.json.email.notify.EmailNotifyMessage;
  *
  * @author Brad Behnke
  */
-public class SNSEmailDeliveryEvent extends EmailNotificationEvent {
+public class SNSEmailDeliveryEvent extends EmailNotificationEvent<EmailNotifyMessage> {
     public static final String ADDRESS = "sns-email-delivery";
-    private EmailNotifyMessage message;
 
     public SNSEmailDeliveryEvent() {
-        super(ADDRESS);
+        super(null, EmailNotifyMessage.class);
     }
 
     public SNSEmailDeliveryEvent(EmailNotifyMessage message) {
-        super(ADDRESS);
-        this.message = message;
-    }
-
-    public EmailNotifyMessage getMessage() {
-        return message;
-    }
-
-    public void setMessage(EmailNotifyMessage message) {
-        this.message = message;
+        super(message, EmailNotifyMessage.class);
     }
 }

@@ -8,24 +8,14 @@ import sns.data.json.email.receive.EmailReceivedMessage;
  *
  * @author Brad Behnke
  */
-public class SNSEmailReceivedEvent extends EmailNotificationEvent {
+public class SNSEmailReceivedEvent extends EmailNotificationEvent<EmailReceivedMessage> {
     public static final String ADDRESS = "sns-email-received";
-    private EmailReceivedMessage message;
 
     public SNSEmailReceivedEvent() {
-        super(ADDRESS);
+        super(null, EmailReceivedMessage.class);
     }
 
     public SNSEmailReceivedEvent(EmailReceivedMessage message) {
-        super(ADDRESS);
-        this.message = message;
-    }
-
-    public EmailReceivedMessage getMessage() {
-        return message;
-    }
-
-    public void setMessage(EmailReceivedMessage message) {
-        this.message = message;
+        super(message, EmailReceivedMessage.class);
     }
 }

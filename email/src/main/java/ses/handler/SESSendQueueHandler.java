@@ -251,6 +251,6 @@ public class SESSendQueueHandler extends EmailSendQueueHandler<MimeSendRequest> 
     }
 
     private void publishEvent(EmailEntity emailEntity, boolean success) {
-        eventBus.publish(SESEmailSentEvent.ADDRESS, new SESEmailSentEvent(emailEntity, success));
+        eventBus.publish(SESEmailSentEvent.ADDRESS, new SESEmailSentEvent(emailEntity, success).toJson());
     }
 }

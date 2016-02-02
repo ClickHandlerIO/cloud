@@ -1,5 +1,6 @@
 package ses.event;
 
+import common.data.EmailSentMessage;
 import common.event.EmailNotificationEvent;
 import entity.EmailEntity;
 
@@ -8,34 +9,18 @@ import entity.EmailEntity;
  *
  *  @author Brad Behnke
  */
-public class SESEmailSentEvent extends EmailNotificationEvent {
+public class SESEmailSentEvent extends EmailNotificationEvent<EmailSentMessage> {
     public static final String ADDRESS = "sns-email-sent";
-    private boolean successful;
-    private EmailEntity emailEntity;
 
     public SESEmailSentEvent() {
-        super(ADDRESS);
+        super(null, EmailSentMessage.class);
     }
 
-    public SESEmailSentEvent(EmailEntity emailEntity, boolean successful) {
-        super(ADDRESS);
-        this.emailEntity = emailEntity;
-        this.successful = successful;
+    public SESEmailSentEvent(EmailSentMessage message) {
+        super(message, EmailSentMessage.class);
     }
 
-    public EmailEntity getEmailEntity() {
-        return emailEntity;
-    }
-
-    public void setEmailEntity(EmailEntity emailEntity) {
-        this.emailEntity = emailEntity;
-    }
-
-    public boolean isSuccessful() {
-        return successful;
-    }
-
-    public void setSuccessful(boolean successful) {
-        this.successful = successful;
+    public SESEmailSentEvent(EmailEntity emailEntity, boolean success) {
+        super(new EmailSentMessage(emailEntity, success), EmailSentMessage.class);
     }
 }

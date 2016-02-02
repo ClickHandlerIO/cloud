@@ -125,7 +125,7 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
         } catch (Exception e) {
             LOG.error("Failed to Confirm Subscription to Topic ARN: " + message.getTopicArn());
         }
-        eventBus.publish(SNSSubscriptionConfirmEvent.ADDRESS, new SNSSubscriptionConfirmEvent(message));
+        eventBus.publish(SNSSubscriptionConfirmEvent.ADDRESS, new SNSSubscriptionConfirmEvent(message).toJson());
     }
 
     private void handleUnsubscribe(GeneralMessage message) {
@@ -141,11 +141,11 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
         } catch (Exception e) {
             LOG.error("Failed to Confirm Unsubscribe to Topic ARN: " + message.getTopicArn());
         }
-        eventBus.publish(SNSUnsubscribeConfirmEvent.ADDRESS, new SNSUnsubscribeConfirmEvent(message));
+        eventBus.publish(SNSUnsubscribeConfirmEvent.ADDRESS, new SNSUnsubscribeConfirmEvent(message).toJson());
     }
 
     private void handleNotification(GeneralMessage message) {
-        eventBus.publish(SNSNotificationEvent.ADDRESS, new SNSNotificationEvent(message));
+        eventBus.publish(SNSNotificationEvent.ADDRESS, new SNSNotificationEvent(message).toJson());
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -187,7 +187,7 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
                     updateRecipientObservable(recipientEntity)
                             .doOnError(throwable -> LOG.error(throwable.getMessage()));
                 }));
-        eventBus.publish(SNSEmailDeliveryEvent.ADDRESS, new SNSEmailDeliveryEvent(message));
+        eventBus.publish(SNSEmailDeliveryEvent.ADDRESS, new SNSEmailDeliveryEvent(message).toJson());
     }
 
     private void handleBounce(EmailNotifyMessage message) {
@@ -203,7 +203,7 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
                     updateRecipientObservable(recipientEntity)
                             .doOnError(throwable -> LOG.error(throwable.getMessage()));
                 }));
-        eventBus.publish(SNSEmailBounceEvent.ADDRESS, new SNSEmailBounceEvent(message));
+        eventBus.publish(SNSEmailBounceEvent.ADDRESS, new SNSEmailBounceEvent(message).toJson());
     }
 
     private void handleComplaint(EmailNotifyMessage message) {
@@ -218,7 +218,7 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
                     updateRecipientObservable(recipientEntity)
                             .doOnError(throwable -> LOG.error(throwable.getMessage()));
                 }));
-        eventBus.publish(SNSEmailComplaintEvent.ADDRESS, new SNSEmailComplaintEvent(message));
+        eventBus.publish(SNSEmailComplaintEvent.ADDRESS, new SNSEmailComplaintEvent(message).toJson());
     }
 
     private Observable<List<EmailRecipientEntity>> getRecipientsObservable(NotifyMail mail) {
@@ -299,7 +299,7 @@ public class SNSQueueHandler implements QueueHandler<Message>, Tables {
     }
 
     private void handleReceived(EmailReceivedMessage message) {
-        eventBus.publish(SNSEmailReceivedEvent.ADDRESS, new SNSEmailReceivedEvent(message));
+        eventBus.publish(SNSEmailReceivedEvent.ADDRESS, new SNSEmailReceivedEvent(message).toJson());
     }
 
 }

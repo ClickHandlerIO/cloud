@@ -8,8 +8,8 @@ import event.VertxEvent;
  *  @see io.vertx.core.eventbus.EventBus
  *  @author Brad Behnke
  */
-public class NotificationEvent extends VertxEvent {
-    public NotificationEvent(String eventAddress) {
-        super(eventAddress);
+public abstract class NotificationEvent<T> extends VertxEvent<T>{
+    public NotificationEvent(T value, Class<T> valueType) {
+        super(value, valueType);
     }
 }

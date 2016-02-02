@@ -8,24 +8,14 @@ import sns.data.json.general.GeneralMessage;
  *
  * @author Brad Behnke
  */
-public class SNSNotificationEvent extends NotificationEvent {
+public class SNSNotificationEvent extends NotificationEvent<GeneralMessage> {
     public static final String ADDRESS = "sns-notification";
-    private GeneralMessage message;
 
     public SNSNotificationEvent() {
-        super(ADDRESS);
+        super(null, GeneralMessage.class);
     }
 
     public SNSNotificationEvent(GeneralMessage message) {
-        super(ADDRESS);
-        this.message = message;
-    }
-
-    public GeneralMessage getMessage() {
-        return message;
-    }
-
-    public void setMessage(GeneralMessage message) {
-        this.message = message;
+        super(message, GeneralMessage.class);
     }
 }

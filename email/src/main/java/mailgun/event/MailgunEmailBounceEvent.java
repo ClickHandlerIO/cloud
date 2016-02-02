@@ -8,24 +8,14 @@ import mailgun.data.BounceMessage;
  *
  * @author Brad Behnke
  */
-public class MailgunEmailBounceEvent extends EmailNotificationEvent {
+public class MailgunEmailBounceEvent extends EmailNotificationEvent<BounceMessage> {
     public static final String ADDRESS = "mailgun-email-bounce";
-    private BounceMessage message;
 
     public MailgunEmailBounceEvent() {
-        super(ADDRESS);
+        super(null, BounceMessage.class);
     }
 
     public MailgunEmailBounceEvent(BounceMessage message) {
-        super(ADDRESS);
-        this.message = message;
-    }
-
-    public BounceMessage getMessage() {
-        return message;
-    }
-
-    public void setMessage(BounceMessage message) {
-        this.message = message;
+        super(message, BounceMessage.class);
     }
 }
