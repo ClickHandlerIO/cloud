@@ -318,9 +318,6 @@ public class ActionProcessor extends AbstractProcessor {
                 );
 
                 initActionsCode.addStatement("actionMap.put($T.class, $L)", action.type, action.getFieldName());
-                // TODO: Is this something we should add back in?
-//                initActionsCode.addStatement("actionMap.put($T.class, $L)", action.inType.getResolvedElement(), action.getFieldName());
-//                initActionsCode.addStatement("actionMap.put($T.class, $L)", action.outType.getResolvedElement(), action.getFieldName());
 
                 type.addMethod(
                     MethodSpec.methodBuilder(action.getFieldName())

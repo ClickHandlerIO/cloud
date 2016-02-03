@@ -1,9 +1,5 @@
 package io.clickhandler.sql;
 
-import io.clickhandler.sql.Column;
-import io.clickhandler.sql.HasId;
-import io.clickhandler.sql.HasVersion;
-
 import java.io.Serializable;
 import java.util.Date;
 

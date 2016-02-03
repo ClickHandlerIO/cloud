@@ -8,7 +8,7 @@ import java.util.Set;
 /**
  *
  */
-public class WsBroadcast implements Serializable {
+public class WsBroadcast {
     private Set<String> userIds;
     private WsEnvelope envelope;
 

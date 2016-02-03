@@ -13,8 +13,8 @@ public class SqlConfig {
     private String readUrl = "jdbc:h2:mem:move;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=TRUE;";
     private String readUser = "root";
     private String readPassword = "passme";
-    private int maxPoolSize = 25;
-    private int maxReadPoolSize = 25;
+    private int maxPoolSize = 2;
+    private int maxReadPoolSize = 4;
     private boolean cachePrepStmts = true;
     private int prepStmtCacheSize = 250;
     private int prepStmtCacheSqlLimit = 2048;

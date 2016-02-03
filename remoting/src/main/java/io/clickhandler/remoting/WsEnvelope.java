@@ -7,8 +7,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  */
 public class WsEnvelope {
     // Direction
-    public static final int IN = 0;
-    public static final int OUT = 1;
+    public static final int OUT = 0;
+    public static final int IN = 1;
 
     // Encoding
     public static final int NONE = 0;

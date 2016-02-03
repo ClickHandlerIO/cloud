@@ -51,7 +51,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     private static final int DEV_MYSQL_PREPARE_STMT_CACHE_SIZE = 256;
     private static final int PROD_MYSQL_PREPARE_STMT_CACHE_SQL_LIMIT = 4096;
     private static final int DEV_MYSQL_PREPARE_STMT_CACHE_SQL_LIMIT = 2048;
-    private static final String ENTITY_PACKAGE = "io.clickhandler.sql.evolution";
+    private static final String ENTITY_PACKAGE = "io.clickhandler.sql";
     private static final Logger LOG = LoggerFactory.getLogger(SqlDatabase.class);
 
     protected final SqlConfig config;
