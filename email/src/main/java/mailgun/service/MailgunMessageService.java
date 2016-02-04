@@ -9,7 +9,7 @@ import io.clickhandler.queue.QueueService;
 import io.clickhandler.queue.QueueServiceConfig;
 import io.clickhandler.sql.SqlExecutor;
 import io.vertx.core.eventbus.EventBus;
-import mailgun.config.MailgunConfig;
+import mailgun.config.MailgunConfig1;
 import mailgun.handler.MailgunMessageQueueHandler;
 /**
  * @author Brad Behnke
@@ -17,7 +17,7 @@ import mailgun.handler.MailgunMessageQueueHandler;
 public class MailgunMessageService extends AbstractIdleService {
     private QueueService<Message> queueService;
 
-    public MailgunMessageService(@NotNull MailgunConfig config, @NotNull EventBus eventBus, @NotNull SqlExecutor db) {
+    public MailgunMessageService(@NotNull MailgunConfig1 config, @NotNull EventBus eventBus, @NotNull SqlExecutor db) {
         QueueFactory factory = new LocalQueueServiceFactory();
         final QueueServiceConfig<Message> mainConfig = new QueueServiceConfig<>("MailgunMessageQueue", Message.class, true, config.getMessageParallelism(), config.getMessageBatchSize());
         mainConfig.setHandler(new MailgunMessageQueueHandler(eventBus, db));

@@ -18,10 +18,10 @@ import io.vertx.core.http.HttpClientRequest;
 import io.vertx.core.http.HttpClientResponse;
 import io.vertx.rx.java.ObservableFuture;
 import io.vertx.rx.java.RxHelper;
-import mailgun.config.MailgunConfig;
-import mailgun.data.MailgunSendRequest;
+import mailgun.config.MailgunConfig1;
+import mailgun.data.MailgunSendRequest1;
 import mailgun.data.json.MailgunSendResponse;
-import mailgun.event.MailgunEmailSentEvent;
+import mailgun.event.MailgunEmailSentEvent1;
 import org.apache.http.HttpHeaders;
 import org.apache.http.HttpStatus;
 import org.apache.http.entity.ContentType;
@@ -34,7 +34,7 @@ import java.util.List;
 /**
  * @author Brad Behnke
  */
-public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRequest> {
+public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRequest1> {
 
     private final EventBus eventBus;
     private final HttpClient client;
@@ -43,7 +43,7 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
     private final String apiKey;
     private final int ALLOWED_ATTEMPTS;
 
-    public MailgunSendQueueHandler(MailgunConfig config, EventBus eventBus, SqlExecutor db, FileService fileService) {
+    public MailgunSendQueueHandler(MailgunConfig1 config, EventBus eventBus, SqlExecutor db, FileService fileService) {
         super(db, fileService);
         this.eventBus = eventBus;
         this.domain = config.getDomain();
@@ -63,11 +63,11 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
     }
 
     @Override
-    public void receive(List<MailgunSendRequest> sendRequests) {
+    public void receive(List<MailgunSendRequest1> sendRequests) {
         sendRequests.forEach(this::sendEmail);
     }
 
-    private void sendEmail(final MailgunSendRequest sendRequest) {
+    private void sendEmail(final MailgunSendRequest1 sendRequest) {
         sendRequest.incrementAttempts();
         final HttpClientRequest clientRequest = client.post("/"+domain+"/messages")
                 .handler(new HttpResponseHandler(sendRequest))
@@ -103,13 +103,13 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
                 });
     }
 
-    private Observable<Void> writeBodyObservable(HttpClientRequest clientRequest, MailgunSendRequest sendRequest) {
+    private Observable<Void> writeBodyObservable(HttpClientRequest clientRequest, MailgunSendRequest1 sendRequest) {
         ObservableFuture<Void> observableFuture = RxHelper.observableFuture();
         writeBody(clientRequest, sendRequest, observableFuture.toHandler());
         return observableFuture;
     }
 
-    private void writeBody(HttpClientRequest clientRequest, MailgunSendRequest sendRequest, Handler<AsyncResult<Void>> completionHandler) {
+    private void writeBody(HttpClientRequest clientRequest, MailgunSendRequest1 sendRequest, Handler<AsyncResult<Void>> completionHandler) {
         EmailEntity emailEntity = sendRequest.getEmailEntity();
         if(emailEntity == null) {
             if(completionHandler != null) {
@@ -216,7 +216,7 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
     }
 
     private void publishEvent(EmailEntity emailEntity, boolean success) {
-        eventBus.publish(MailgunEmailSentEvent.ADDRESS, new MailgunEmailSentEvent(emailEntity, success).toJson());
+        eventBus.publish(MailgunEmailSentEvent1.ADDRESS, new MailgunEmailSentEvent1(emailEntity, success).toJson());
     }
 
     protected class MultiPartUtility {
@@ -257,10 +257,10 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
 
     private class HttpResponseHandler implements Handler<HttpClientResponse> {
 
-        private MailgunSendRequest sendRequest;
+        private MailgunSendRequest1 sendRequest;
         private Buffer totalBuffer;
 
-        public HttpResponseHandler(MailgunSendRequest sendRequest) {
+        public HttpResponseHandler(MailgunSendRequest1 sendRequest) {
             this.sendRequest = sendRequest;
             this.totalBuffer = Buffer.buffer();
         }

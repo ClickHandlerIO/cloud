@@ -3,7 +3,7 @@ package mailgun.routing;
 import io.vertx.core.Handler;
 import io.vertx.rxjava.core.http.HttpServerRequest;
 import io.vertx.rxjava.ext.web.RoutingContext;
-import mailgun.config.MailgunConfig;
+import mailgun.config.MailgunConfig1;
 import mailgun.service.MailgunService;
 import common.data.Message;
 import org.apache.commons.codec.binary.Base64;
@@ -22,7 +22,7 @@ public abstract class MailgunRouteHandler<T extends Message> implements Handler<
     private final MailgunService mailgunService;
     private final String apiKey;
 
-    public MailgunRouteHandler(MailgunConfig config, MailgunService mailgunService){
+    public MailgunRouteHandler(MailgunConfig1 config, MailgunService mailgunService){
         this.mailgunService = mailgunService;
         this.apiKey = config.getApiKey();
     }

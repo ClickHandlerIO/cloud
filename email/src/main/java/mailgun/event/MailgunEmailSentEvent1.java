@@ -9,18 +9,18 @@ import entity.EmailEntity;
  *
  * @author Brad Behnke
  */
-public class MailgunEmailSentEvent extends EmailNotificationEvent<EmailSentMessage> {
+public class MailgunEmailSentEvent1 extends EmailNotificationEvent<EmailSentMessage> {
     public static final String ADDRESS = "mg-email-sent";
 
-    public MailgunEmailSentEvent() {
+    public MailgunEmailSentEvent1() {
         super(null, EmailSentMessage.class);
     }
 
-    public MailgunEmailSentEvent(EmailSentMessage message) {
+    public MailgunEmailSentEvent1(EmailSentMessage message) {
         super(message, EmailSentMessage.class);
     }
 
-    public MailgunEmailSentEvent(EmailEntity emailEntity, boolean success) {
+    public MailgunEmailSentEvent1(EmailEntity emailEntity, boolean success) {
         super(new EmailSentMessage(emailEntity, success), EmailSentMessage.class);
     }
 }

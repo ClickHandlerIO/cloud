@@ -3,7 +3,7 @@ package mailgun.routing;
 import io.vertx.rxjava.core.MultiMap;
 import io.vertx.rxjava.core.http.HttpServerRequest;
 import io.vertx.rxjava.ext.web.RoutingContext;
-import mailgun.config.MailgunConfig;
+import mailgun.config.MailgunConfig1;
 import mailgun.data.DeliveryMessage;
 import mailgun.service.MailgunService;
 import org.apache.http.HttpStatus;
@@ -19,7 +19,7 @@ import org.slf4j.LoggerFactory;
 public class MailgunDeliveryRouteHandler extends MailgunRouteHandler<DeliveryMessage> {
     private final static Logger LOG = LoggerFactory.getLogger(MailgunDeliveryRouteHandler.class);
 
-    public MailgunDeliveryRouteHandler(MailgunConfig config, MailgunService mailgunService) {
+    public MailgunDeliveryRouteHandler(MailgunConfig1 config, MailgunService mailgunService) {
         super(config, mailgunService);
     }
 
