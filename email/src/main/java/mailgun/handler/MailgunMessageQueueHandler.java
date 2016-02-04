@@ -137,10 +137,7 @@ public class MailgunMessageQueueHandler implements QueueHandler<Message>, Tables
     }
 
     private void updateRecipient(final EmailRecipientEntity recipientEntity, Handler<AsyncResult<EmailRecipientEntity>> completionHandler) {
-        db.writeObservable(session -> {
-                        Integer result = session.update(recipientEntity);
-                        return new SqlResult<>(result == 1, recipientEntity);
-                })
+        db.writeObservable(session -> session.update(recipientEntity))
                 .doOnError(throwable -> {
                     if(completionHandler != null) {
                         completionHandler.handle(Future.failedFuture(throwable));
@@ -149,7 +146,7 @@ public class MailgunMessageQueueHandler implements QueueHandler<Message>, Tables
                 .doOnNext(recipientEntitySqlResult -> {
                     if(completionHandler != null) {
                         if (recipientEntitySqlResult.isSuccess()) {
-                            completionHandler.handle(Future.succeededFuture(recipientEntitySqlResult.get()));
+                            completionHandler.handle(Future.succeededFuture(recipientEntity));
                         } else {
                             completionHandler.handle(Future.failedFuture(new Exception("EmailRecipientEntity Update Failed.")));
                         }

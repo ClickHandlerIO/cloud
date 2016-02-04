@@ -108,7 +108,7 @@ public abstract class EmailSendQueueHandler<T extends SendRequest> implements Qu
     }
 
     private void updateEmailEntity(EmailEntity emailEntity, Handler<AsyncResult<EmailEntity>> completionHandler) {
-        db.writeObservable(session -> new SqlResult<>((session.update(emailEntity) == 1), emailEntity))
+        db.writeObservable(session -> session.update(emailEntity))
                 .doOnError(throwable -> {
                     if(completionHandler != null) {
                         completionHandler.handle(Future.failedFuture(throwable));
@@ -117,7 +117,7 @@ public abstract class EmailSendQueueHandler<T extends SendRequest> implements Qu
                 .doOnNext(emailEntitySqlResult -> {
                     if(completionHandler != null) {
                         if(emailEntitySqlResult.isSuccess()) {
-                            completionHandler.handle(Future.succeededFuture(emailEntitySqlResult.get()));
+                            completionHandler.handle(Future.succeededFuture(emailEntity));
                         } else {
                             completionHandler.handle(Future.failedFuture(new Exception("Email Entity Update Failed.")));
                         }
@@ -150,10 +150,7 @@ public abstract class EmailSendQueueHandler<T extends SendRequest> implements Qu
                             recipientEntity.setStatus(RecipientStatus.FAILED);
                             recipientEntity.setFailed(new Date());
                         }
-                        db.writeObservable(session -> {
-                            Integer result = session.update(recipientEntity);
-                            return new SqlResult<>(result == 1, result);
-                        })
+                        db.writeObservable(session -> session.update(recipientEntity))
                                 .doOnError(throwable -> {
                                     if(completionHandler != null) {
                                         completionHandler.handle(Future.failedFuture(throwable));
