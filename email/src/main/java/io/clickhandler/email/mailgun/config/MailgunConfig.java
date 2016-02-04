@@ -2,6 +2,8 @@ package io.clickhandler.email.mailgun.config;
 
 import io.clickhandler.email.common.config.EmailConfig;
 
+import javax.inject.Inject;
+
 /**
  * @author Brad Behnke
  */
@@ -14,6 +16,11 @@ public class MailgunConfig extends EmailConfig {
     private int messageParallelism = 2;
     private int messageBatchSize = 10;
     private int sendRetryMax = 3;
+
+    @Inject
+    public MailgunConfig() {
+
+    }
 
     public MailgunConfig apiKey(String apiKey) {
         this.apiKey = apiKey;
