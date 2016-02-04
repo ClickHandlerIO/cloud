@@ -5,7 +5,7 @@ import common.config.EmailConfig;
 /**
  * @author Brad Behnke
  */
-public class MailgunConfig1 extends EmailConfig {
+public class MailgunConfig extends EmailConfig {
 
     private String domain;
     private String apiKey;
@@ -15,37 +15,37 @@ public class MailgunConfig1 extends EmailConfig {
     private int messageBatchSize = 10;
     private int sendRetryMax = 3;
 
-    public MailgunConfig1 apiKey(String apiKey) {
+    public MailgunConfig apiKey(String apiKey) {
         this.apiKey = apiKey;
         return this;
     }
 
-    public MailgunConfig1 domain(String domain) {
+    public MailgunConfig domain(String domain) {
         this.domain = domain;
         return this;
     }
 
-    public MailgunConfig1 sendBatchSize(int sendBatchSize) {
+    public MailgunConfig sendBatchSize(int sendBatchSize) {
         this.sendBatchSize = sendBatchSize;
         return this;
     }
 
-    public MailgunConfig1 sendParallelism(int sendParallelism) {
+    public MailgunConfig sendParallelism(int sendParallelism) {
         this.sendParallelism = sendParallelism;
         return this;
     }
 
-    public MailgunConfig1 messageBatchSize(int messageBatchSize) {
+    public MailgunConfig messageBatchSize(int messageBatchSize) {
         this.messageBatchSize = messageBatchSize;
         return this;
     }
 
-    public MailgunConfig1 messageParallelism(int messageParallelism) {
+    public MailgunConfig messageParallelism(int messageParallelism) {
         this.messageParallelism = messageParallelism;
         return this;
     }
 
-    public MailgunConfig1 sendRetryMax(int sendRetryMax) {
+    public MailgunConfig sendRetryMax(int sendRetryMax) {
         this.sendRetryMax = sendRetryMax;
         return this;
     }

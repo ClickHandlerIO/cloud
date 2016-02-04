@@ -7,11 +7,11 @@ import io.vertx.core.MultiMap;
 /**
  * Created by admin on 1/28/16.
  */
-public class MailgunSendRequest1 extends SendRequest {
+public class MailgunSendRequest extends SendRequest {
 
     private MultiMap content;
 
-    public MailgunSendRequest1(EmailEntity emailEntity) {
+    public MailgunSendRequest(EmailEntity emailEntity) {
         super(emailEntity);
     }
 

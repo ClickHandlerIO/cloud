@@ -8,8 +8,8 @@ import io.clickhandler.queue.QueueService;
 import io.clickhandler.queue.QueueServiceConfig;
 import io.clickhandler.sql.SqlExecutor;
 import io.vertx.core.eventbus.EventBus;
-import mailgun.config.MailgunConfig1;
-import mailgun.data.MailgunSendRequest1;
+import mailgun.config.MailgunConfig;
+import mailgun.data.MailgunSendRequest;
 import mailgun.handler.MailgunSendQueueHandler;
 
 /**
@@ -17,11 +17,11 @@ import mailgun.handler.MailgunSendQueueHandler;
  */
 public class MailgunSendService extends AbstractIdleService {
 
-    private final QueueService<MailgunSendRequest1> queueService;
+    private final QueueService<MailgunSendRequest> queueService;
     private final MailgunSendQueueHandler queueHandler;
 
-    public MailgunSendService(MailgunConfig1 mailgunConfig, EventBus eventBus, SqlExecutor db, FileService fileService) {
-        final QueueServiceConfig<MailgunSendRequest1> config = new QueueServiceConfig<>("MailgunSendQueue", MailgunSendRequest1.class, true, mailgunConfig.getSendParallelism(), mailgunConfig.getSendBatchSize());
+    public MailgunSendService(MailgunConfig mailgunConfig, EventBus eventBus, SqlExecutor db, FileService fileService) {
+        final QueueServiceConfig<MailgunSendRequest> config = new QueueServiceConfig<>("MailgunSendQueue", MailgunSendRequest.class, true, mailgunConfig.getSendParallelism(), mailgunConfig.getSendBatchSize());
         this.queueHandler = new MailgunSendQueueHandler(mailgunConfig, eventBus, db, fileService);
         config.setHandler(this.queueHandler);
 
@@ -40,7 +40,7 @@ public class MailgunSendService extends AbstractIdleService {
         this.queueHandler.shutdown();
     }
 
-    public void enqueue(MailgunSendRequest1 sendRequest) {
+    public void enqueue(MailgunSendRequest sendRequest) {
         this.queueService.add(sendRequest);
     }
 }

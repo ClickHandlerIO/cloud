@@ -12,8 +12,8 @@ import io.vertx.core.Handler;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.rx.java.ObservableFuture;
 import io.vertx.rx.java.RxHelper;
-import mailgun.config.MailgunConfig1;
-import mailgun.data.MailgunSendRequest1;
+import mailgun.config.MailgunConfig;
+import mailgun.data.MailgunSendRequest;
 import mailgun.routing.MailgunBounceRouteHandler;
 import mailgun.routing.MailgunDeliveryRouteHandler;
 import mailgun.routing.MailgunFailureRouteHandler;
@@ -31,7 +31,7 @@ import javax.inject.Singleton;
  * @author Brad Behnke
  */
 @Singleton
-public class MailgunService extends EmailService<MailgunSendRequest1>{
+public class MailgunService extends EmailService<MailgunSendRequest>{
     private final static Logger LOG = LoggerFactory.getLogger(MailgunService.class);
 
     private final MailgunSendService sendService;
@@ -42,7 +42,7 @@ public class MailgunService extends EmailService<MailgunSendRequest1>{
     private final MailgunReceiveRouteHandler receiveRouteHandler;
 
     @Inject
-    public MailgunService(@NotNull MailgunConfig1 config, @NotNull EventBus eventBus, @NotNull SqlExecutor db, @NotNull FileService fileService) {
+    public MailgunService(@NotNull MailgunConfig config, @NotNull EventBus eventBus, @NotNull SqlExecutor db, @NotNull FileService fileService) {
         this.sendService = new MailgunSendService(config, eventBus, db, fileService);
         this.messageService = new MailgunMessageService(config, eventBus, db);
         this.deliveryRouteHandler = new MailgunDeliveryRouteHandler(config, this);
@@ -66,13 +66,13 @@ public class MailgunService extends EmailService<MailgunSendRequest1>{
     }
 
     @Override
-    public Observable<EmailEntity> sendObservable(MailgunSendRequest1 sendRequest) {
+    public Observable<EmailEntity> sendObservable(MailgunSendRequest sendRequest) {
         ObservableFuture<EmailEntity> observableFuture = RxHelper.observableFuture();
         send(sendRequest, observableFuture.toHandler());
         return observableFuture;
     }
 
-    private void send(MailgunSendRequest1 sendRequest, Handler<AsyncResult<EmailEntity>> completionHandler) {
+    private void send(MailgunSendRequest sendRequest, Handler<AsyncResult<EmailEntity>> completionHandler) {
         if(sendRequest.getEmailEntity() == null) {
             if(completionHandler != null)
                 completionHandler.handle(Future.failedFuture(new Exception("Null EmailEntity.")));
