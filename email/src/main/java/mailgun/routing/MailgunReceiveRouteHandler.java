@@ -5,7 +5,7 @@ import io.vertx.rxjava.core.http.HttpServerRequest;
 import io.vertx.rxjava.ext.web.RoutingContext;
 import mailgun.config.MailgunConfig;
 import mailgun.data.ReceiveMessage;
-import mailgun.service.MailgunService;
+import mailgun.service.MailgunService1;
 import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,7 +22,7 @@ import java.util.List;
 public class MailgunReceiveRouteHandler extends MailgunRouteHandler<ReceiveMessage> {
     private final static Logger LOG = LoggerFactory.getLogger(MailgunReceiveRouteHandler.class);
 
-    public MailgunReceiveRouteHandler(MailgunConfig config, MailgunService mailgunService) {
+    public MailgunReceiveRouteHandler(MailgunConfig config, MailgunService1 mailgunService) {
         super(config, mailgunService);
     }
 

@@ -4,7 +4,7 @@ import io.vertx.core.Handler;
 import io.vertx.rxjava.core.http.HttpServerRequest;
 import io.vertx.rxjava.ext.web.RoutingContext;
 import mailgun.config.MailgunConfig;
-import mailgun.service.MailgunService;
+import mailgun.service.MailgunService1;
 import common.data.Message;
 import org.apache.commons.codec.binary.Base64;
 
@@ -19,10 +19,10 @@ import javax.crypto.spec.SecretKeySpec;
  */
 public abstract class MailgunRouteHandler<T extends Message> implements Handler<RoutingContext> {
 
-    private final MailgunService mailgunService;
+    private final MailgunService1 mailgunService;
     private final String apiKey;
 
-    public MailgunRouteHandler(MailgunConfig config, MailgunService mailgunService){
+    public MailgunRouteHandler(MailgunConfig config, MailgunService1 mailgunService){
         this.mailgunService = mailgunService;
         this.apiKey = config.getApiKey();
     }
