@@ -31,8 +31,8 @@ import javax.inject.Singleton;
  * @author Brad Behnke
  */
 @Singleton
-public class MailgunService1 extends EmailService<MailgunSendRequest>{
-    private final static Logger LOG = LoggerFactory.getLogger(MailgunService1.class);
+public class MailgunService extends EmailService<MailgunSendRequest>{
+    private final static Logger LOG = LoggerFactory.getLogger(MailgunService.class);
 
     private final MailgunSendService sendService;
     private final MailgunMessageService messageService;
@@ -42,7 +42,7 @@ public class MailgunService1 extends EmailService<MailgunSendRequest>{
     private final MailgunReceiveRouteHandler receiveRouteHandler;
 
     @Inject
-    public MailgunService1(@NotNull MailgunConfig config, @NotNull EventBus eventBus, @NotNull SqlExecutor db, @NotNull FileService fileService) {
+    public MailgunService(@NotNull MailgunConfig config, @NotNull EventBus eventBus, @NotNull SqlExecutor db, @NotNull FileService fileService) {
         this.sendService = new MailgunSendService(config, eventBus, db, fileService);
         this.messageService = new MailgunMessageService(config, eventBus, db);
         this.deliveryRouteHandler = new MailgunDeliveryRouteHandler(config, this);
