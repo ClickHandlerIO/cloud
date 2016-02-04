@@ -6,7 +6,7 @@ import com.amazonaws.services.simpleemail.model.RawMessage;
 import com.amazonaws.services.simpleemail.model.SendRawEmailRequest;
 import com.amazonaws.services.simpleemail.model.SendRawEmailResult;
 import com.google.common.base.Strings;
-import io.clickhandler.files.handler.EmailSendQueueHandler;
+import io.clickhandler.email.handler.EmailSendQueueHandler;
 import io.clickhandler.files.handler.FileGetChunksHandler;
 import io.clickhandler.files.service.FileService;
 import io.clickhandler.email.entity.EmailAttachmentEntity;

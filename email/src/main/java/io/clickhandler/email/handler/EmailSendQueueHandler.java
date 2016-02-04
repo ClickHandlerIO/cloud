@@ -1,4 +1,4 @@
-package io.clickhandler.files.handler;
+package io.clickhandler.email.handler;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.clickhandler.email.common.data.SendRequest;

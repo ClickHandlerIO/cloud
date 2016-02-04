@@ -1,6 +1,6 @@
 package io.clickhandler.email.mailgun.handler;
 
-import io.clickhandler.files.handler.EmailSendQueueHandler;
+import io.clickhandler.email.handler.EmailSendQueueHandler;
 import io.clickhandler.files.handler.FileGetPipeHandler;
 import io.clickhandler.files.service.FileService;
 import io.clickhandler.email.entity.EmailAttachmentEntity;

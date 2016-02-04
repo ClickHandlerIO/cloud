@@ -2,7 +2,7 @@ package io.clickhandler.email.mailgun.service;
 
 import com.sun.istack.internal.NotNull;
 import io.clickhandler.email.common.data.Message;
-import io.clickhandler.files.service.EmailService;
+import io.clickhandler.email.service.EmailService;
 import io.clickhandler.files.service.FileService;
 import io.clickhandler.email.entity.EmailEntity;
 import io.clickhandler.sql.SqlExecutor;

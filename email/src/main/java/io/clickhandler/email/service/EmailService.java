@@ -1,4 +1,4 @@
-package io.clickhandler.files.service;
+package io.clickhandler.email.service;
 
 import com.google.common.util.concurrent.AbstractIdleService;
 import io.clickhandler.email.common.data.SendRequest;
