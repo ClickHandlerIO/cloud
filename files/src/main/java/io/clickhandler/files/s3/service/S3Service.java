@@ -1,4 +1,4 @@
-package s3.service;
+package io.clickhandler.files.s3.service;
 
 import com.sun.istack.internal.NotNull;
 import io.clickhandler.email.entity.FileEntity;
@@ -9,7 +9,7 @@ import io.clickhandler.files.service.FileService;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpClientRequest;
 import io.vertx.core.streams.Pump;
-import s3.config.S3Config;
+import io.clickhandler.files.s3.config.S3Config;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;

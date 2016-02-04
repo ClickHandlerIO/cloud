@@ -1,4 +1,4 @@
-package s3.service;
+package io.clickhandler.files.s3.service;
 
 import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
@@ -12,7 +12,7 @@ import io.vertx.core.http.HttpServerFileUpload;
 import io.vertx.core.streams.Pump;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import s3.data.S3ClientRequest;
+import io.clickhandler.files.s3.data.S3ClientRequest;
 
 /**
  *  Code from https://github.com/spartango/SuperS3t

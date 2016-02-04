@@ -1,4 +1,4 @@
-package s3.config;
+package io.clickhandler.files.s3.config;
 
 /**
  * Configuration settings for S3 file service.

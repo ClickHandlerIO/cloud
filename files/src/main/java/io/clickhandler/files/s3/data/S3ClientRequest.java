@@ -1,4 +1,4 @@
-package s3.data;
+package io.clickhandler.files.s3.data;
 
 import io.vertx.core.Handler;
 import io.vertx.core.MultiMap;
