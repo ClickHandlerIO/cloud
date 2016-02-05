@@ -6,18 +6,18 @@ import io.clickhandler.email.service.EmailService;
 import io.clickhandler.files.service.FileService;
 import io.clickhandler.email.entity.EmailEntity;
 import io.clickhandler.sql.SqlExecutor;
-import io.vertx.core.AsyncResult;
-import io.vertx.core.Future;
-import io.vertx.core.Handler;
-import io.vertx.core.eventbus.EventBus;
-import io.vertx.rx.java.ObservableFuture;
-import io.vertx.rx.java.RxHelper;
 import io.clickhandler.email.mailgun.config.MailgunConfig;
 import io.clickhandler.email.mailgun.data.MailgunSendRequest;
 import io.clickhandler.email.mailgun.routing.MailgunBounceRouteHandler;
 import io.clickhandler.email.mailgun.routing.MailgunDeliveryRouteHandler;
 import io.clickhandler.email.mailgun.routing.MailgunFailureRouteHandler;
 import io.clickhandler.email.mailgun.routing.MailgunReceiveRouteHandler;
+import io.vertx.core.AsyncResult;
+import io.vertx.core.Future;
+import io.vertx.core.Handler;
+import io.vertx.rx.java.ObservableFuture;
+import io.vertx.rx.java.RxHelper;
+import io.vertx.rxjava.core.eventbus.EventBus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import rx.Observable;
@@ -80,7 +80,7 @@ public class MailgunService extends EmailService<MailgunSendRequest>{
         }
         if(sendRequest.getEmailEntity().getId() == null || sendRequest.getEmailEntity().getId().isEmpty()) {
             if(completionHandler != null)
-                completionHandler.handle(Future.failedFuture(new Exception("Null or Empty EmailEntity Id")));
+                completionHandler.handle(Future.failedFuture(new Exception("Missing Email Entity Id.")));
             return;
         }
         sendRequest.setCompletionHandler(completionHandler);

@@ -7,10 +7,10 @@ import io.clickhandler.queue.QueueFactory;
 import io.clickhandler.queue.QueueService;
 import io.clickhandler.queue.QueueServiceConfig;
 import io.clickhandler.sql.SqlExecutor;
-import io.vertx.core.eventbus.EventBus;
 import io.clickhandler.email.mailgun.config.MailgunConfig;
 import io.clickhandler.email.mailgun.data.MailgunSendRequest;
 import io.clickhandler.email.mailgun.handler.MailgunSendQueueHandler;
+import io.vertx.rxjava.core.eventbus.EventBus;
 
 /**
  * @author Brad Behnke
