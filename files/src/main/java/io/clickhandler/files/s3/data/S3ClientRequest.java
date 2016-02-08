@@ -1,11 +1,11 @@
 package io.clickhandler.files.s3.data;
 
 import io.vertx.core.Handler;
-import io.vertx.core.MultiMap;
-import io.vertx.core.buffer.Buffer;
-import io.vertx.core.http.HttpClientRequest;
-import io.vertx.core.http.HttpClientResponse;
 import io.vertx.core.http.HttpMethod;
+import io.vertx.rxjava.core.MultiMap;
+import io.vertx.rxjava.core.buffer.Buffer;
+import io.vertx.rxjava.core.http.HttpClientRequest;
+import io.vertx.rxjava.core.http.HttpClientResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,7 +23,7 @@ import java.util.Date;
  *  Request object for S3 http communication.
  */
 
-public class S3ClientRequest implements HttpClientRequest {
+public class S3ClientRequest {
     private static final SimpleDateFormat dateFormat = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz");
     private static final Logger logger = LoggerFactory.getLogger(S3ClientRequest.class);
 
@@ -76,121 +76,110 @@ public class S3ClientRequest implements HttpClientRequest {
         this.contentType = contentType;
     }
 
-    @Override public HttpClientRequest setWriteQueueMaxSize(int maxSize) {
+    public HttpClientRequest setWriteQueueMaxSize(int maxSize) {
         return request.setWriteQueueMaxSize(maxSize);
     }
 
-    @Override
     public HttpClientRequest handler(Handler<HttpClientResponse> handler) {
         return request.handler(handler);
     }
 
-    @Override public boolean writeQueueFull() {
+    public boolean writeQueueFull() {
         return request.writeQueueFull();
     }
 
-    @Override public HttpClientRequest drainHandler(Handler<Void> handler) {
+    public HttpClientRequest drainHandler(Handler<Void> handler) {
         return request.drainHandler(handler);
     }
 
-    @Override public HttpClientRequest exceptionHandler(Handler<Throwable> handler) {
+    public HttpClientRequest exceptionHandler(Handler<Throwable> handler) {
         return request.exceptionHandler(handler);
     }
 
-    @Override public HttpClientRequest setChunked(boolean chunked) {
+    public HttpClientRequest setChunked(boolean chunked) {
         return request.setChunked(chunked);
     }
 
-    @Override public MultiMap headers() { return request.headers(); }
+    public MultiMap headers() { return request.headers(); }
 
-    @Override public HttpClientRequest pause() { return request.pause(); }
+    public HttpClientRequest pause() { return request.pause(); }
 
-    @Override
     public HttpClientRequest resume() { return request.resume();}
 
-    @Override
     public HttpClientRequest endHandler(Handler<Void> endHandler) { return request.endHandler(endHandler);}
 
-    @Override
     public boolean isChunked() { return request.isChunked(); }
 
-    @Override
     public HttpMethod method() {
         return request.method();
     }
 
-    @Override
     public String uri() {
         return request.uri();
     }
 
-    @Override
     public HttpClientRequest putHeader(String name, String value) {
         return request.putHeader(name, value);
     }
 
-    @Override
     public HttpClientRequest putHeader(CharSequence name, CharSequence value) {
-        return request.putHeader(name, value);
+        return request.putHeader(name.toString(), value.toString());
     }
 
-    @Override
-    public HttpClientRequest putHeader(String name, Iterable<String> values) {
-        return request.putHeader(name, values);
-    }
+//    public HttpClientRequest putHeader(String name, Iterable<String> values) {
+//        return request.putHeader(name, values);
+//    }
+//
+//    public HttpClientRequest putHeader(CharSequence name, Iterable<CharSequence> values) {
+//        return request.putHeader(name, values);
+//    }
 
-    @Override
-    public HttpClientRequest putHeader(CharSequence name, Iterable<CharSequence> values) {
-        return request.putHeader(name, values);
-    }
-
-    @Override
     public HttpClientRequest setTimeout(long timeoutMs) {
         return request.setTimeout(timeoutMs);
     }
 
-    @Override public HttpClientRequest write(Buffer chunk) {
+    public HttpClientRequest write(Buffer chunk) {
         return request.write(chunk);
     }
 
-    @Override public HttpClientRequest write(String chunk) {
+    public HttpClientRequest write(String chunk) {
         return request.write(chunk);
     }
 
-    @Override public HttpClientRequest write(String chunk, String enc) {
+    public HttpClientRequest write(String chunk, String enc) {
         return request.write(chunk, enc);
     }
 
-    @Override public HttpClientRequest continueHandler(Handler<Void> handler) {
+    public HttpClientRequest continueHandler(Handler<Void> handler) {
         return request.continueHandler(handler);
     }
 
-    @Override public HttpClientRequest sendHead() {
+    public HttpClientRequest sendHead() {
         // Generate authentication header
         initAuthenticationHeader();
         // Send the header
         return request.sendHead();
     }
 
-    @Override public void end(String chunk) {
+    public void end(String chunk) {
         // Generate authentication header
         initAuthenticationHeader();
         request.end(chunk);
     }
 
-    @Override public void end(String chunk, String enc) {
+    public void end(String chunk, String enc) {
         // Generate authentication header
         initAuthenticationHeader();
         request.end(chunk, enc);
     }
 
-    @Override public void end(Buffer chunk) {
+    public void end(Buffer chunk) {
         // Generate authentication header
         initAuthenticationHeader();
         request.end(chunk);
     }
 
-    @Override public void end() {
+    public void end() {
         // Generate authentication header
         initAuthenticationHeader();
         request.end();
@@ -238,6 +227,10 @@ public class S3ClientRequest implements HttpClientRequest {
             headers().add("Authorization", authorization);
         }
         // Otherwise not needed
+    }
+
+    public HttpClientRequest getRequest() {
+        return request;
     }
 
     public boolean isAuthenticated() {

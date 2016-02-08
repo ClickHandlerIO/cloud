@@ -6,10 +6,12 @@ import io.clickhandler.files.handler.FileGetChunksHandler;
 import io.clickhandler.files.handler.FileGetPipeHandler;
 import io.clickhandler.files.handler.FileStatusHandler;
 import io.clickhandler.files.service.FileService;
-import io.vertx.core.buffer.Buffer;
-import io.vertx.core.http.HttpClientRequest;
-import io.vertx.core.streams.Pump;
 import io.clickhandler.files.s3.config.S3Config;
+import io.vertx.rxjava.core.Vertx;
+import io.vertx.rxjava.core.buffer.Buffer;
+import io.vertx.rxjava.core.http.HttpClientRequest;
+import io.vertx.rxjava.core.http.HttpServerFileUpload;
+import io.vertx.rxjava.core.streams.Pump;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -25,8 +27,8 @@ public class S3Service extends FileService {
     private final S3Client s3Client;
 
     @Inject
-    public S3Service(@NotNull S3Config config) {
-        this.s3Client = new S3Client(config.getAwsAccessKey(), config.getAwsSecretKey(), config.getEndPoint());
+    public S3Service(@NotNull Vertx vertx, @NotNull S3Config config) {
+        this.s3Client = new S3Client(vertx, config.getAwsAccessKey(), config.getAwsSecretKey(), config.getEndPoint());
     }
 
     @Override
@@ -66,6 +68,20 @@ public class S3Service extends FileService {
     @Override
     public void putAsync(FileEntity fileEntity, Buffer data, FileStatusHandler handler) {
         s3Client.put(fileEntity.getStoreBucket(), fileEntity.getStoreId(), data, httpClientResponse -> {
+            if(handler != null) {
+                httpClientResponse.exceptionHandler(handler::onFailure);
+                if(httpClientResponse.statusCode() == 200) {
+                    handler.onSuccess();
+                } else {
+                    handler.onFailure(new Exception("Failure with Response Code: " + httpClientResponse.statusCode()));
+                }
+            }
+        });
+    }
+
+    @Override
+    public void putAsync(FileEntity fileEntity, HttpServerFileUpload upload, FileStatusHandler handler) {
+        s3Client.put(fileEntity.getStoreBucket(), fileEntity.getStoreId(), upload, httpClientResponse -> {
             if(handler != null) {
                 httpClientResponse.exceptionHandler(handler::onFailure);
                 if(httpClientResponse.statusCode() == 200) {

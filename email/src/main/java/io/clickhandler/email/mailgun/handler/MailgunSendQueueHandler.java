@@ -9,19 +9,19 @@ import io.clickhandler.sql.SqlExecutor;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
-import io.vertx.core.Vertx;
-import io.vertx.core.buffer.Buffer;
-import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientOptions;
-import io.vertx.core.http.HttpClientRequest;
-import io.vertx.core.http.HttpClientResponse;
 import io.vertx.rx.java.ObservableFuture;
 import io.vertx.rx.java.RxHelper;
 import io.clickhandler.email.mailgun.config.MailgunConfig;
 import io.clickhandler.email.mailgun.data.MailgunSendRequest;
 import io.clickhandler.email.mailgun.data.json.MailgunSendResponse;
 import io.clickhandler.email.mailgun.event.MailgunEmailSentEvent;
+import io.vertx.rxjava.core.Vertx;
+import io.vertx.rxjava.core.buffer.Buffer;
 import io.vertx.rxjava.core.eventbus.EventBus;
+import io.vertx.rxjava.core.http.HttpClient;
+import io.vertx.rxjava.core.http.HttpClientRequest;
+import io.vertx.rxjava.core.http.HttpClientResponse;
 import org.apache.http.HttpHeaders;
 import org.apache.http.HttpStatus;
 import org.apache.http.entity.ContentType;
@@ -43,14 +43,14 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
     private final String apiKey;
     private final int ALLOWED_ATTEMPTS;
 
-    public MailgunSendQueueHandler(MailgunConfig config, EventBus eventBus, SqlExecutor db, FileService fileService) {
+    public MailgunSendQueueHandler(Vertx vertx, MailgunConfig config, EventBus eventBus, SqlExecutor db, FileService fileService) {
         super(db, fileService);
         this.eventBus = eventBus;
         this.domain = config.getDomain();
         this.host = "api.io.clickhandler.email.mailgun.net/v3";
         this.apiKey = config.getApiKey();
         this.ALLOWED_ATTEMPTS = config.getSendRetryMax();
-        this.client = Vertx.vertx().createHttpClient(new HttpClientOptions()
+        this.client = vertx.createHttpClient(new HttpClientOptions()
                 .setSsl(true)
                 .setTrustAll(true)
                 .setDefaultHost(host)
@@ -271,7 +271,7 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
                 httpClientResponse.bodyHandler(buffer -> totalBuffer.appendBuffer(buffer));
                 httpClientResponse.endHandler(aVoid -> {
                     try {
-                        MailgunSendResponse response = jsonMapper.readValue(totalBuffer.getBytes(), MailgunSendResponse.class);
+                        MailgunSendResponse response = jsonMapper.readValue(totalBuffer.toString(), MailgunSendResponse.class);
                         if(response == null || response.getId() == null || response.getId().isEmpty()) {
                             failure(sendRequest, new Exception("Invalid Response to Send Request"));
                             return;

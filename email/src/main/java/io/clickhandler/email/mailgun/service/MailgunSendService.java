@@ -10,6 +10,7 @@ import io.clickhandler.sql.SqlExecutor;
 import io.clickhandler.email.mailgun.config.MailgunConfig;
 import io.clickhandler.email.mailgun.data.MailgunSendRequest;
 import io.clickhandler.email.mailgun.handler.MailgunSendQueueHandler;
+import io.vertx.rxjava.core.Vertx;
 import io.vertx.rxjava.core.eventbus.EventBus;
 
 /**
@@ -20,9 +21,9 @@ public class MailgunSendService extends AbstractIdleService {
     private final QueueService<MailgunSendRequest> queueService;
     private final MailgunSendQueueHandler queueHandler;
 
-    public MailgunSendService(MailgunConfig mailgunConfig, EventBus eventBus, SqlExecutor db, FileService fileService) {
+    public MailgunSendService(Vertx vertx, MailgunConfig mailgunConfig, EventBus eventBus, SqlExecutor db, FileService fileService) {
         final QueueServiceConfig<MailgunSendRequest> config = new QueueServiceConfig<>("MailgunSendQueue", MailgunSendRequest.class, true, mailgunConfig.getSendParallelism(), mailgunConfig.getSendBatchSize());
-        this.queueHandler = new MailgunSendQueueHandler(mailgunConfig, eventBus, db, fileService);
+        this.queueHandler = new MailgunSendQueueHandler(vertx, mailgunConfig, eventBus, db, fileService);
         config.setHandler(this.queueHandler);
 
         QueueFactory factory = new LocalQueueServiceFactory();

@@ -1,5 +1,7 @@
 package io.clickhandler.files.s3.config;
 
+import javax.inject.Inject;
+
 /**
  * Configuration settings for S3 file service.
  *
@@ -9,6 +11,10 @@ public class S3Config {
     private String awsAccessKey;
     private String awsSecretKey;
     private String endPoint = "s3-us-west-1.amazonaws.com";
+
+    @Inject
+    public S3Config() {
+    }
 
     public String getAwsAccessKey() {
         return awsAccessKey;

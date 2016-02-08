@@ -1,6 +1,7 @@
 package io.clickhandler.files.handler;
 
-import io.vertx.core.buffer.Buffer;
+
+import io.vertx.rxjava.core.buffer.Buffer;
 
 /**
  * Created by admin on 1/29/16.

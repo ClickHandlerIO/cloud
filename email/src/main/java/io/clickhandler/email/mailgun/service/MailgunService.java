@@ -17,6 +17,7 @@ import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.rx.java.ObservableFuture;
 import io.vertx.rx.java.RxHelper;
+import io.vertx.rxjava.core.Vertx;
 import io.vertx.rxjava.core.eventbus.EventBus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,8 +43,8 @@ public class MailgunService extends EmailService<MailgunSendRequest>{
     private final MailgunReceiveRouteHandler receiveRouteHandler;
 
     @Inject
-    public MailgunService(@NotNull MailgunConfig config, @NotNull EventBus eventBus, @NotNull SqlExecutor db, @NotNull FileService fileService) {
-        this.sendService = new MailgunSendService(config, eventBus, db, fileService);
+    public MailgunService(@NotNull Vertx vertx, @NotNull MailgunConfig config, @NotNull EventBus eventBus, @NotNull SqlExecutor db, @NotNull FileService fileService) {
+        this.sendService = new MailgunSendService(vertx, config, eventBus, db, fileService);
         this.messageService = new MailgunMessageService(config, eventBus, db);
         this.deliveryRouteHandler = new MailgunDeliveryRouteHandler(config, this);
         this.bounceRouteHandler = new MailgunBounceRouteHandler(config, this);

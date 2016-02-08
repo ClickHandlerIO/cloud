@@ -1,15 +1,15 @@
 package io.clickhandler.files.s3.service;
 
 import io.vertx.core.Handler;
-import io.vertx.core.Vertx;
-import io.vertx.core.buffer.Buffer;
-import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientOptions;
-import io.vertx.core.http.HttpClientRequest;
-import io.vertx.core.http.HttpClientResponse;
 import io.vertx.core.http.HttpHeaders;
-import io.vertx.core.http.HttpServerFileUpload;
-import io.vertx.core.streams.Pump;
+import io.vertx.rxjava.core.Vertx;
+import io.vertx.rxjava.core.buffer.Buffer;
+import io.vertx.rxjava.core.http.HttpClient;
+import io.vertx.rxjava.core.http.HttpClientRequest;
+import io.vertx.rxjava.core.http.HttpClientResponse;
+import io.vertx.rxjava.core.http.HttpServerFileUpload;
+import io.vertx.rxjava.core.streams.Pump;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import io.clickhandler.files.s3.data.S3ClientRequest;
@@ -24,24 +24,12 @@ public class S3Client {
     public static final String DEFAULT_ENDPOINT = "s3-us-west-1.amazonaws.com";
     private static final Logger logger = LoggerFactory.getLogger(S3Client.class);
 
-    private static final Vertx vertx = Vertx.vertx();
+    private final Vertx vertx;
 
     private final String awsAccessKey;
     private final String awsSecretKey;
 
     private final HttpClient client;
-
-    public S3Client() {
-        this(vertx, null, null, DEFAULT_ENDPOINT);
-    }
-
-    public S3Client(String accessKey, String secretKey) {
-        this(vertx, accessKey, secretKey, DEFAULT_ENDPOINT);
-    }
-
-    public S3Client(String accessKey, String secretKey, String endpoint) {
-        this(vertx, accessKey, secretKey, endpoint);
-    }
 
     public S3Client(Vertx vertx,
                     String accessKey,
@@ -49,7 +37,7 @@ public class S3Client {
                     String endpoint) {
         awsAccessKey = accessKey;
         awsSecretKey = secretKey;
-
+        this.vertx = vertx;
         this.client = vertx.createHttpClient(new HttpClientOptions().setDefaultHost(endpoint));
     }
 
@@ -92,9 +80,7 @@ public class S3Client {
             request.end(buffer);
         });
 
-        upload.handler(data -> {
-            buffer.appendBuffer(data);
-        });
+        upload.handler(buffer::appendBuffer);
     }
 
     /*
@@ -117,7 +103,7 @@ public class S3Client {
             request.end(buffer);
         });
 
-        Pump pump = Pump.pump(upload, request);
+        Pump pump = Pump.pump(upload, request.getRequest());
         pump.start();
     }
 
