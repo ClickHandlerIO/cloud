@@ -47,7 +47,7 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
         super(db, fileService);
         this.eventBus = eventBus;
         this.domain = config.getDomain();
-        this.host = "api.io.clickhandler.email.mailgun.net/v3";
+        this.host = "api.email.mailgun.net/v3/"+domain;
         this.apiKey = config.getApiKey();
         this.ALLOWED_ATTEMPTS = config.getSendRetryMax();
         this.client = vertx.createHttpClient(new HttpClientOptions()
@@ -69,7 +69,7 @@ public class MailgunSendQueueHandler extends EmailSendQueueHandler<MailgunSendRe
 
     private void sendEmail(final MailgunSendRequest sendRequest) {
         sendRequest.incrementAttempts();
-        final HttpClientRequest clientRequest = client.post("/"+domain+"/messages")
+        final HttpClientRequest clientRequest = client.post("/messages")
                 .handler(new HttpResponseHandler(sendRequest))
                 .exceptionHandler(throwable -> failure(sendRequest,throwable))
                 .setChunked(true);
