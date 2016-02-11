@@ -32,6 +32,8 @@ public class FileEntity extends AbstractEntity {
     private EncodedKey key;
     @Column(length = 16)
     private String storageClass;
+    @Column
+    private FileStatus status;
 
     public String getName() {
         return name;
@@ -123,5 +125,21 @@ public class FileEntity extends AbstractEntity {
 
     public boolean isEncrypted() {
         return key != null && !Strings.nullToEmpty(key.getKey()).trim().isEmpty();
+    }
+
+    public FileStatus getStatus() {
+        return status;
+    }
+
+    public void setStatus(FileStatus status) {
+        this.status = status;
+    }
+
+    public enum FileStatus {
+        PENDING,
+        UPLOADING,
+        COMPLETE,
+        FAILED,
+        CANCELLED
     }
 }

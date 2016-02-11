@@ -25,7 +25,7 @@ public class JOOQAppGenerator {
             Vertx.vertx(),
             dbConfig,
             new String[]{"io.clickhandler.email.entity"},
-            new String[]{"data.schema"}
+            new String[]{"io.clickhandler.data.schema"}
         );
 
         database.startAsync().awaitRunning();
@@ -34,16 +34,16 @@ public class JOOQAppGenerator {
         GenerationTool.generate(
             SchemaGenerator.buildConfiguration(
                 dbConfig,
-                "data.schema",
-                "email-schema/src/main/java"
+                "io.clickhandler.data.schema",
+                "email-schema/src/main/javaio/clickhandler"
             )
         );
 
         // Set Tables class to interface.
         try {
-            String content = new String(Files.readAllBytes(Paths.get("email-schema/src/main/java/data/schema/Tables.java")), StandardCharsets.UTF_8);
+            String content = new String(Files.readAllBytes(Paths.get("email-schema/src/main/java/io/clickhandler/data/schema/Tables.java")), StandardCharsets.UTF_8);
             content = content.replaceAll("public class Tables", "public interface Tables");
-            File tempFile = new File("email-schema/src/main/java/data/schema/Tables.java");
+            File tempFile = new File("email-schema/src/main/java/io/clickhandler/data/schema/Tables.java");
             Files.write(tempFile.toPath(), content.getBytes(StandardCharsets.UTF_8), StandardOpenOption.WRITE);
         } catch (IOException e) {
             throw new RuntimeException("Error updating Tables class to interface!", e);
