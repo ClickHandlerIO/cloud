@@ -135,11 +135,4 @@ public class FileEntity extends AbstractEntity {
         this.status = status;
     }
 
-    public enum FileStatus {
-        PENDING,
-        UPLOADING,
-        COMPLETE,
-        FAILED,
-        CANCELLED
-    }
 }
