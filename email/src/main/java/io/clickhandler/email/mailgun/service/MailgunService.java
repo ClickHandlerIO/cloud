@@ -1,6 +1,5 @@
 package io.clickhandler.email.mailgun.service;
 
-import com.sun.istack.internal.NotNull;
 import io.clickhandler.email.common.data.Message;
 import io.clickhandler.email.service.EmailService;
 import io.clickhandler.files.service.FileService;
@@ -43,7 +42,7 @@ public class MailgunService extends EmailService<MailgunSendRequest>{
     private final MailgunReceiveRouteHandler receiveRouteHandler;
 
     @Inject
-    public MailgunService(@NotNull Vertx vertx, @NotNull MailgunConfig config, @NotNull EventBus eventBus, @NotNull SqlExecutor db, @NotNull FileService fileService) {
+    public MailgunService(Vertx vertx, MailgunConfig config, EventBus eventBus, SqlExecutor db, FileService fileService) {
         this.sendService = new MailgunSendService(vertx, config, eventBus, db, fileService);
         this.messageService = new MailgunMessageService(config, eventBus, db);
         this.deliveryRouteHandler = new MailgunDeliveryRouteHandler(config, this);

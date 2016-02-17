@@ -1,6 +1,5 @@
 package io.clickhandler.email.ses.service;
 
-import com.sun.istack.internal.NotNull;
 import io.clickhandler.email.service.EmailService;
 import io.clickhandler.files.service.FileService;
 import io.clickhandler.email.entity.EmailEntity;
@@ -33,7 +32,7 @@ public class SESService extends EmailService<MimeSendRequest> {
     private final SESSendService sesSendService;
 
     @Inject
-    public SESService(@NotNull SESConfig config, @NotNull EventBus eventBus, @NotNull SqlExecutor db, @NotNull FileService fileService) {
+    public SESService(SESConfig config, EventBus eventBus, SqlExecutor db, FileService fileService) {
         this.sesSendService = new SESSendService(config, eventBus, db, fileService);
     }
 

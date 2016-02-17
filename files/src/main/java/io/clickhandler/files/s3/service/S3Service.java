@@ -1,6 +1,5 @@
 package io.clickhandler.files.s3.service;
 
-import com.sun.istack.internal.NotNull;
 import io.clickhandler.email.entity.FileEntity;
 import io.clickhandler.files.handler.FileGetChunksHandler;
 import io.clickhandler.files.handler.FileGetPipeHandler;
@@ -27,7 +26,7 @@ public class S3Service extends FileService {
     private final S3Client s3Client;
 
     @Inject
-    public S3Service(@NotNull Vertx vertx, @NotNull S3Config config) {
+    public S3Service(Vertx vertx, S3Config config) {
         this.s3Client = new S3Client(vertx, config.getAwsAccessKey(), config.getAwsSecretKey(), config.getEndPoint());
     }
 

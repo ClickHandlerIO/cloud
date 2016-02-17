@@ -2,7 +2,6 @@ package io.clickhandler.email.sns.service;
 
 
 import com.google.common.util.concurrent.AbstractIdleService;
-import com.sun.istack.internal.NotNull;
 import io.clickhandler.queue.LocalQueueServiceFactory;
 import io.clickhandler.queue.QueueFactory;
 import io.clickhandler.queue.QueueService;
@@ -35,7 +34,7 @@ public class SNSService extends AbstractIdleService {
     private QueueService<Message> queueService;
 
     @Inject
-    public SNSService(@NotNull SNSConfig snsConfig, @NotNull EventBus eventBus, @NotNull SqlExecutor db) {
+    public SNSService(SNSConfig snsConfig, EventBus eventBus, SqlExecutor db) {
 
         // initialize io.clickhandler.email.sns queues
         QueueFactory factory = new LocalQueueServiceFactory();

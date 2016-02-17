@@ -1,7 +1,6 @@
 package io.clickhandler.email.mailgun.service;
 
 import com.google.common.util.concurrent.AbstractIdleService;
-import com.sun.istack.internal.NotNull;
 import io.clickhandler.email.common.data.Message;
 import io.clickhandler.queue.LocalQueueServiceFactory;
 import io.clickhandler.queue.QueueFactory;
@@ -18,7 +17,7 @@ import io.vertx.rxjava.core.eventbus.EventBus;
 public class MailgunMessageService extends AbstractIdleService {
     private QueueService<Message> queueService;
 
-    public MailgunMessageService(@NotNull MailgunConfig config, @NotNull EventBus eventBus, @NotNull SqlExecutor db) {
+    public MailgunMessageService(MailgunConfig config, EventBus eventBus, SqlExecutor db) {
         QueueFactory factory = new LocalQueueServiceFactory();
         final QueueServiceConfig<Message> mainConfig = new QueueServiceConfig<>("MailgunMessageQueue", Message.class, true, config.getMessageParallelism(), config.getMessageBatchSize());
         mainConfig.setHandler(new MailgunMessageQueueHandler(eventBus, db));
