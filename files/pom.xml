@@ -19,6 +19,11 @@
             <artifactId>dagger</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.google.dagger</groupId>
+            <artifactId>dagger-compiler</artifactId>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
             <groupId>io.clickhandler</groupId>
             <artifactId>cloud-common</artifactId>
         </dependency>
@@ -53,7 +58,7 @@
                     <dependency>
                         <groupId>com.google.dagger</groupId>
                         <artifactId>dagger-compiler</artifactId>
-                        <version>2.0.2</version>
+                        <version>${dagger.version}</version>
                     </dependency>
                 </dependencies>
                 <configuration>

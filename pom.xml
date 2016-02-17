@@ -54,6 +54,7 @@ http://www.w3.org/2001/XMLSchema-instance ">
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <java.version>1.8</java.version>
+        <dagger.version>2.0.2</dagger.version>
         <maven-compiler-plugin.version>3.3</maven-compiler-plugin.version>
         <maven-resources-plugin.version>2.5</maven-resources-plugin.version>
         <maven-gpg-plugin.version>1.6</maven-gpg-plugin.version>
@@ -193,13 +194,13 @@ http://www.w3.org/2001/XMLSchema-instance ">
             <dependency>
                 <groupId>com.google.dagger</groupId>
                 <artifactId>dagger</artifactId>
-                <version>2.0.2</version>
+                <version>${dagger.version}</version>
             </dependency>
 
             <dependency>
                 <groupId>com.google.dagger</groupId>
                 <artifactId>dagger-compiler</artifactId>
-                <version>2.0.2</version>
+                <version>${dagger.version}</version>
                 <optional>true</optional>
             </dependency>
 
