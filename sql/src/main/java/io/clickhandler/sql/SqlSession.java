@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.*;
 import java.util.*;
+import java.util.Date;
 
 /**
  * Manages the logical lifecycle of a Transaction.
@@ -1120,6 +1121,9 @@ public class SqlSession {
      */
     public <E extends AbstractEntity> SqlResult<Integer> store(E entity) {
         Preconditions.checkNotNull(entity, "entity must be specified");
+        if(entity.getChanged() == null) {
+            entity.setChanged(new Date());
+        }
         // Get mapper.
         final EntityMapper<E, UpdatableRecord> mapper = db.entityMapper(entity.getClass());
         // Map to Record.
@@ -1141,6 +1145,9 @@ public class SqlSession {
      */
     public <E extends AbstractEntity> SqlResult<Integer> insert(E entity) {
         Preconditions.checkNotNull(entity, "entity must be specified");
+        if(entity.getChanged() == null) {
+            entity.setChanged(new Date());
+        }
         // Get mapper.
         final EntityMapper<E, UpdatableRecord> mapper = db.entityMapper(entity.getClass());
         // Map to Record.
@@ -1169,6 +1176,9 @@ public class SqlSession {
         final Map<E, UpdatableRecord<?>> recordMap = Maps.newHashMapWithExpectedSize(entities.size());
         final List<UpdatableRecord<?>> records = Lists.newArrayList();
         for (E entity : entities) {
+            if(entity.getChanged() == null) {
+                entity.setChanged(new Date());
+            }
             final UpdatableRecord<?> record = mapper.map(entity);
             records.add(record);
             recordMap.put(entity, record);
@@ -1190,6 +1200,9 @@ public class SqlSession {
      */
     public <E extends AbstractEntity> SqlResult<Integer> update(final E entity) {
         Preconditions.checkNotNull(entity, "entity must be specified");
+        if(entity.getChanged() == null) {
+            entity.setChanged(new Date());
+        }
         // Get mapper.
         final EntityMapper<E, UpdatableRecord> mapper = db.entityMapper(entity.getClass());
         // Map to Record.
@@ -1217,6 +1230,9 @@ public class SqlSession {
         final Map<E, UpdatableRecord<?>> recordMap = Maps.newHashMapWithExpectedSize(entities.size());
         final List<UpdatableRecord<?>> records = Lists.newArrayList();
         for (E entity : entities) {
+            if(entity.getChanged() == null) {
+                entity.setChanged(new Date());
+            }
             final UpdatableRecord<?> record = mapper.map(entity);
             records.add(record);
             recordMap.put(entity, record);
