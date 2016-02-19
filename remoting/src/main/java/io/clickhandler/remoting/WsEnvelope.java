@@ -3,68 +3,46 @@ package io.clickhandler.remoting;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
- * Wasabi Envelope
+ * WebSocket Remoting Envelope
  */
 public class WsEnvelope {
-    // Direction
+    // Method
     public static final int OUT = 0;
     public static final int IN = 1;
+    public static final int SUB = 2;
+    public static final int USUB = 3;
+    public static final int PUSH = 4;
 
-    // Encoding
-    public static final int NONE = 0;
-    public static final int GZIP = 1;
-    public static final int DEFLATE = 2;
-
-    // Format
-    public static final int JSON = 0;
-    public static final int MSGPACK = 1;
-    public static final int XML = 2;
-    public static final int RAW = 9;
-
-    @JsonProperty("d")
-    private int in;
+    @JsonProperty("m")
+    private int method;
     @JsonProperty("i")
     private int id;
     @JsonProperty("s")
     private int sequence;
     @JsonProperty("c")
     private int code;
-    @JsonProperty("e")
-    private int encoding;
-    @JsonProperty("f")
-    private int format;
     @JsonProperty("t")
     private String type;
-    @JsonProperty("p")
-    private String payload;
+    @JsonProperty("b")
+    private String body;
 
     public WsEnvelope() {
     }
 
-    public WsEnvelope(int in, int id, int code, String type, String payload) {
-        this.in = in;
+    public WsEnvelope(int method, int id, int code, String type, String body) {
+        this.method = method;
         this.id = id;
         this.code = code;
         this.type = type;
-        this.payload = payload;
+        this.body = body;
     }
 
-    public WsEnvelope(int in, int id, int code, int encoding, int format, String type, String payload) {
-        this.in = in;
-        this.id = id;
-        this.code = code;
-        this.encoding = encoding;
-        this.format = format;
-        this.type = type;
-        this.payload = payload;
+    public int getMethod() {
+        return method;
     }
 
-    public int isIn() {
-        return in;
-    }
-
-    public void setIn(int in) {
-        this.in = in;
+    public void setMethod(int method) {
+        this.method = method;
     }
 
     public int getId() {
@@ -91,11 +69,11 @@ public class WsEnvelope {
         this.type = type;
     }
 
-    public String getPayload() {
-        return payload;
+    public String getBody() {
+        return body;
     }
 
-    public void setPayload(String payload) {
-        this.payload = payload;
+    public void setBody(String body) {
+        this.body = body;
     }
 }

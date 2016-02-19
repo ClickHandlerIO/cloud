@@ -4,8 +4,10 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.Strings;
 import com.google.common.reflect.TypeToken;
 import io.clickhandler.action.RemoteActionProvider;
+import io.clickhandler.remoting.Push;
 import javaslang.control.Match;
 import javaslang.control.Try;
+import org.reflections.Reflections;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -26,6 +28,9 @@ public class RemotingAST {
     private final Namespace root = new Namespace().name("").canonicalName("");
     private final TreeMap<String, Namespace> namespaceMap = new TreeMap<>();
 
+    private final Set<ComplexType> pushTypes = new HashSet<>();
+    private String[] pushPackages = new String[]{"model", "io.clickhandler"};
+
     /**
      * @param providerMap
      * @param prefixMap
@@ -35,7 +40,6 @@ public class RemotingAST {
         this.providerMap = providerMap;
         this.prefixMap = prefixMap == null ? new TreeMap<>() : prefixMap;
         this.prefixMap.put("", "");
-        construct();
     }
 
     /**
@@ -78,10 +82,33 @@ public class RemotingAST {
         return namespaceMap;
     }
 
+    public String[] getPushPackages() {
+        return pushPackages;
+    }
+
+    public void setPushPackages(String[] pushPackages) {
+        this.pushPackages = pushPackages;
+    }
+
+    public Set<ComplexType> getPushTypes() {
+        return pushTypes;
+    }
+
+    public boolean isPush(ComplexType type) {
+        return pushTypes.contains(type);
+    }
+
     /**
      *
      */
     public void construct() {
+        // Sniff out Pushes.
+        if (pushPackages != null) {
+            for (String pushPackage : pushPackages) {
+                loadPush(pushPackage);
+            }
+        }
+
         // Build ActionSpecs
         providerMap.forEach((key, value) -> {
             if (value != null) {
@@ -91,7 +118,6 @@ public class RemotingAST {
                     .outSpec(buildType(value.getOutClass())));
             }
         });
-
 
         actionSpecs.forEach((key, value) -> {
             value.name(key.getSimpleName());
@@ -122,6 +148,21 @@ public class RemotingAST {
         });
 
         sorted.keySet().forEach(System.out::println);
+    }
+
+    private void loadPush(String packageName) {
+        final Reflections reflections = new Reflections(packageName);
+        final Set<Class<?>> classes = reflections.getTypesAnnotatedWith(Push.class);
+        if (classes == null || classes.isEmpty())
+            return;
+
+        classes.forEach(c -> {
+            final StandardType type = buildType(c);
+            if (type == null) return;
+
+            if (type instanceof ComplexType)
+                pushTypes.add((ComplexType) type);
+        });
     }
 
     /**
