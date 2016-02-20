@@ -37,5 +37,17 @@ public interface StandardType {
      *
      * @return
      */
+    boolean isAbstract();
+
+    /**
+     *
+     * @return
+     */
+    boolean isInterface();
+
+    /**
+     *
+     * @return
+     */
     String canonicalName();
 }

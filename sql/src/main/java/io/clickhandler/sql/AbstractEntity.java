@@ -6,7 +6,7 @@ import java.util.Date;
 /**
  *
  */
-public class AbstractEntity implements HasId, HasVersion, Serializable {
+public abstract class AbstractEntity implements HasId, HasVersion, Serializable {
     public static final String ID = "id";
     public static final String VERSION = "v";
     public static final String CHANGED = "c";

@@ -1,5 +1,7 @@
 package io.clickhandler.remoting.compiler;
 
+import java.lang.reflect.Modifier;
+
 /**
  *
  */
@@ -23,6 +25,16 @@ public abstract class AbstractType implements StandardType {
     @Override
     public boolean isCollection() {
         return false;
+    }
+
+    @Override
+    public boolean isAbstract() {
+        return Modifier.isAbstract(typeClass.getModifiers());
+    }
+
+    @Override
+    public boolean isInterface() {
+        return typeClass.isInterface();
     }
 
     @Override
