@@ -34,7 +34,7 @@ import org.jooq.impl.TableImpl;
 @SuppressWarnings({ "all", "unchecked", "rawtypes" })
 public class EmailRecipientJnl extends TableImpl<EmailRecipientJnlRecord> {
 
-	private static final long serialVersionUID = -2028430889;
+	private static final long serialVersionUID = 1158297928;
 
 	/**
 	 * The reference instance of <code>email_recipient_jnl</code>
@@ -165,6 +165,22 @@ public class EmailRecipientJnl extends TableImpl<EmailRecipientJnlRecord> {
 	@Override
 	public List<UniqueKey<EmailRecipientJnlRecord>> getKeys() {
 		return Arrays.<UniqueKey<EmailRecipientJnlRecord>>asList(Keys.PK_EMAIL_RECIPIENT_JNL);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public TableField<EmailRecipientJnlRecord, Long> getRecordVersion() {
+		return V;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public TableField<EmailRecipientJnlRecord, Timestamp> getRecordTimestamp() {
+		return C;
 	}
 
 	/**

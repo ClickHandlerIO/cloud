@@ -32,6 +32,11 @@ import javax.annotation.Generated;
 public class Tables {
 
 	/**
+	 * The table evolution_change
+	 */
+	public static final EvolutionChange EVOLUTION_CHANGE = io.clickhandler.data.schema.tables.EvolutionChange.EVOLUTION_CHANGE;
+
+	/**
 	 * The table email
 	 */
 	public static final Email EMAIL = io.clickhandler.data.schema.tables.Email.EMAIL;
@@ -40,31 +45,6 @@ public class Tables {
 	 * The table email_jnl
 	 */
 	public static final EmailJnl EMAIL_JNL = io.clickhandler.data.schema.tables.EmailJnl.EMAIL_JNL;
-
-	/**
-	 * The table evolution_change
-	 */
-	public static final EvolutionChange EVOLUTION_CHANGE = io.clickhandler.data.schema.tables.EvolutionChange.EVOLUTION_CHANGE;
-
-	/**
-	 * The table email_recipient
-	 */
-	public static final EmailRecipient EMAIL_RECIPIENT = io.clickhandler.data.schema.tables.EmailRecipient.EMAIL_RECIPIENT;
-
-	/**
-	 * The table email_recipient_jnl
-	 */
-	public static final EmailRecipientJnl EMAIL_RECIPIENT_JNL = io.clickhandler.data.schema.tables.EmailRecipientJnl.EMAIL_RECIPIENT_JNL;
-
-	/**
-	 * The table email_attachment
-	 */
-	public static final EmailAttachment EMAIL_ATTACHMENT = io.clickhandler.data.schema.tables.EmailAttachment.EMAIL_ATTACHMENT;
-
-	/**
-	 * The table email_attachment_jnl
-	 */
-	public static final EmailAttachmentJnl EMAIL_ATTACHMENT_JNL = io.clickhandler.data.schema.tables.EmailAttachmentJnl.EMAIL_ATTACHMENT_JNL;
 
 	/**
 	 * The table file
@@ -77,7 +57,27 @@ public class Tables {
 	public static final FileJnl FILE_JNL = io.clickhandler.data.schema.tables.FileJnl.FILE_JNL;
 
 	/**
+	 * The table email_attachment
+	 */
+	public static final EmailAttachment EMAIL_ATTACHMENT = io.clickhandler.data.schema.tables.EmailAttachment.EMAIL_ATTACHMENT;
+
+	/**
+	 * The table email_attachment_jnl
+	 */
+	public static final EmailAttachmentJnl EMAIL_ATTACHMENT_JNL = io.clickhandler.data.schema.tables.EmailAttachmentJnl.EMAIL_ATTACHMENT_JNL;
+
+	/**
 	 * The table evolution
 	 */
 	public static final Evolution EVOLUTION = io.clickhandler.data.schema.tables.Evolution.EVOLUTION;
+
+	/**
+	 * The table email_recipient
+	 */
+	public static final EmailRecipient EMAIL_RECIPIENT = io.clickhandler.data.schema.tables.EmailRecipient.EMAIL_RECIPIENT;
+
+	/**
+	 * The table email_recipient_jnl
+	 */
+	public static final EmailRecipientJnl EMAIL_RECIPIENT_JNL = io.clickhandler.data.schema.tables.EmailRecipientJnl.EMAIL_RECIPIENT_JNL;
 }

@@ -34,7 +34,7 @@ import org.jooq.impl.TableImpl;
 @SuppressWarnings({ "all", "unchecked", "rawtypes" })
 public class Evolution extends TableImpl<EvolutionRecord> {
 
-	private static final long serialVersionUID = -1627519773;
+	private static final long serialVersionUID = -1290321572;
 
 	/**
 	 * The reference instance of <code>evolution</code>
@@ -110,6 +110,22 @@ public class Evolution extends TableImpl<EvolutionRecord> {
 	@Override
 	public List<UniqueKey<EvolutionRecord>> getKeys() {
 		return Arrays.<UniqueKey<EvolutionRecord>>asList(Keys.PK_EVOLUTION);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public TableField<EvolutionRecord, Long> getRecordVersion() {
+		return V;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public TableField<EvolutionRecord, Timestamp> getRecordTimestamp() {
+		return C;
 	}
 
 	/**

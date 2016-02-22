@@ -34,7 +34,7 @@ import org.jooq.impl.TableImpl;
 @SuppressWarnings({ "all", "unchecked", "rawtypes" })
 public class File extends TableImpl<FileRecord> {
 
-	private static final long serialVersionUID = 1352910585;
+	private static final long serialVersionUID = 189610352;
 
 	/**
 	 * The reference instance of <code>file</code>
@@ -170,6 +170,22 @@ public class File extends TableImpl<FileRecord> {
 	@Override
 	public List<UniqueKey<FileRecord>> getKeys() {
 		return Arrays.<UniqueKey<FileRecord>>asList(Keys.PK_FILE);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public TableField<FileRecord, Long> getRecordVersion() {
+		return V;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public TableField<FileRecord, Timestamp> getRecordTimestamp() {
+		return C;
 	}
 
 	/**

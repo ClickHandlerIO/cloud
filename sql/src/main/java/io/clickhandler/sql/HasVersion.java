@@ -4,7 +4,7 @@ package io.clickhandler.sql;
  *
  */
 public interface HasVersion extends HasId {
-    long getVersion();
+    long getV();
 
-    void setVersion(long version);
+    void setV(long version);
 }

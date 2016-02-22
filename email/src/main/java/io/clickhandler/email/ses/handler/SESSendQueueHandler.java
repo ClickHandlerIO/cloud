@@ -112,10 +112,10 @@ public class SESSendQueueHandler extends EmailSendQueueHandler<MimeSendRequest> 
             message.setReplyTo(new Address[]{new InternetAddress(emailEntity.getReplyTo())});
             message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(emailEntity.getTo()));
             message.setSentDate(new Date());
-            // Text version
+            // Text v
             final MimeBodyPart textPart = new MimeBodyPart();
             textPart.setContent(emailEntity.getTextBody(), "text/plain");
-            // HTML version
+            // HTML v
             final MimeBodyPart htmlPart = new MimeBodyPart();
             htmlPart.setContent(emailEntity.getHtmlBody(), "text/html");
             // Wrap Parts

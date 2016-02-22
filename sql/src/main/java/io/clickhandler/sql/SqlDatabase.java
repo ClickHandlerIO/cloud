@@ -571,7 +571,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
 
         try {
             executeWrite(session -> {
-                evolution.setChanged(new Date());
+                evolution.setC(new Date());
                 boolean failed = false;
 
                 for (SchemaInspector.Change change : changes) {
