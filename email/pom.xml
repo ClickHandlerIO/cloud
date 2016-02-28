@@ -13,8 +13,9 @@
     <version>0.1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
-    <dependencies>
+    <name>Email</name>
 
+    <dependencies>
         <!--Module dependencies-->
         <dependency>
             <groupId>io.clickhandler</groupId>
@@ -41,7 +42,6 @@
         <dependency>
             <groupId>com.amazonaws</groupId>
             <artifactId>aws-java-sdk-ses</artifactId>
-            <version>1.10.20</version>
         </dependency>
         <dependency>
             <groupId>io.vertx</groupId>
@@ -61,7 +61,7 @@
         </dependency>
         <dependency>
             <groupId>javax.mail</groupId>
-            <artifactId>mail</artifactId>
+            <artifactId>javax.mail-api</artifactId>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>

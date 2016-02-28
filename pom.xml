@@ -13,7 +13,7 @@ http://www.w3.org/2001/XMLSchema-instance ">
     <version>0.1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
-    <name>ClickHandler Cloud</name>
+    <name>Cloud</name>
     <description>ClickHandler.io Cloud</description>
     <url>http://www.clickhandler.io/</url>
     <inceptionYear>2016</inceptionYear>
@@ -56,9 +56,32 @@ http://www.w3.org/2001/XMLSchema-instance ">
         <java.version>1.8</java.version>
         <dagger.version>2.0.2</dagger.version>
         <maven-compiler-plugin.version>3.3</maven-compiler-plugin.version>
+        <maven-source-plugin.version>3.0.0</maven-source-plugin.version>
+        <maven-dependency-plugin.version>2.10</maven-dependency-plugin.version>
         <maven-resources-plugin.version>2.5</maven-resources-plugin.version>
         <maven-gpg-plugin.version>1.6</maven-gpg-plugin.version>
         <nexus-staging-maven-plugin.version>1.6.6</nexus-staging-maven-plugin.version>
+
+        <auto-service.version>1.0-rc2</auto-service.version>
+        <aws.version>1.10.56</aws.version>
+        <cglib-nodep.version>3.2.1</cglib-nodep.version>
+        <guava.version>19.0</guava.version>
+        <hikaricp.version>2.4.3</hikaricp.version>
+        <hystrix.version>1.5.0-rc.5</hystrix.version>
+        <jackson.version>2.7.2</jackson.version>
+        <javax-mail.version>1.5.5</javax-mail.version>
+        <javapoet.version>1.5.1</javapoet.version>
+        <javaslang.version>2.0.0-RC4</javaslang.version>
+        <jooq.version>3.7.2</jooq.version>
+        <junit.version>4.12</junit.version>
+        <mysql.version>5.1.38</mysql.version>
+        <netty.version>4.0.33.Final</netty.version>
+        <reflections.version>0.9.10</reflections.version>
+        <slf4j.version>1.7.18</slf4j.version>
+        <vertx.version>3.2.1</vertx.version>
+        <rxjava.version>1.1.1</rxjava.version>
+        <javax-validation-api.version>1.1.0.Final</javax-validation-api.version>
+        <selenium.version>2.52.0</selenium.version>
     </properties>
 
     <distributionManagement>
@@ -96,6 +119,7 @@ http://www.w3.org/2001/XMLSchema-instance ">
         <module>common</module>
         <module>queue</module>
         <module>remoting</module>
+        <module>remoting-web</module>
         <module>sql</module>
         <module>email-schema</module>
         <module>email</module>
@@ -151,11 +175,29 @@ http://www.w3.org/2001/XMLSchema-instance ">
                 <version>${project.version}</version>
             </dependency>
 
+            <dependency>
+                <groupId>io.clickhandler</groupId>
+                <artifactId>cloud-remoting</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.clickhandler</groupId>
+                <artifactId>cloud-remoting-web</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>javax.validation</groupId>
+                <artifactId>validation-api</artifactId>
+                <version>${javax-validation-api.version}</version>
+            </dependency>
+
             <!-- SQL -->
             <dependency>
                 <groupId>com.zaxxer</groupId>
                 <artifactId>HikariCP</artifactId>
-                <version>2.4.3</version>
+                <version>${hikaricp.version}</version>
             </dependency>
 
             <dependency>
@@ -166,29 +208,31 @@ http://www.w3.org/2001/XMLSchema-instance ">
             <dependency>
                 <groupId>cglib</groupId>
                 <artifactId>cglib-nodep</artifactId>
-                <version>2.1_3</version>
+                <version>${cglib-nodep.version}</version>
             </dependency>
             <dependency>
                 <groupId>mysql</groupId>
                 <artifactId>mysql-connector-java</artifactId>
-                <version>5.1.38</version>
+                <version>${mysql.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.jooq</groupId>
                 <artifactId>jooq</artifactId>
-                <version>3.7.2</version>
+                <version>${jooq.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.jooq</groupId>
                 <artifactId>jooq-codegen</artifactId>
-                <version>3.7.2</version>
+                <version>${jooq.version}</version>
             </dependency>
 
             <!-- External Dependencies -->
             <dependency>
                 <groupId>com.amazonaws</groupId>
-                <artifactId>aws-java-sdk-sqs</artifactId>
-                <version>1.10.20</version>
+                <artifactId>aws-java-sdk-bom</artifactId>
+                <version>${aws.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
             </dependency>
 
             <dependency>
@@ -207,19 +251,19 @@ http://www.w3.org/2001/XMLSchema-instance ">
             <dependency>
                 <groupId>com.javaslang</groupId>
                 <artifactId>javaslang</artifactId>
-                <version>2.0.0-RC3</version>
+                <version>${javaslang.version}</version>
             </dependency>
 
             <dependency>
                 <groupId>io.reactivex</groupId>
                 <artifactId>rxjava</artifactId>
-                <version>1.1.0</version>
+                <version>${rxjava.version}</version>
             </dependency>
 
             <dependency>
                 <groupId>com.fasterxml.jackson.core</groupId>
                 <artifactId>jackson-annotations</artifactId>
-                <version>2.6.2</version>
+                <version>${jackson.version}</version>
             </dependency>
 
             <dependency>
@@ -227,75 +271,17 @@ http://www.w3.org/2001/XMLSchema-instance ">
                 <artifactId>javax.inject</artifactId>
                 <version>1</version>
             </dependency>
+
             <dependency>
                 <groupId>javax.mail</groupId>
-                <artifactId>mail</artifactId>
-                <version>1.4.7</version>
+                <artifactId>javax.mail-api</artifactId>
+                <version>${javax-mail.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>com.google.guava</groupId>
                 <artifactId>guava</artifactId>
-                <version>18.0</version>
-            </dependency>
-            <dependency>
-                <groupId>org.reflections</groupId>
-                <artifactId>reflections</artifactId>
-                <version>0.9.9-RC2</version>
-            </dependency>
-            <dependency>
-                <groupId>org.slf4j</groupId>
-                <artifactId>slf4j-api</artifactId>
-                <version>1.7.12</version>
-            </dependency>
-
-            <dependency>
-                <groupId>io.vertx</groupId>
-                <artifactId>vertx-core</artifactId>
-                <version>3.2.0</version>
-            </dependency>
-
-            <dependency>
-                <groupId>io.vertx</groupId>
-                <artifactId>vertx-codegen</artifactId>
-                <version>3.2.0</version>
-            </dependency>
-
-            <dependency>
-                <groupId>io.vertx</groupId>
-                <artifactId>vertx-web</artifactId>
-                <version>3.2.0</version>
-            </dependency>
-
-            <dependency>
-                <groupId>io.vertx</groupId>
-                <artifactId>vertx-rx-java</artifactId>
-                <version>3.2.0</version>
-            </dependency>
-
-            <dependency>
-                <groupId>io.netty</groupId>
-                <artifactId>netty-codec-haproxy</artifactId>
-                <version>4.0.32.Final</version>
-            </dependency>
-
-            <dependency>
-                <groupId>com.netflix.hystrix</groupId>
-                <artifactId>hystrix-core</artifactId>
-                <version>1.5.0-rc.1</version>
-            </dependency>
-
-            <!-- Auto service annotation processor -->
-            <dependency>
-                <groupId>com.squareup</groupId>
-                <artifactId>javapoet</artifactId>
-                <version>1.5.1</version>
-            </dependency>
-
-            <dependency>
-                <groupId>com.google.auto.service</groupId>
-                <artifactId>auto-service</artifactId>
-                <version>1.0-rc2</version>
-                <optional>true</optional>
+                <version>${guava.version}</version>
             </dependency>
 
             <dependency>
@@ -305,9 +291,65 @@ http://www.w3.org/2001/XMLSchema-instance ">
             </dependency>
 
             <dependency>
-                <groupId>org.msgpack</groupId>
-                <artifactId>jackson-dataformat-msgpack</artifactId>
-                <version>${jackson-dataformat-msgpack.version}</version>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-api</artifactId>
+                <version>${slf4j.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.vertx</groupId>
+                <artifactId>vertx-core</artifactId>
+                <version>${vertx.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.vertx</groupId>
+                <artifactId>vertx-codegen</artifactId>
+                <version>${vertx.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.vertx</groupId>
+                <artifactId>vertx-hazelcast</artifactId>
+                <version>${vertx.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.vertx</groupId>
+                <artifactId>vertx-web</artifactId>
+                <version>${vertx.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.vertx</groupId>
+                <artifactId>vertx-rx-java</artifactId>
+                <version>${vertx.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.netty</groupId>
+                <artifactId>netty-codec-haproxy</artifactId>
+                <version>${netty.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.netflix.hystrix</groupId>
+                <artifactId>hystrix-core</artifactId>
+                <version>${hystrix.version}</version>
+            </dependency>
+
+            <!-- Auto service annotation processor -->
+            <dependency>
+                <groupId>com.squareup</groupId>
+                <artifactId>javapoet</artifactId>
+                <version>${javapoet.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.google.auto.service</groupId>
+                <artifactId>auto-service</artifactId>
+                <version>${auto-service.version}</version>
+                <optional>true</optional>
             </dependency>
 
             <!-- Testing -->
@@ -318,30 +360,10 @@ http://www.w3.org/2001/XMLSchema-instance ">
             </dependency>
 
             <dependency>
-                <groupId>org.jukito</groupId>
-                <artifactId>jukito</artifactId>
-                <version>${jukito.version}</version>
-                <scope>test</scope>
-            </dependency>
-
-            <dependency>
-                <groupId>org.testng</groupId>
-                <artifactId>testng</artifactId>
-                <version>${test-ng.version}</version>
-                <scope>test</scope>
-            </dependency>
-
-            <dependency>
                 <groupId>junit</groupId>
                 <artifactId>junit</artifactId>
-                <version>4.11</version>
+                <version>${junit.version}</version>
                 <scope>test</scope>
-            </dependency>
-
-            <dependency>
-                <groupId>com.googlecode.owasp-java-html-sanitizer</groupId>
-                <artifactId>owasp-java-html-sanitizer</artifactId>
-                <version>20150501.1</version>
             </dependency>
 
         </dependencies>
@@ -356,6 +378,7 @@ http://www.w3.org/2001/XMLSchema-instance ">
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-source-plugin</artifactId>
+                <version>${maven-source-plugin.version}</version>
                 <executions>
                     <execution>
                         <id>attach-sources</id>
@@ -367,22 +390,22 @@ http://www.w3.org/2001/XMLSchema-instance ">
             </plugin>
 
             <!--<plugin>-->
-                <!--<groupId>org.apache.maven.plugins</groupId>-->
-                <!--<artifactId>maven-javadoc-plugin</artifactId>-->
-                <!--<executions>-->
-                    <!--<execution>-->
-                        <!--<id>attach-javadocs</id>-->
-                        <!--<goals>-->
-                            <!--<goal>jar</goal>-->
-                        <!--</goals>-->
-                    <!--</execution>-->
-                <!--</executions>-->
+            <!--<groupId>org.apache.maven.plugins</groupId>-->
+            <!--<artifactId>maven-javadoc-plugin</artifactId>-->
+            <!--<executions>-->
+            <!--<execution>-->
+            <!--<id>attach-javadocs</id>-->
+            <!--<goals>-->
+            <!--<goal>jar</goal>-->
+            <!--</goals>-->
+            <!--</execution>-->
+            <!--</executions>-->
             <!--</plugin>-->
 
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-dependency-plugin</artifactId>
-                <version>2.4</version>
+                <version>${maven-dependency-plugin.version}</version>
                 <executions>
                     <execution>
                         <id>copy-dependencies</id>
@@ -396,12 +419,12 @@ http://www.w3.org/2001/XMLSchema-instance ">
 
             <plugin>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.1</version>
+                <version>${maven-compiler-plugin.version}</version>
                 <dependencies>
                     <dependency>
                         <groupId>com.google.dagger</groupId>
                         <artifactId>dagger-compiler</artifactId>
-                        <version>2.0.2</version>
+                        <version>${dagger.version}</version>
                     </dependency>
                 </dependencies>
                 <configuration>

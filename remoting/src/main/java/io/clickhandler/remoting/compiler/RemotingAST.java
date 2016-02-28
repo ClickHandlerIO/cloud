@@ -19,7 +19,7 @@ import java.util.*;
  */
 public class RemotingAST {
     public final Map<Object, RemoteActionProvider<?, ?, ?>> providerMap;
-    private final Map<Class, StandardType> types = new HashMap<>();
+    private final Map<Type, StandardType> types = new HashMap<>();
     private final Map<Class, ActionSpec> actionSpecs = new HashMap<>();
     private final TreeMap<String, ActionSpec> actionMap = new TreeMap<>();
     private final TreeMap<String, String> prefixMap;
@@ -54,7 +54,7 @@ public class RemotingAST {
         return value.length() == 1 ? out : out + value.substring(1);
     }
 
-    public Map<Class, StandardType> getTypes() {
+    public Map<Type, StandardType> getTypes() {
         return types;
     }
 
@@ -135,7 +135,7 @@ public class RemotingAST {
         types.forEach((type, spec) -> {
             if (spec instanceof MaterializedType) {
                 final MaterializedType materializedType = (MaterializedType) spec;
-                final String canonicalName = findCanonicalName(type.getCanonicalName());
+                final String canonicalName = findCanonicalName(TypeToken.of(type).getRawType().getCanonicalName());
                 final Namespace namespace = findNamespace(canonicalName, 1);
 
                 materializedType
@@ -232,7 +232,7 @@ public class RemotingAST {
      * @return
      */
     private StandardType buildType(Class type, Type genericType) {
-        StandardType dataType = types.get(type);
+        StandardType dataType = genericType != null ? types.get(genericType) : types.get(type);
         if (dataType != null) {
             return dataType;
         }
@@ -327,7 +327,11 @@ public class RemotingAST {
             }
         }
 
-        types.put(type, dataType);
+        if (genericType != null) {
+            types.put(genericType, dataType);
+        } else {
+            types.put(type, dataType);
+        }
         return dataType;
     }
 }

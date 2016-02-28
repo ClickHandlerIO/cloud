@@ -23,12 +23,6 @@
             <artifactId>aws-java-sdk-sqs</artifactId>
         </dependency>
         <dependency>
-            <groupId>io.iron.ironmq</groupId>
-            <artifactId>ironmq</artifactId>
-            <version>3.0.2</version>
-        </dependency>
-
-        <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
             <scope>test</scope>
