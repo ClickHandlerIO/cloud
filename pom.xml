@@ -199,7 +199,6 @@ http://www.w3.org/2001/XMLSchema-instance ">
                 <artifactId>HikariCP</artifactId>
                 <version>${hikaricp.version}</version>
             </dependency>
-
             <dependency>
                 <groupId>com.h2database</groupId>
                 <artifactId>h2</artifactId>
@@ -223,6 +222,11 @@ http://www.w3.org/2001/XMLSchema-instance ">
             <dependency>
                 <groupId>org.jooq</groupId>
                 <artifactId>jooq-codegen</artifactId>
+                <version>${jooq.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.jooq</groupId>
+                <artifactId>jooq-meta</artifactId>
                 <version>${jooq.version}</version>
             </dependency>
 
