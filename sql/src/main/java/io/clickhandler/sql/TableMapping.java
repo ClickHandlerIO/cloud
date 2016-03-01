@@ -339,19 +339,7 @@ public class TableMapping extends Mapping {
             if (entityClassName.endsWith(ENTITY_SUFFIX)) {
                 entityClassName = entityClassName.substring(0, entityClassName.length() - ENTITY_SUFFIX.length());
             }
-
-            final StringBuilder sb = new StringBuilder();
-            for (char c : entityClassName.toCharArray()) {
-                if (Character.isUpperCase(c)) {
-                    if (sb.length() > 0) {
-                        sb.append('_');
-                    }
-                }
-
-                sb.append(Character.toLowerCase(c));
-            }
-
-            name = sb.toString();
+            name = SqlUtils.sqlName(entityClassName);
         }
 
         if (journal) {

@@ -82,19 +82,7 @@ public class Mapping {
             return prefix;
         }
 
-        // Implicitly create COLUMN NAME using this convention (TotalCost = TOTAL_COST)
-        final StringBuilder sb = new StringBuilder();
-        for (char c : propertyName.toCharArray()) {
-            if (Character.isUpperCase(c)) {
-                if (sb.length() > 0) {
-                    sb.append('_');
-                }
-            }
-
-            sb.append(Character.toLowerCase(c));
-        }
-
-        propertyName = sb.toString();
+        propertyName = SqlUtils.sqlName(propertyName);
         if (embedded && !propertyName.endsWith("_")) {
             propertyName = propertyName + "_";
         }

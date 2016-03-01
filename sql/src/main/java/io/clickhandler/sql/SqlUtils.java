@@ -19,6 +19,52 @@ public class SqlUtils {
     public static final String[] ALPHABET = {"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"};
 
     /**
+     *
+     * @param name
+     * @return
+     */
+    public static String sqlName(String name) {
+        final StringBuilder sb = new StringBuilder();
+        final char[] chars = name.toCharArray();
+        for (int i = 0; i < chars.length; i++) {
+            final char c = chars[i];
+            if (i == chars.length - 1) {
+                sb.append(Character.toLowerCase(c));
+            } else if (Character.isUpperCase(c) && sb.length() > 0) {
+                String part = String.valueOf(Character.toLowerCase(c));
+
+                for (i = i + 1; i < chars.length; i++) {
+                    final char lookahead = chars[i];
+                    if (!Character.isUpperCase(lookahead)) {
+                        if (part.length() == 2) {
+                            sb.append("_").append(part).append("_").append(Character.toLowerCase(lookahead));
+                        } else if (part.length() > 2) {
+                            sb.append("_");
+                            sb.append(part.substring(0, part.length() - 1));
+                            sb.append("_");
+                            sb.append(part.substring(part.length() - 1));
+                            sb.append(Character.toLowerCase(lookahead));
+                        } else {
+                            sb.append("_").append(part).append(Character.toLowerCase(lookahead));
+                        }
+                        part = null;
+                        break;
+                    } else {
+                        part += String.valueOf(Character.toLowerCase(lookahead));
+                    }
+                }
+
+                if (part != null) {
+                    sb.append(part);
+                }
+            } else {
+                sb.append(Character.toLowerCase(c));
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
      * Returns true if the provided class is a type supported natively (as
      * opposed to a bean).
      *
