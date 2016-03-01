@@ -225,6 +225,14 @@ public class ActionProvider<A, IN, OUT> {
         ).toBlocking().toFuture().get()).get();
     }
 
+    protected Observable<OUT> observe(final Object context, final Func.Run1<IN> callback) {
+        final IN in = inProvider.get();
+        if (callback != null) {
+            callback.run(in);
+        }
+        return observe(context, in);
+    }
+
     protected Observable<OUT> observe(final Func.Run1<IN> callback) {
         final IN in = inProvider.get();
         if (callback != null) {

@@ -38,6 +38,10 @@ public abstract class AbstractAction<IN, OUT> implements Action<IN, OUT> {
         return this;
     }
 
+    public IN request() {
+        return request.get();
+    }
+
     /**
      * @return
      */

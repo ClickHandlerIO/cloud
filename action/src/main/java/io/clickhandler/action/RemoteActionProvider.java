@@ -28,6 +28,10 @@ public class RemoteActionProvider<A extends Action<IN, OUT>, IN, OUT> extends Ac
         return remoteAction.guarded();
     }
 
+    public Observable<OUT> observe(final Object context, final Func.Run1<IN> callback) {
+        return super.observe(context, callback);
+    }
+
     public Observable<OUT> observe(final Func.Run1<IN> callback) {
         return super.observe(callback);
     }
