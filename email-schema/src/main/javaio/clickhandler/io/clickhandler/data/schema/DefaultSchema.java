@@ -38,7 +38,7 @@ import org.jooq.impl.SchemaImpl;
 @SuppressWarnings({ "all", "unchecked", "rawtypes" })
 public class DefaultSchema extends SchemaImpl {
 
-	private static final long serialVersionUID = 2024393828;
+	private static final long serialVersionUID = 1174918962;
 
 	/**
 	 * The reference instance of <code></code>
@@ -61,14 +61,14 @@ public class DefaultSchema extends SchemaImpl {
 
 	private final List<Table<?>> getTables0() {
 		return Arrays.<Table<?>>asList(
-			EvolutionChange.EVOLUTION_CHANGE,
-			Email.EMAIL,
-			EmailJnl.EMAIL_JNL,
-			File.FILE,
-			FileJnl.FILE_JNL,
 			EmailAttachment.EMAIL_ATTACHMENT,
 			EmailAttachmentJnl.EMAIL_ATTACHMENT_JNL,
 			Evolution.EVOLUTION,
+			File.FILE,
+			FileJnl.FILE_JNL,
+			EvolutionChange.EVOLUTION_CHANGE,
+			Email.EMAIL,
+			EmailJnl.EMAIL_JNL,
 			EmailRecipient.EMAIL_RECIPIENT,
 			EmailRecipientJnl.EMAIL_RECIPIENT_JNL);
 	}

@@ -32,31 +32,6 @@ import javax.annotation.Generated;
 public class Tables {
 
 	/**
-	 * The table evolution_change
-	 */
-	public static final EvolutionChange EVOLUTION_CHANGE = io.clickhandler.data.schema.tables.EvolutionChange.EVOLUTION_CHANGE;
-
-	/**
-	 * The table email
-	 */
-	public static final Email EMAIL = io.clickhandler.data.schema.tables.Email.EMAIL;
-
-	/**
-	 * The table email_jnl
-	 */
-	public static final EmailJnl EMAIL_JNL = io.clickhandler.data.schema.tables.EmailJnl.EMAIL_JNL;
-
-	/**
-	 * The table file
-	 */
-	public static final File FILE = io.clickhandler.data.schema.tables.File.FILE;
-
-	/**
-	 * The table file_jnl
-	 */
-	public static final FileJnl FILE_JNL = io.clickhandler.data.schema.tables.FileJnl.FILE_JNL;
-
-	/**
 	 * The table email_attachment
 	 */
 	public static final EmailAttachment EMAIL_ATTACHMENT = io.clickhandler.data.schema.tables.EmailAttachment.EMAIL_ATTACHMENT;
@@ -70,6 +45,31 @@ public class Tables {
 	 * The table evolution
 	 */
 	public static final Evolution EVOLUTION = io.clickhandler.data.schema.tables.Evolution.EVOLUTION;
+
+	/**
+	 * The table file
+	 */
+	public static final File FILE = io.clickhandler.data.schema.tables.File.FILE;
+
+	/**
+	 * The table file_jnl
+	 */
+	public static final FileJnl FILE_JNL = io.clickhandler.data.schema.tables.FileJnl.FILE_JNL;
+
+	/**
+	 * The table evolution_change
+	 */
+	public static final EvolutionChange EVOLUTION_CHANGE = io.clickhandler.data.schema.tables.EvolutionChange.EVOLUTION_CHANGE;
+
+	/**
+	 * The table email
+	 */
+	public static final Email EMAIL = io.clickhandler.data.schema.tables.Email.EMAIL;
+
+	/**
+	 * The table email_jnl
+	 */
+	public static final EmailJnl EMAIL_JNL = io.clickhandler.data.schema.tables.EmailJnl.EMAIL_JNL;
 
 	/**
 	 * The table email_recipient

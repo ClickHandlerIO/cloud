@@ -1,5 +1,6 @@
 package io.clickhandler.remoting.web;
 
+import com.google.common.base.Charsets;
 import com.google.web.bindery.event.shared.HandlerRegistration;
 import com.squareup.javapoet.*;
 import com.squareup.javapoet.FieldSpec;
@@ -41,6 +42,7 @@ public class CodeGenerator {
     private RemotingAST ast;
     private TypeSpec.Builder initializerType = null;
     private MethodSpec.Builder initMethod = null;
+    private String gwtModuleFileName = "Api.gwt.xml";
 
     public CodeGenerator(RemotingAST ast, String rootPackage, File outputDir) {
         this.ast = ast;
@@ -105,6 +107,24 @@ public class CodeGenerator {
             JavaFile.builder(rootPackage, initializerType.build()).build().writeTo(outputDir);
         } catch (IOException e) {
             e.printStackTrace();
+        }
+
+        final String gwtModuleFileContents = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+            "\n" +
+            "<module>\n" +
+            "    <inherits name=\"com.google.gwt.user.User\"/>\n" +
+            "    <inherits name=\"com.google.gwt.resources.Resources\"/>\n" +
+            "    <inherits name=\"io.clickhandler.web.Web\" />\n" +
+            "\n" +
+            "    <source path=\"\"/>\n" +
+            "</module>\n";
+        try {
+            com.google.common.io.Files.write(
+                gwtModuleFileContents.getBytes(Charsets.UTF_8),
+                new File(outputDir + File.separator + rootPackage.replace(".", File.separator) + File.separator + gwtModuleFileName)
+            );
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
     }
 
@@ -646,10 +666,12 @@ public class CodeGenerator {
             }
         });
 
-        try {
-            JavaFile.builder(namespace.path(), type.build()).build().writeTo(outputDir);
-        } catch (IOException e) {
-            e.printStackTrace();
+        if (namespace.canonicalName().startsWith(rootPackage)){
+            try {
+                JavaFile.builder(namespace.path(), type.build()).build().writeTo(outputDir);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
     }
 

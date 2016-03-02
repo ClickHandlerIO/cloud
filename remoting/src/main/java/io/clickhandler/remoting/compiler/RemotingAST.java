@@ -3,6 +3,7 @@ package io.clickhandler.remoting.compiler;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.Strings;
 import com.google.common.reflect.TypeToken;
+import io.clickhandler.action.Action;
 import io.clickhandler.action.RemoteActionProvider;
 import io.clickhandler.remoting.Push;
 import javaslang.control.Match;
@@ -11,6 +12,7 @@ import org.reflections.Reflections;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
 import java.util.*;
 
@@ -19,15 +21,14 @@ import java.util.*;
  */
 public class RemotingAST {
     public final Map<Object, RemoteActionProvider<?, ?, ?>> providerMap;
+    final StandardType OBJECT_TYPE = new PrimitiveType(Object.class, DataType.WILDCARD, true);
     private final Map<Type, StandardType> types = new HashMap<>();
     private final Map<Class, ActionSpec> actionSpecs = new HashMap<>();
     private final TreeMap<String, ActionSpec> actionMap = new TreeMap<>();
     private final TreeMap<String, String> prefixMap;
-
     private final Map<String, Boolean> isClassMap = new HashMap<>();
     private final Namespace root = new Namespace().name("").canonicalName("");
     private final TreeMap<String, Namespace> namespaceMap = new TreeMap<>();
-
     private final Set<ComplexType> pushTypes = new HashSet<>();
     private String[] pushPackages = new String[]{"model", "io.clickhandler"};
 
@@ -131,6 +132,8 @@ public class RemotingAST {
 
         // Build namespaces.
 
+        final List<MaterializedType> nonStaticTypes = new ArrayList<>();
+
         final TreeMap<String, MaterializedType> sorted = new TreeMap<>();
         types.forEach((type, spec) -> {
             if (spec instanceof MaterializedType) {
@@ -142,10 +145,23 @@ public class RemotingAST {
                     .namespace(namespace)
                     .canonicalName(canonicalName);
 
-                namespace.types().add(materializedType);
+                // Ensure it's not an embedded type on an action.
+                if (!namespaceMap.containsKey(materializedType.canonicalName())) {
+                    namespace.types().add(materializedType);
+                }
+
+                if (materializedType.namespace().isClass() && !Modifier.isStatic(materializedType.javaType().getModifiers())) {
+                    nonStaticTypes.add(materializedType);
+                }
+
                 sorted.put(canonicalName, materializedType);
             }
         });
+
+        if (!nonStaticTypes.isEmpty()) {
+            nonStaticTypes.forEach(t -> System.err.println("Type [" + t.javaType().getCanonicalName() + "] needs the 'static' modifier."));
+            throw new RuntimeException("Invalid Types found");
+        }
 
         sorted.keySet().forEach(System.out::println);
     }
@@ -232,106 +248,124 @@ public class RemotingAST {
      * @return
      */
     private StandardType buildType(Class type, Type genericType) {
-        StandardType dataType = genericType != null ? types.get(genericType) : types.get(type);
-        if (dataType != null) {
-            return dataType;
-        }
-
-        if (type.isEnum()) {
-            final Object[] enumConstants = type.getEnumConstants();
-            final String[] vals;
-            if (enumConstants != null) {
-                vals = new String[enumConstants.length];
-                for (int i = 0; i < enumConstants.length; i++)
-                    vals[i] = enumConstants[i].toString();
-            } else {
-                vals = new String[0];
+        try {
+            StandardType dataType = genericType != null ? types.get(genericType) : types.get(type);
+            if (dataType != null) {
+                return dataType;
             }
 
-            dataType = new EnumType(type, vals);
-        } else if (type.isArray()) {
-            dataType = new ArrayType(buildType(type.getComponentType()));
-        } else if (List.class.isAssignableFrom(type)) {
-            final Class componentType = TypeToken.of(genericType).resolveType(List.class.getTypeParameters()[0]).getRawType();
-            dataType = new ListType(buildType(componentType));
-        } else if (Set.class.isAssignableFrom(type)) {
-            final Class componentType = TypeToken.of(genericType).resolveType(Set.class.getTypeParameters()[0]).getRawType();
-            dataType = new SetType(buildType(componentType));
-        } else if (Map.class.isAssignableFrom(type)) {
-            final Class keyType = TypeToken.of(genericType).resolveType(Map.class.getTypeParameters()[0]).getRawType();
-            final Class valueType = TypeToken.of(genericType).resolveType(Map.class.getTypeParameters()[1]).getRawType();
-            dataType = new MapType(type, buildType(keyType), buildType(valueType));
-        } else {
-            dataType = Match.of(type)
-                .whenIs(byte.class).then((StandardType) new PrimitiveType(byte.class, DataType.BYTE, false))
-                .whenIs(Byte.class).then(new PrimitiveType(Byte.class, DataType.BYTE, true))
-                .whenIs(boolean.class).then(new PrimitiveType(boolean.class, DataType.BOOLEAN, false))
-                .whenIs(Boolean.class).then(new PrimitiveType(Boolean.class, DataType.BOOLEAN, true))
-                .whenIs(short.class).then(new PrimitiveType(short.class, DataType.SHORT, false))
-                .whenIs(Short.class).then(new PrimitiveType(Short.class, DataType.SHORT, true))
-                .whenIs(char.class).then(new PrimitiveType(char.class, DataType.CHAR, false))
-                .whenIs(Character.class).then(new PrimitiveType(Character.class, DataType.CHAR, true))
-                .whenIs(int.class).then(new PrimitiveType(int.class, DataType.INT, false))
-                .whenIs(Integer.class).then(new PrimitiveType(Integer.class, DataType.INT, true))
-                .whenIs(long.class).then(new PrimitiveType(long.class, DataType.LONG, false))
-                .whenIs(Long.class).then(new PrimitiveType(Long.class, DataType.LONG, true))
-                .whenIs(float.class).then(new PrimitiveType(float.class, DataType.FLOAT, false))
-                .whenIs(Float.class).then(new PrimitiveType(Float.class, DataType.FLOAT, true))
-                .whenIs(double.class).then(new PrimitiveType(double.class, DataType.DOUBLE, false))
-                .whenIs(Double.class).then(new PrimitiveType(Double.class, DataType.DOUBLE, true))
-                .whenIs(Date.class).then(new DateType())
-                .whenIs(String.class).then(new StringType())
-                .whenIs(Object.class).then(new WildcardType())
-                .whenIs(Enum.class).then(new WildcardType())
-                .otherwise((StandardType) null)
-                .get();
+            if (type.isEnum()) {
+                final Object[] enumConstants = type.getEnumConstants();
+                final String[] vals;
+                if (enumConstants != null) {
+                    vals = new String[enumConstants.length];
+                    for (int i = 0; i < enumConstants.length; i++)
+                        vals[i] = enumConstants[i].toString();
+                } else {
+                    vals = new String[0];
+                }
 
-            if (dataType == null) {
-                final ComplexType complexType = new ComplexType(type, buildType(type.getSuperclass()));
-                dataType = complexType;
-                final Field[] declaredFields = type.getDeclaredFields();
-                for (Field field : declaredFields) {
-                    final String name = field.getName();
-                    final Class fieldClass = field.getType();
-                    final Type fieldType = field.getGenericType();
+                dataType = new EnumType(type, vals);
+            } else if (type.isArray()) {
+                dataType = new ArrayType(buildType(type.getComponentType()));
+            } else if (List.class.isAssignableFrom(type)) {
+                final Class componentType = TypeToken.of(genericType).resolveType(List.class.getTypeParameters()[0]).getRawType();
+                dataType = new ListType(buildType(componentType));
+            } else if (Set.class.isAssignableFrom(type)) {
+                final Class componentType = TypeToken.of(genericType).resolveType(Set.class.getTypeParameters()[0]).getRawType();
+                dataType = new SetType(buildType(componentType));
+            } else if (Map.class.isAssignableFrom(type)) {
+                final Class keyType = TypeToken.of(genericType).resolveType(Map.class.getTypeParameters()[0]).getRawType();
+                final Class valueType = TypeToken.of(genericType).resolveType(Map.class.getTypeParameters()[1]).getRawType();
+                dataType = new MapType(type, buildType(keyType), buildType(valueType));
+            } else {
+                dataType = Match.of(type)
+                    .whenIs(byte.class).then((StandardType) new PrimitiveType(byte.class, DataType.BYTE, false))
+                    .whenIs(Byte.class).then(new PrimitiveType(Byte.class, DataType.BYTE, true))
+                    .whenIs(boolean.class).then(new PrimitiveType(boolean.class, DataType.BOOLEAN, false))
+                    .whenIs(Boolean.class).then(new PrimitiveType(Boolean.class, DataType.BOOLEAN, true))
+                    .whenIs(short.class).then(new PrimitiveType(short.class, DataType.SHORT, false))
+                    .whenIs(Short.class).then(new PrimitiveType(Short.class, DataType.SHORT, true))
+                    .whenIs(char.class).then(new PrimitiveType(char.class, DataType.CHAR, false))
+                    .whenIs(Character.class).then(new PrimitiveType(Character.class, DataType.CHAR, true))
+                    .whenIs(int.class).then(new PrimitiveType(int.class, DataType.INT, false))
+                    .whenIs(Integer.class).then(new PrimitiveType(Integer.class, DataType.INT, true))
+                    .whenIs(long.class).then(new PrimitiveType(long.class, DataType.LONG, false))
+                    .whenIs(Long.class).then(new PrimitiveType(Long.class, DataType.LONG, true))
+                    .whenIs(float.class).then(new PrimitiveType(float.class, DataType.FLOAT, false))
+                    .whenIs(Float.class).then(new PrimitiveType(Float.class, DataType.FLOAT, true))
+                    .whenIs(double.class).then(new PrimitiveType(double.class, DataType.DOUBLE, false))
+                    .whenIs(Double.class).then(new PrimitiveType(Double.class, DataType.DOUBLE, true))
+                    .whenIs(Date.class).then(new DateType())
+                    .whenIs(String.class).then(new StringType())
+                    .whenIs(Object.class).then(new WildcardType())
+                    .whenIs(Enum.class).then(new WildcardType())
+                    .otherwise((StandardType) null)
+                    .get();
 
-                    JsonProperty jsonProperty = field.getAnnotation(JsonProperty.class);
+                if (dataType == null) {
+                    if (Action.class.isAssignableFrom(type)) {
+                        dataType = new ComplexType(type);
+                    } else {
+                        final ComplexType complexType = new ComplexType(type);
+                        dataType = complexType;
+                        if (genericType != null) {
+                            types.put(genericType, complexType);
+                        } else {
+                            types.put(type, complexType);
+                        }
 
-                    final Method none = null;
-                    final Method fluentGetter = Try.of(() -> type.getDeclaredMethod(name)).getOrElse(none);
+                        complexType.setSuperType(buildType(type.getSuperclass()));
 
-                    Method getter = Try.of(() -> type.getDeclaredMethod("get" + capitalize(name))).getOrElse(none);
-                    if (getter == null)
-                        getter = Try.of(() -> type.getDeclaredMethod("is" + capitalize(name))).getOrElse(none);
+                        final Field[] declaredFields = type.getDeclaredFields();
+                        for (Field field : declaredFields) {
+                            final String name = field.getName();
+                            final Class fieldClass = field.getType();
+                            final Type fieldType = field.getGenericType();
 
-                    if (jsonProperty == null && fluentGetter != null) {
-                        jsonProperty = fluentGetter.getAnnotation(JsonProperty.class);
+                            JsonProperty jsonProperty = field.getAnnotation(JsonProperty.class);
+
+                            final Method none = null;
+                            final Method fluentGetter = Try.of(() -> type.getDeclaredMethod(name)).getOrElse(none);
+
+                            Method getter = Try.of(() -> type.getDeclaredMethod("get" + capitalize(name))).getOrElse(none);
+                            if (getter == null)
+                                getter = Try.of(() -> type.getDeclaredMethod("is" + capitalize(name))).getOrElse(none);
+
+                            if (jsonProperty == null && fluentGetter != null) {
+                                jsonProperty = fluentGetter.getAnnotation(JsonProperty.class);
+                            }
+                            if (jsonProperty == null && getter != null) {
+                                jsonProperty = getter.getAnnotation(JsonProperty.class);
+                            }
+
+                            String jsonName = jsonProperty != null ? Strings.nullToEmpty(jsonProperty.value()).trim() : "";
+
+                            if (jsonName.isEmpty()) {
+                                jsonName = name;
+                            }
+
+                            complexType.fields().add(new FieldSpec()
+                                .field(field)
+                                .name(name)
+                                .type(buildType(fieldClass, fieldType))
+                                .jsonName(jsonName)
+                                .jsonProperty(jsonProperty));
+                        }
                     }
-                    if (jsonProperty == null && getter != null) {
-                        jsonProperty = getter.getAnnotation(JsonProperty.class);
-                    }
-
-                    String jsonName = jsonProperty != null ? Strings.nullToEmpty(jsonProperty.value()).trim() : "";
-
-                    if (jsonName.isEmpty()) {
-                        jsonName = name;
-                    }
-
-                    complexType.fields().add(new FieldSpec()
-                        .field(field)
-                        .name(name)
-                        .type(buildType(fieldClass, fieldType))
-                        .jsonName(jsonName)
-                        .jsonProperty(jsonProperty));
                 }
             }
-        }
 
-        if (genericType != null) {
-            types.put(genericType, dataType);
-        } else {
-            types.put(type, dataType);
+            if (genericType != null) {
+                types.put(genericType, dataType);
+            } else {
+                types.put(type, dataType);
+            }
+
+            return dataType;
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException(e);
         }
-        return dataType;
     }
 }

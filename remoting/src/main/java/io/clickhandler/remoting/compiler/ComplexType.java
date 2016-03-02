@@ -15,8 +15,16 @@ public class ComplexType extends AbstractType implements MaterializedType {
     private String canonicalName;
     private boolean processed;
 
+    public ComplexType(Class typeClass) {
+        super(typeClass);
+    }
+
     public ComplexType(Class type, StandardType superType) {
         super(type);
+        this.superType = superType;
+    }
+
+    void setSuperType(StandardType superType) {
         this.superType = superType;
     }
 
