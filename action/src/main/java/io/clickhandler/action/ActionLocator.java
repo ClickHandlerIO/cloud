@@ -14,22 +14,21 @@ public abstract class ActionLocator {
     private final Map<Object, RemoteActionProvider<?, ?, ?>> remoteActionMap = new HashMap<>();
     private final Map<Object, QueueActionProvider<?, ?, ?>> queueActionMap = new HashMap<>();
     private final Map<Object, InternalActionProvider<?, ?, ?>> internalActionMap = new HashMap<>();
-    protected Map<Object, ActionProvider<?, ?, ?>> actionMap;
+    protected Map<Object, ActionProvider<?, ?, ?>> actionMap = new HashMap<>();
     private ActionManager actionManager;
+    private boolean inited;
 
     @Inject
     void setActionManager(ActionManager actionManager) {
         this.actionManager = actionManager;
     }
 
-    protected Map<Object, ActionProvider<?, ?, ?>> ensureActionMap() {
-        if (actionMap == null) {
-            synchronized (this) {
-                if (actionMap != null) return actionMap;
-                actionMap = new HashMap<>();
-                init();
-            }
-        }
+    public void register() {
+        ensureActionMap();
+    }
+
+    public Map<Object, ActionProvider<?, ?, ?>> ensureActionMap() {
+        init();
         return actionMap;
     }
 
@@ -94,7 +93,12 @@ public abstract class ActionLocator {
         return map;
     }
 
-    private void init() {
+    private synchronized void init() {
+        if (inited)
+            return;
+
+        inited = true;
+
         // Init actions.
         initActions();
 
@@ -118,6 +122,10 @@ public abstract class ActionLocator {
                 internalActionMap.put(key, (InternalActionProvider<?, ?, ?>) value);
             }
         });
+
+        if (actionManager != null) {
+            actionManager.register(actionMap);
+        }
     }
 
     protected void initActions() {

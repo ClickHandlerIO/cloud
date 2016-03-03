@@ -29,6 +29,10 @@ public class ActionProvider<A, IN, OUT> {
     private Class<A> actionClass;
     private Class<IN> inClass;
     private Class<OUT> outClass;
+    private boolean inited;
+
+    private final HystrixCommandProperties.Setter commandPropertiesDefaults = HystrixCommandProperties.Setter();
+    private boolean executionTimeoutEnabled;
 
     @Inject
     public ActionProvider() {
@@ -80,6 +84,18 @@ public class ActionProvider<A, IN, OUT> {
         }
     }
 
+    public void setExecutionTimeoutEnabled(boolean enabled) {
+        commandPropertiesDefaults.withExecutionTimeoutEnabled(enabled);
+
+        if (!inited)
+            init();
+
+        if (defaultObservableSetter != null)
+            defaultObservableSetter.andCommandPropertiesDefaults(commandPropertiesDefaults);
+        else if (defaultSetter != null)
+            defaultSetter.andCommandPropertiesDefaults(commandPropertiesDefaults);
+    }
+
     public Class<A> getActionClass() {
         return actionClass;
     }
@@ -93,12 +109,11 @@ public class ActionProvider<A, IN, OUT> {
     }
 
     protected void init() {
+        inited = true;
+
         scheduler = initScheduler();
         // Get default config.
         actionConfig = actionClass.getAnnotation(ActionConfig.class);
-
-        // Create command props defaults.
-        final HystrixCommandProperties.Setter commandPropertiesDefaults = HystrixCommandProperties.Setter();
 
         // Timeout milliseconds.
         long timeoutMillis = DEFAULT_TIMEOUT_MILLIS;

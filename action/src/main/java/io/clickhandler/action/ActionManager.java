@@ -1,7 +1,6 @@
 package io.clickhandler.action;
 
 import com.google.common.util.concurrent.AbstractExecutionThreadService;
-import com.netflix.hystrix.Hystrix;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -18,7 +17,7 @@ public class ActionManager extends AbstractExecutionThreadService {
     private final static Map<Object, ActionProvider<?, ?, ?>> actionProviderMap = new HashMap<>();
     private final static Map<Object, RemoteActionProvider<?, ?, ?>> remoteActionMap = new HashMap<>();
     private final static Map<Object, QueueActionProvider<?, ?, ?>> queueActionMap = new HashMap<>();
-    private final static Map<Object, QueueActionProvider<?, ?, ?>> internalActionMap = new HashMap<>();
+    private final static Map<Object, InternalActionProvider<?, ?, ?>> internalActionMap = new HashMap<>();
 
     @Inject
     public ActionManager() {
@@ -50,15 +49,18 @@ public class ActionManager extends AbstractExecutionThreadService {
             if (value == null) {
                 return;
             }
-            value.getActionClass().getAnnotation(ActionConfig.class);
             if (value instanceof RemoteActionProvider) {
                 remoteActionMap.put(key, (RemoteActionProvider<?, ?, ?>) value);
             } else if (value instanceof QueueActionProvider) {
                 queueActionMap.put(key, (QueueActionProvider<?, ?, ?>) value);
             } else if (value instanceof InternalActionProvider) {
-
+                internalActionMap.put(key, (InternalActionProvider<?, ?, ?>) value);
             }
         });
+    }
+
+    public void setExecutionTimeoutEnabled(boolean enabled) {
+        actionProviderMap.forEach((k, v) -> v.setExecutionTimeoutEnabled(enabled));
     }
 
     enum Type {
