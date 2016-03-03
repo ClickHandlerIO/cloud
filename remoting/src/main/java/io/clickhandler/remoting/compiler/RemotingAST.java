@@ -274,6 +274,9 @@ public class RemotingAST {
             } else if (Set.class.isAssignableFrom(type)) {
                 final Class componentType = TypeToken.of(genericType).resolveType(Set.class.getTypeParameters()[0]).getRawType();
                 dataType = new SetType(buildType(componentType));
+            } else if (Collection.class.isAssignableFrom(type)) {
+                final Class componentType = TypeToken.of(genericType).resolveType(List.class.getTypeParameters()[0]).getRawType();
+                dataType = new ListType(buildType(componentType));
             } else if (Map.class.isAssignableFrom(type)) {
                 final Class keyType = TypeToken.of(genericType).resolveType(Map.class.getTypeParameters()[0]).getRawType();
                 final Class valueType = TypeToken.of(genericType).resolveType(Map.class.getTypeParameters()[1]).getRawType();
