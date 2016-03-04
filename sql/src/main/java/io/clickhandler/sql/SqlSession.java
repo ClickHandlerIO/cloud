@@ -111,7 +111,7 @@ public class SqlSession {
      * @param <R>
      * @return
      */
-    public <R extends UpdatableRecord<R>> R record(Class<R> recordClass) {
+    public <R extends Record> R record(Class<R> recordClass) {
         if (recordClass == null) {
             return null;
         }
@@ -129,7 +129,7 @@ public class SqlSession {
      * @param <R>
      * @return
      */
-    public <R extends UpdatableRecord<R>> R attach(R record) {
+    public <R extends Record> R attach(R record) {
         if (record == null) {
             return null;
         }
@@ -142,7 +142,7 @@ public class SqlSession {
      * @param <R>
      * @return
      */
-    public <R extends UpdatableRecord<R>> void attach(Collection<R> records) {
+    public <R extends Record> void attach(Collection<R> records) {
         if (records == null || records.isEmpty()) {
             return;
         }
@@ -156,7 +156,7 @@ public class SqlSession {
      * @param <R>
      * @return
      */
-    public <R extends UpdatableRecord<R>> void attach(List<R> records) {
+    public <R extends Record> void attach(List<R> records) {
         if (records == null || records.isEmpty()) {
             return;
         }
@@ -165,19 +165,19 @@ public class SqlSession {
         }
     }
 
-    public <E extends AbstractEntity, R extends UpdatableRecord<R>> R map(E entity) {
+    public <E extends AbstractEntity, R extends Record> R map(E entity) {
         Preconditions.checkNotNull(entity);
         final EntityMapper<E, R> mapper = db.entityMapper(entity.getClass());
         Preconditions.checkNotNull(mapper);
         return mapper.map(entity);
     }
 
-    public <E extends AbstractEntity, R extends UpdatableRecord<R>> EntityMapper<E, R> mapper(Class cls) {
+    public <E extends AbstractEntity, R extends Record> EntityMapper<E, R> mapper(Class cls) {
         Preconditions.checkNotNull(cls);
         return db.entityMapper(cls);
     }
 
-    public <E extends AbstractEntity, R extends UpdatableRecord<R>> List<R> mapRecords(Collection<E> entities) {
+    public <E extends AbstractEntity, R extends Record> List<R> mapRecords(Collection<E> entities) {
         if (entities == null || entities.isEmpty()) {
             return Lists.newArrayListWithCapacity(0);
         }
@@ -197,7 +197,7 @@ public class SqlSession {
      * @param <E>
      * @return
      */
-    public <E extends AbstractEntity, R extends UpdatableRecord<R>> List<R> mapRecords(EntityMapper<E, R> mapper, Collection<E> entities) {
+    public <E extends AbstractEntity, R extends Record> List<R> mapRecords(EntityMapper<E, R> mapper, Collection<E> entities) {
         if (entities == null || entities.isEmpty()) {
             return Lists.newArrayListWithCapacity(0);
         }
@@ -220,11 +220,11 @@ public class SqlSession {
      * @param <R>
      * @return
      */
-    public <R extends UpdatableRecord<R>> R getRecord(Class<R> recordClass, String id) {
+    public <R extends Record> R getRecord(Class<R> recordClass, String id) {
         return getRecord(db.getMapping(recordClass), id);
     }
 
-    public <R extends UpdatableRecord<R>> R newRecord(Class<R> recordClass) {
+    public <R extends Record> R newRecord(Class<R> recordClass) {
         final TableMapping mapping = db.getCheckedMapping(recordClass);
         final R record = (R) mapping.tbl.newRecord();
         record.attach(configuration);
@@ -237,7 +237,7 @@ public class SqlSession {
      * @param <R>
      * @return
      */
-    public <R extends UpdatableRecord<R>> R getRecordOrNew(Class<R> recordClass, String id) {
+    public <R extends Record> R getRecordOrNew(Class<R> recordClass, String id) {
         final TableMapping mapping = db.getMapping(recordClass);
         R record = getRecord(mapping, id);
         if (record != null) {
@@ -256,7 +256,7 @@ public class SqlSession {
      * @return
      */
     @SuppressWarnings("unchecked")
-    public <R extends UpdatableRecord<R>> R getRecord(TableMapping mapping, String id) {
+    public <R extends Record> R getRecord(TableMapping mapping, String id) {
         return (R) create().selectFrom(mapping.TBL()).where(mapping.ID().eq(id)).fetchOne();
     }
 
@@ -266,7 +266,7 @@ public class SqlSession {
      * @param <R>
      * @return
      */
-    public <R extends UpdatableRecord<R>> List<R> getRecords(Class<R> recordClass, String... id) {
+    public <R extends Record> List<R> getRecords(Class<R> recordClass, String... id) {
         return getRecords(recordClass, Lists.newArrayList(id));
     }
 
@@ -276,7 +276,7 @@ public class SqlSession {
      * @param <R>
      * @return
      */
-    public <R extends UpdatableRecord<R>> List<R> getRecords(Class<R> recordClass, Collection<String> ids) {
+    public <R extends Record> List<R> getRecords(Class<R> recordClass, Collection<String> ids) {
         return getRecords(db.getMapping(recordClass), ids);
     }
 
@@ -286,7 +286,7 @@ public class SqlSession {
      * @param <R>
      * @return
      */
-    public <R extends UpdatableRecord<R>> List<R> getRecords(TableMapping mapping, Collection<String> ids) {
+    public <R extends Record> List<R> getRecords(TableMapping mapping, Collection<String> ids) {
         return getRecords(mapping, ids, 255);
     }
 
@@ -296,7 +296,7 @@ public class SqlSession {
      * @param <R>
      * @return
      */
-    public <R extends UpdatableRecord<R>> List<R> getRecords(final TableMapping mapping,
+    public <R extends Record> List<R> getRecords(final TableMapping mapping,
                                                              final Collection<String> collection,
                                                              final int batchSize) {
         Preconditions.checkNotNull(mapping);
@@ -361,7 +361,7 @@ public class SqlSession {
      * @param map
      * @param <R>
      */
-    public <R extends UpdatableRecord> void getRecords(Class cls, Map<String, R> map) {
+    public <R extends Record> void getRecords(Class cls, Map<String, R> map) {
         if (map == null || map.isEmpty()) {
             return;
         }
@@ -386,7 +386,7 @@ public class SqlSession {
      * @param ids
      * @param <R>
      */
-    protected <R extends UpdatableRecord<R>> void fetch(TableMapping mapping, List<R> recordList, Collection<String> ids) {
+    protected <R extends Record> void fetch(TableMapping mapping, List<R> recordList, Collection<String> ids) {
         final List<R> result = (List<R>) create().selectFrom(mapping.TBL()).where(mapping.ID().in(ids)).fetch();
         if (result != null && !result.isEmpty()) {
             recordList.addAll(result);
@@ -399,7 +399,7 @@ public class SqlSession {
      * @param <R>
      * @return
      */
-    protected <R extends UpdatableRecord<R>> List<R> fetch(TableMapping mapping, Collection<String> ids) {
+    protected <R extends Record> List<R> fetch(TableMapping mapping, Collection<String> ids) {
         return (List<R>) create().selectFrom(mapping.TBL()).where(mapping.ID().in(ids)).fetch();
     }
 
@@ -409,7 +409,7 @@ public class SqlSession {
      * @param <E>
      * @return
      */
-    public <R extends UpdatableRecord<R>, E extends AbstractEntity> E getEntity(Class<E> cls, String id) {
+    public <R extends Record, E extends AbstractEntity> E getEntity(Class<E> cls, String id) {
         return db.map((R) getRecord(db.getCheckedMapping(cls), id));
     }
 
@@ -420,7 +420,7 @@ public class SqlSession {
      * @param <R>
      * @return
      */
-    public <E extends AbstractEntity, R extends UpdatableRecord<R>> List<E> getEntities(Class entityClass, String... ids) {
+    public <E extends AbstractEntity, R extends Record> List<E> getEntities(Class entityClass, String... ids) {
         return getEntities(entityClass, Lists.newArrayList(ids));
     }
 
@@ -431,7 +431,7 @@ public class SqlSession {
      * @param <R>
      * @return
      */
-    public <E extends AbstractEntity, R extends UpdatableRecord<R>> List<E> getEntities(Class entityClass, Collection<String> ids) {
+    public <E extends AbstractEntity, R extends Record> List<E> getEntities(Class entityClass, Collection<String> ids) {
         return db.map((List<R>) getRecords(db.getMapping(entityClass), ids));
     }
 
@@ -1125,9 +1125,9 @@ public class SqlSession {
             entity.setC(new Date());
         }
         // Get mapper.
-        final EntityMapper<E, UpdatableRecord> mapper = db.entityMapper(entity.getClass());
+        final EntityMapper<E, Record> mapper = db.entityMapper(entity.getClass());
         // Map to Record.
-        final UpdatableRecord record = mapper.map(entity);
+        final UpdatableRecord record = (UpdatableRecord)mapper.map(entity);
         // Attach record.
         attach(record);
         // Store it.
@@ -1149,9 +1149,9 @@ public class SqlSession {
             entity.setC(new Date());
         }
         // Get mapper.
-        final EntityMapper<E, UpdatableRecord> mapper = db.entityMapper(entity.getClass());
+        final EntityMapper<E, Record> mapper = db.entityMapper(entity.getClass());
         // Map to Record.
-        final UpdatableRecord record = mapper.map(entity);
+        final UpdatableRecord record = (UpdatableRecord)mapper.map(entity);
         // Attach record.
         attach(record);
         // Store it.
@@ -1171,22 +1171,22 @@ public class SqlSession {
             return success(new int[0]);
         }
 
-        final EntityMapper<E, UpdatableRecord> mapper = db.entityMapper(entities);
+        final EntityMapper<E, Record> mapper = db.entityMapper(entities);
 
-        final Map<E, UpdatableRecord<?>> recordMap = Maps.newHashMapWithExpectedSize(entities.size());
+        final Map<E, UpdatableRecord> recordMap = Maps.newHashMapWithExpectedSize(entities.size());
         final List<UpdatableRecord<?>> records = Lists.newArrayList();
         for (E entity : entities) {
             if(entity.getC() == null) {
                 entity.setC(new Date());
             }
-            final UpdatableRecord<?> record = mapper.map(entity);
+            final UpdatableRecord record = (UpdatableRecord)mapper.map(entity);
             records.add(record);
             recordMap.put(entity, record);
         }
 
         int[] results = create().batchInsert(records).execute();
         for (E entity : entities) {
-            final UpdatableRecord<?> record = recordMap.get(entity);
+            final Record record = recordMap.get(entity);
             mapper.merge(record, entity);
         }
 
@@ -1204,9 +1204,9 @@ public class SqlSession {
             entity.setC(new Date());
         }
         // Get mapper.
-        final EntityMapper<E, UpdatableRecord> mapper = db.entityMapper(entity.getClass());
+        final EntityMapper<E, Record> mapper = db.entityMapper(entity.getClass());
         // Map to Record.
-        final UpdatableRecord record = mapper.map(entity);
+        final UpdatableRecord record = (UpdatableRecord)mapper.map(entity);
         // Attach record.
         attach(record);
         // Store it.
@@ -1225,7 +1225,7 @@ public class SqlSession {
             return success(new int[0]);
         }
 
-        final EntityMapper<E, UpdatableRecord> mapper = db.entityMapper(entities);
+        final EntityMapper<E, Record> mapper = db.entityMapper(entities);
 
         final Map<E, UpdatableRecord<?>> recordMap = Maps.newHashMapWithExpectedSize(entities.size());
         final List<UpdatableRecord<?>> records = Lists.newArrayList();
@@ -1233,7 +1233,7 @@ public class SqlSession {
             if(entity.getC() == null) {
                 entity.setC(new Date());
             }
-            final UpdatableRecord<?> record = mapper.map(entity);
+            final UpdatableRecord<?> record = (UpdatableRecord<?>)mapper.map(entity);
             records.add(record);
             recordMap.put(entity, record);
         }
@@ -1252,10 +1252,10 @@ public class SqlSession {
      * @param <E>
      * @return
      */
-    public <E extends AbstractEntity, R extends UpdatableRecord<R>> SqlResult<Integer> delete(final E object) {
+    public <E extends AbstractEntity, R extends Record> SqlResult<Integer> delete(final E object) {
         Preconditions.checkNotNull(object, "object must be specified");
-        final EntityMapper<E, R> mapper = mapper(object.getClass());
-        final R record = mapper.map(object);
+        final EntityMapper<E, Record> mapper = mapper(object.getClass());
+        final UpdatableRecord record = (UpdatableRecord)mapper.map(object);
         attach(record);
         final int ret = record.delete();
         mapper.merge(record, object);
@@ -1270,12 +1270,12 @@ public class SqlSession {
             return success(new int[0]);
         }
 
-        final EntityMapper<E, UpdatableRecord> mapper = db.entityMapper(entities);
+        final EntityMapper<E, Record> mapper = db.entityMapper(entities);
 
         final Map<E, UpdatableRecord<?>> recordMap = Maps.newHashMapWithExpectedSize(entities.size());
         final List<UpdatableRecord<?>> records = Lists.newArrayList();
         for (E entity : entities) {
-            final UpdatableRecord<?> record = mapper.map(entity);
+            final UpdatableRecord<?> record = (UpdatableRecord<?>)mapper.map(entity);
             records.add(record);
             recordMap.put(entity, record);
         }
@@ -1337,7 +1337,7 @@ public class SqlSession {
         }
 
         // Insert Journal Record.
-        final UpdatableRecord journalRecord = db.journalMapper(mapping).map(record);
+        final UpdatableRecord journalRecord = (UpdatableRecord)db.journalMapper(mapping).map(record);
         journalRecord.attach(configuration);
         journalRecord.insert();
     }
@@ -1348,7 +1348,7 @@ public class SqlSession {
         }
 
         // Insert Journal Record.
-        final UpdatableRecord journalRecord = db.journalMapper(mapping).map(record);
+        final UpdatableRecord journalRecord = (UpdatableRecord)db.journalMapper(mapping).map(record);
         journalRecord.setValue(mapping.JOURNAL_VERSION(), -2L);
         journalRecord.setValue(mapping.JOURNAL_CHANGED(), record.getValue(mapping.CHANGED()));
         journalRecord.attach(configuration);

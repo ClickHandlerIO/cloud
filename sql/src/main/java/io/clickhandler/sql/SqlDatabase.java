@@ -1010,7 +1010,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @param mapping
      * @return
      */
-    RecordMapper<UpdatableRecord, UpdatableRecord> journalMapper(TableMapping mapping) {
+    RecordMapper<Record, Record> journalMapper(TableMapping mapping) {
         return mapping.getJournalMapper();
     }
 
@@ -1020,7 +1020,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @param <E>
      * @return
      */
-    <R extends UpdatableRecord<R>, E extends AbstractEntity> RecordMapper<R, E> recordMapper(Class cls) {
+    <R extends Record, E extends AbstractEntity> RecordMapper<R, E> recordMapper(Class cls) {
         return (RecordMapper<R, E>) getCheckedMapping(cls).getRecordMapper();
     }
 
@@ -1030,7 +1030,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @param <E>
      * @return
      */
-    <R extends UpdatableRecord<R>, E extends AbstractEntity> RecordMapper<R, E> mapper(Class cls) {
+    <R extends Record, E extends AbstractEntity> RecordMapper<R, E> mapper(Class cls) {
         return (RecordMapper<R, E>) getCheckedMapping(cls).getRecordMapper();
     }
 
@@ -1040,7 +1040,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @param <R>
      * @return
      */
-    <E extends AbstractEntity, R extends UpdatableRecord<R>> EntityMapper<E, R> entityMapper(Class cls) {
+    <E extends AbstractEntity, R extends Record> EntityMapper<E, R> entityMapper(Class cls) {
         return (EntityMapper<E, R>) getCheckedMapping(cls).getEntityMapper();
     }
 
@@ -1050,7 +1050,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @param <R>
      * @return
      */
-    <E extends AbstractEntity, R extends UpdatableRecord<R>> EntityMapper<E, R> entityMapper(List list) {
+    <E extends AbstractEntity, R extends Record> EntityMapper<E, R> entityMapper(List list) {
         if (list == null || list.isEmpty()) {
             return null;
         }
@@ -1063,7 +1063,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @param <E>
      * @return
      */
-    <R extends UpdatableRecord<R>, E extends AbstractEntity> E map(R record) {
+    <R extends Record, E extends AbstractEntity> E map(R record) {
         if (record == null) {
             return null;
         }
@@ -1089,7 +1089,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @param <E>
      * @return
      */
-    <R extends UpdatableRecord<R>, E extends AbstractEntity> List<E> map(R... records) {
+    <R extends Record, E extends AbstractEntity> List<E> map(R... records) {
         if (records == null) {
             return new ArrayList<>(0);
         }
@@ -1102,7 +1102,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @param <E>
      * @return
      */
-    <R extends UpdatableRecord<R>, E extends AbstractEntity> List<E> map(Collection<R> records) {
+    <R extends Record, E extends AbstractEntity> List<E> map(Collection<R> records) {
         if (records == null || records.isEmpty()) {
             return new ArrayList<>(0);
         }

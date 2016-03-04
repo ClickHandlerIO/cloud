@@ -42,9 +42,9 @@ public class TableMapping extends Mapping {
     private final Field<String> idField;
     private final Field<Long> versionField;
     private final Field<Date> changedField;
-    private final RecordMapper<? extends UpdatableRecord, ? extends AbstractEntity> recordMapper;
-    private final RecordMapper<? extends UpdatableRecord, ? extends UpdatableRecord> journalMapper;
-    private final EntityMapper<? extends AbstractEntity, ? extends UpdatableRecord> entityMapper;
+    private final RecordMapper<? extends Record, ? extends AbstractEntity> recordMapper;
+    private final RecordMapper<? extends Record, ? extends Record> journalMapper;
+    private final EntityMapper<? extends AbstractEntity, ? extends Record> entityMapper;
     private final Class recordClass;
     private final Class journalRecordClass;
 
@@ -156,7 +156,7 @@ public class TableMapping extends Mapping {
                 return entity;
             };
 
-            this.entityMapper = new EntityMapper<AbstractEntity, UpdatableRecord>() {
+            this.entityMapper = new EntityMapper<AbstractEntity, Record>() {
                 @Override
                 public UpdatableRecord map(AbstractEntity entity) {
                     final UpdatableRecord<?> record = (UpdatableRecord<?>) tbl.newRecord();
@@ -179,7 +179,7 @@ public class TableMapping extends Mapping {
                 }
 
                 @Override
-                public void merge(UpdatableRecord record, AbstractEntity intoEntity) {
+                public void merge(Record record, AbstractEntity intoEntity) {
                     for (int i = 0; i < properties.length; i++) {
                         final Property property = properties[i];
                         try {
@@ -486,15 +486,15 @@ public class TableMapping extends Mapping {
         }
     }
 
-    public <R extends UpdatableRecord<R>, E extends AbstractEntity> RecordMapper<R, E> getRecordMapper() {
+    public <R extends Record, E extends AbstractEntity> RecordMapper<R, E> getRecordMapper() {
         return (RecordMapper<R, E>) recordMapper;
     }
 
-    public RecordMapper<UpdatableRecord, UpdatableRecord> getJournalMapper() {
-        return (RecordMapper<UpdatableRecord, UpdatableRecord>) journalMapper;
+    public RecordMapper<Record, Record> getJournalMapper() {
+        return (RecordMapper<Record, Record>) journalMapper;
     }
 
-    public <E extends AbstractEntity, R extends UpdatableRecord<R>> EntityMapper<E, R> getEntityMapper() {
+    public <E extends AbstractEntity, R extends Record> EntityMapper<E, R> getEntityMapper() {
         return (EntityMapper<E, R>) entityMapper;
     }
 
