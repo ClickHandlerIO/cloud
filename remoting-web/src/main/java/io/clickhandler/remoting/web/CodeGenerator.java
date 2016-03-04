@@ -404,11 +404,11 @@ public class CodeGenerator {
                 case FLOAT:
                 case DOUBLE:
                 case DATE:
+                case BOOLEAN:
                     // JavaScript only has 1 number type.
                     typeName = getTypeName(field.type());
                     break;
 
-                case BOOLEAN:
                 case STRING:
                 case WILDCARD:
                     typeName = TypeName.get(field.type().javaType());
@@ -503,6 +503,8 @@ public class CodeGenerator {
                         .addStatement("return this")
                         .build());
                     break;
+                case BOOLEAN:
+                    break;
 
                 default:
                     type.addMethod(MethodSpec.methodBuilder(field.name()).addAnnotation(JsOverlay.class)
@@ -570,8 +572,9 @@ public class CodeGenerator {
             case DOUBLE:
             case DATE:
                 // JavaScript only has 1 number type.
-                return TypeName.get(double.class);
+                return TypeName.get(Double.class);
             case BOOLEAN:
+                return TypeName.get(Boolean.class);
             case STRING:
             case WILDCARD:
                 return TypeName.get(type.javaType());
@@ -666,7 +669,7 @@ public class CodeGenerator {
             }
         });
 
-        if (namespace.canonicalName().startsWith(rootPackage)){
+        if (namespace.canonicalName().startsWith(rootPackage)) {
             try {
                 JavaFile.builder(namespace.path(), type.build()).build().writeTo(outputDir);
             } catch (IOException e) {
