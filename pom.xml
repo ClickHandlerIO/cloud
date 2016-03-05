@@ -72,7 +72,7 @@ http://www.w3.org/2001/XMLSchema-instance ">
         <javax-mail.version>1.5.5</javax-mail.version>
         <javapoet.version>1.5.1</javapoet.version>
         <javaslang.version>2.0.0-RC4</javaslang.version>
-        <jooq.version>3.7.2</jooq.version>
+        <jooq.version>3.7.3</jooq.version>
         <junit.version>4.12</junit.version>
         <mysql.version>5.1.38</mysql.version>
         <netty.version>4.0.33.Final</netty.version>
