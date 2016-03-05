@@ -1,6 +1,6 @@
 package io.clickhandler.email.common.data;
 
-import io.clickhandler.email.entity.EmailEntity;
+import io.clickhandler.cloud.model.EmailEntity;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Handler;
 

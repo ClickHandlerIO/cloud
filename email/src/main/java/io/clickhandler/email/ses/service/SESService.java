@@ -2,7 +2,7 @@ package io.clickhandler.email.ses.service;
 
 import io.clickhandler.email.service.EmailService;
 import io.clickhandler.files.service.FileService;
-import io.clickhandler.email.entity.EmailEntity;
+import io.clickhandler.cloud.model.EmailEntity;
 import io.clickhandler.sql.SqlExecutor;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;

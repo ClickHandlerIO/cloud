@@ -1,7 +1,7 @@
 package io.clickhandler.email.mailgun.data;
 
 import io.clickhandler.email.common.data.SendRequest;
-import io.clickhandler.email.entity.EmailEntity;
+import io.clickhandler.cloud.model.EmailEntity;
 import io.vertx.core.MultiMap;
 
 /**

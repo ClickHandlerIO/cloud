@@ -1,9 +1,9 @@
 package io.clickhandler.email.handler;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.clickhandler.cloud.model.*;
 import io.clickhandler.email.common.data.SendRequest;
-import io.clickhandler.email.entity.*;
-import io.clickhandler.email.schema.Tables;
+import io.clickhandler.cloud.model.Tables;
 import io.clickhandler.files.service.FileService;
 import io.clickhandler.queue.QueueHandler;
 import io.clickhandler.sql.SqlExecutor;
@@ -171,5 +171,4 @@ public abstract class EmailSendQueueHandler<T extends SendRequest> implements Qu
     protected FileService getFileService() {
         return fileService;
     }
-
 }

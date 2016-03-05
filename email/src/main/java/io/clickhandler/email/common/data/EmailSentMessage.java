@@ -1,6 +1,6 @@
 package io.clickhandler.email.common.data;
 
-import io.clickhandler.email.entity.EmailEntity;
+import io.clickhandler.cloud.model.EmailEntity;
 
 /**
  * Created by admin on 2/1/16.

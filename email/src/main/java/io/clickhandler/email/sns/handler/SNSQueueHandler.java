@@ -1,10 +1,10 @@
 package io.clickhandler.email.sns.handler;
 
 import io.clickhandler.email.common.data.Message;
-import io.clickhandler.email.entity.EmailEntity;
-import io.clickhandler.email.entity.EmailRecipientEntity;
-import io.clickhandler.email.entity.RecipientStatus;
-import io.clickhandler.email.schema.Tables;
+import io.clickhandler.cloud.model.EmailEntity;
+import io.clickhandler.cloud.model.EmailRecipientEntity;
+import io.clickhandler.cloud.model.RecipientStatus;
+import io.clickhandler.cloud.model.Tables;
 import io.clickhandler.email.sns.config.SNSConfig;
 import io.clickhandler.email.sns.data.json.common.MessageType;
 import io.clickhandler.email.sns.data.json.email.notify.*;

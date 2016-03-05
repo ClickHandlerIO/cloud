@@ -121,7 +121,8 @@ http://www.w3.org/2001/XMLSchema-instance ">
         <module>remoting</module>
         <module>remoting-web</module>
         <module>sql</module>
-        <module>email-schema</module>
+        <module>model</module>
+        <module>schema</module>
         <module>email</module>
         <module>files</module>
     </modules>
@@ -165,7 +166,13 @@ http://www.w3.org/2001/XMLSchema-instance ">
 
             <dependency>
                 <groupId>io.clickhandler</groupId>
-                <artifactId>cloud-email-schema</artifactId>
+                <artifactId>cloud-model</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.clickhandler</groupId>
+                <artifactId>cloud-schema</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

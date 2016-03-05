@@ -12,6 +12,8 @@ public class EvolutionChangeEntity extends AbstractEntity {
     @Column(dbType = DBTypes.CLOB)
     private String sql;
     @Column
+    private Date started;
+    @Column
     private Date end;
     @Column
     private boolean success;
@@ -34,6 +36,14 @@ public class EvolutionChangeEntity extends AbstractEntity {
 
     public void setSql(String sql) {
         this.sql = sql;
+    }
+
+    public Date getStarted() {
+        return started;
+    }
+
+    public void setStarted(Date started) {
+        this.started = started;
     }
 
     public Date getEnd() {

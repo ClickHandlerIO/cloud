@@ -1,6 +1,6 @@
 package io.clickhandler.files.s3.service;
 
-import io.clickhandler.email.entity.FileEntity;
+import io.clickhandler.cloud.model.FileEntity;
 import io.clickhandler.files.handler.FileGetChunksHandler;
 import io.clickhandler.files.handler.FileGetPipeHandler;
 import io.clickhandler.files.handler.FileStatusHandler;

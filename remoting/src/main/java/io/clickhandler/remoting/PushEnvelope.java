@@ -2,10 +2,12 @@ package io.clickhandler.remoting;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import java.io.Serializable;
+
 /**
  *
  */
-public class PushEnvelope {
+public class PushEnvelope implements Serializable {
     @JsonProperty("a")
     private String address;
     @JsonProperty("p")

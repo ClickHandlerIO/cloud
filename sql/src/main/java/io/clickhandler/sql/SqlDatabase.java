@@ -17,10 +17,8 @@ import org.h2.tools.Server;
 import org.jooq.*;
 import org.jooq.Table;
 import org.jooq.conf.*;
-import org.jooq.impl.DSL;
-import org.jooq.impl.DataSourceConnectionProvider;
-import org.jooq.impl.DefaultConfiguration;
-import org.jooq.impl.TableImpl;
+import org.jooq.impl.*;
+import org.jooq.tools.StringUtils;
 import org.jooq.tools.jdbc.JDBCUtils;
 import org.reflections.Reflections;
 import org.slf4j.Logger;
@@ -200,6 +198,8 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         configuration.set(new RecordMapperProviderImpl());
         configuration.set(settings);
         configuration.set(dialect);
+
+        configuration.set(PrettyPrinter::new, DeleteOrUpdateWithoutWhereListener::new);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////
         // SqlDatabase Vendor Specific Configuration
@@ -415,6 +415,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         writeExecutor.shutdown();
         readExecutor.shutdown();
 
+        // Completely destroy H2 memory database if necessary.
         if (config.getUrl().startsWith("jdbc:h2:mem")) {
             Try.run(() -> {
                 try (final PreparedStatement stmt = dataSource.getConnection().prepareStatement("DROP ALL OBJECTS;")) {
@@ -572,6 +573,8 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         try {
             executeWrite(session -> {
                 evolution.setC(new Date());
+                evolution.setStarted(new Date());
+
                 boolean failed = false;
 
                 for (SchemaInspector.Change change : changes) {
@@ -584,6 +587,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                         }
                         final EvolutionChangeEntity changeEntity = new EvolutionChangeEntity();
                         changeEntities.add(changeEntity);
+                        changeEntity.setStarted(new Date());
                         changeEntity.setType(change.type());
                         changeEntity.setSql(sqlPart);
                         try {
@@ -1159,6 +1163,54 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 }
             }
         }
+    }
+
+    public static class PrettyPrinter extends DefaultExecuteListener {
+        public static Logger LOG = LoggerFactory.getLogger(PrettyPrinter.class);
+
+        /**
+         * Hook into the query execution lifecycle before executing queries
+         */
+        @Override
+        public void executeStart(ExecuteContext ctx) {
+            if (!LOG.isDebugEnabled())
+                return;
+
+            // Create a new DSLContext for logging rendering purposes
+            // This DSLContext doesn't need a connection, only the SQLDialect...
+            DSLContext create = DSL.using(ctx.dialect(),
+
+                // ... and the flag for pretty-printing
+                new Settings().withRenderFormatted(true));
+
+            // If we're executing a query
+            if (ctx.query() != null) {
+                LOG.debug(create.renderInlined(ctx.query()));
+            }
+
+            // If we're executing a routine
+            else if (ctx.routine() != null) {
+                LOG.debug(create.renderInlined(ctx.routine()));
+            }
+
+            // If we're executing anything else (e.g. plain SQL)
+            else if (!StringUtils.isBlank(ctx.sql())) {
+                LOG.debug(ctx.sql());
+            }
+        }
+    }
+
+    public class DeleteOrUpdateWithoutWhereListener extends DefaultExecuteListener {
+
+        @Override
+        public void renderEnd(ExecuteContext ctx) {
+            if (ctx.sql().matches("^(?i:(UPDATE|DELETE)(?!.* WHERE ).*)$")) {
+                throw new DeleteOrUpdateWithoutWhereException();
+            }
+        }
+    }
+
+    public class DeleteOrUpdateWithoutWhereException extends RuntimeException {
     }
 
     /**

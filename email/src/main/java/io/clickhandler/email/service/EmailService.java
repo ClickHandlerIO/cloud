@@ -2,7 +2,7 @@ package io.clickhandler.email.service;
 
 import com.google.common.util.concurrent.AbstractIdleService;
 import io.clickhandler.email.common.data.SendRequest;
-import io.clickhandler.email.entity.EmailEntity;
+import io.clickhandler.cloud.model.EmailEntity;
 import rx.Observable;
 
 /**

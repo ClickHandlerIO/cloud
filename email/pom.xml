@@ -27,7 +27,7 @@
         </dependency>
         <dependency>
             <groupId>io.clickhandler</groupId>
-            <artifactId>cloud-email-schema</artifactId>
+            <artifactId>cloud-schema</artifactId>
         </dependency>
         <dependency>
             <groupId>io.clickhandler</groupId>

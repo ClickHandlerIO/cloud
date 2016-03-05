@@ -2,7 +2,7 @@ package io.clickhandler.email.mailgun.event;
 
 import io.clickhandler.email.common.data.EmailSentMessage;
 import io.clickhandler.email.common.event.EmailNotificationEvent;
-import io.clickhandler.email.entity.EmailEntity;
+import io.clickhandler.cloud.model.EmailEntity;
 
 /**
  * Vertx event for Mailgun email sent events

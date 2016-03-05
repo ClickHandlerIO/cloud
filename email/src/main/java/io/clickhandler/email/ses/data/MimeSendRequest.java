@@ -1,7 +1,7 @@
 package io.clickhandler.email.ses.data;
 
 import io.clickhandler.email.common.data.SendRequest;
-import io.clickhandler.email.entity.EmailEntity;
+import io.clickhandler.cloud.model.EmailEntity;
 
 import javax.mail.internet.MimeMessage;
 
