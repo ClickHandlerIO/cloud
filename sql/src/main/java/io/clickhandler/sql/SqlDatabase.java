@@ -33,7 +33,6 @@ import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -867,22 +866,30 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         final AtomicReference<SqlResult<T>> r = new AtomicReference<>();
         final SqlSession finalSession = session;
         try {
-            final AtomicBoolean updateCache = new AtomicBoolean(false);
             try {
-                return DSL.using(session.configuration()).transactionResult(configuration1 -> {
-                    finalSession.scope(configuration1);
+                return DSL.using(session.configuration()).transactionResult($ -> {
+                    finalSession.scope($);
 
                     try {
                         // Execute the code.
-                        final SqlResult<T> result = callable.call(finalSession);
+                        SqlResult<T> result = null;
+
+                        try {
+                            result = callable.call(finalSession);
+
+                            if (result == null) {
+                                result = SqlResult.success();
+                            }
+                        } catch (Throwable e) {
+                            result = SqlResult.rollback(null, e);
+                        }
+
                         r.set(result);
 
                         // Rollback if ActionResponse isFailure.
                         if (result != null && !result.isSuccess()) {
                             throw new RollbackException();
                         }
-
-                        updateCache.set(true);
 
                         return result;
                     } finally {
@@ -893,15 +900,14 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 if (created) {
                     sessionLocal.remove();
                 }
-
-                // Update cache.
-                if (updateCache.get()) {
-                    Try.run(() -> finalSession.updateCache());
-                }
             }
         } catch (RollbackException e) {
             return r.get();
+        } catch (Throwable e) {
+            LOG.info("write() threw an exception", e);
         }
+
+        return r.get();
     }
 
 
