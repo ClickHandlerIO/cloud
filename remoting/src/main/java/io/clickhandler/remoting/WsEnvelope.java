@@ -12,6 +12,8 @@ public class WsEnvelope {
     public static final int SUB = 2;
     public static final int USUB = 3;
     public static final int PUSH = 4;
+    public static final int PING = 5;
+    public static final int PONG = 6;
 
     @JsonProperty("m")
     private int method;
