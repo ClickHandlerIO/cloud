@@ -33,7 +33,7 @@ public class Generator {
             SchemaGenerator.buildConfiguration(
                 dbConfig,
                 "io.clickhandler.cloud.model",
-                "schema/src/main/javaio/clickhandler"
+                "schema/src/main/java"
             )
         );
 
