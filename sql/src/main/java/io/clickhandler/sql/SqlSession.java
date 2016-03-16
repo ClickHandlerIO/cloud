@@ -31,7 +31,6 @@ public class SqlSession {
                final Configuration configuration) {
         this.db = db;
         this.configuration = configuration.derive(new DefaultRecordListenerProvider(recordListener));
-
     }
 
     protected Multimap<TableMapping, AbstractEntity> getCachePuts() {
@@ -420,7 +419,7 @@ public class SqlSession {
      * @param <R>
      * @return
      */
-    public <E extends AbstractEntity, R extends Record> List<E> getEntities(Class entityClass, String... ids) {
+    public <E extends AbstractEntity, R extends Record> List<E> getEntities(Class<E> entityClass, String... ids) {
         return getEntities(entityClass, Lists.newArrayList(ids));
     }
 
@@ -431,7 +430,7 @@ public class SqlSession {
      * @param <R>
      * @return
      */
-    public <E extends AbstractEntity, R extends Record> List<E> getEntities(Class entityClass, Collection<String> ids) {
+    public <E extends AbstractEntity, R extends Record> List<E> getEntities(Class<E> entityClass, Collection<String> ids) {
         return db.map((List<R>) getRecords(db.getMapping(entityClass), ids));
     }
 
@@ -440,7 +439,7 @@ public class SqlSession {
      * @param map
      * @param <E>
      */
-    public <E extends AbstractEntity> void getEntities(Class entityClass, Map<String, E> map) {
+    public <E extends AbstractEntity> void getEntities(Class<E> entityClass, Map<String, E> map) {
         if (map == null || map.isEmpty()) {
             return;
         }
