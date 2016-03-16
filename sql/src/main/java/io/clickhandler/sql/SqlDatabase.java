@@ -1223,11 +1223,17 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      *
      */
     private final class RecordMapperProviderImpl implements RecordMapperProvider {
+        private final DefaultRecordMapperProvider defaultProvider;
+
+        public RecordMapperProviderImpl() {
+            defaultProvider = new DefaultRecordMapperProvider();
+        }
+
         @Override
         public <R extends Record, E> RecordMapper<R, E> provide(RecordType<R> recordType, Class<? extends E> type) {
             final TableMapping mapping = tableMappings.get(type);
             if (mapping == null) {
-                return null;
+                return defaultProvider.provide(recordType, type);
             }
             return (RecordMapper<R, E>) mapping.getRecordMapper();
         }
