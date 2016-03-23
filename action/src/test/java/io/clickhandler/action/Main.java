@@ -1,5 +1,6 @@
 package io.clickhandler.action;
 
+import com.hazelcast.core.HazelcastInstance;
 import dagger.Component;
 import dagger.Module;
 import dagger.Provides;
@@ -51,6 +52,12 @@ public class Main {
         @Singleton
         Vertx vertx() {
             return Vertx.vertx();
+        }
+
+        @Provides
+        @Singleton
+        HazelcastInstance hazelcast() {
+            return null;
         }
     }
 }

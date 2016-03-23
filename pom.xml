@@ -63,6 +63,7 @@ http://www.w3.org/2001/XMLSchema-instance ">
         <nexus-staging-maven-plugin.version>1.6.6</nexus-staging-maven-plugin.version>
 
         <auto-service.version>1.0-rc2</auto-service.version>
+        <hazelcast.version>3.6.1</hazelcast.version>
         <aws.version>1.10.56</aws.version>
         <cglib-nodep.version>3.2.1</cglib-nodep.version>
         <guava.version>19.0</guava.version>
@@ -74,6 +75,7 @@ http://www.w3.org/2001/XMLSchema-instance ">
         <javaslang.version>2.0.0-RC4</javaslang.version>
         <jooq.version>3.7.3</jooq.version>
         <junit.version>4.12</junit.version>
+        <msgpack.version>0.8.3</msgpack.version>
         <mysql.version>5.1.38</mysql.version>
         <netty.version>4.0.33.Final</netty.version>
         <reflections.version>0.9.10</reflections.version>
@@ -200,6 +202,12 @@ http://www.w3.org/2001/XMLSchema-instance ">
                 <version>${javax-validation-api.version}</version>
             </dependency>
 
+            <dependency>
+                <groupId>org.msgpack</groupId>
+                <artifactId>msgpack-core</artifactId>
+                <version>${msgpack.version}</version>
+            </dependency>
+
             <!-- SQL -->
             <dependency>
                 <groupId>com.zaxxer</groupId>
@@ -257,6 +265,12 @@ http://www.w3.org/2001/XMLSchema-instance ">
                 <artifactId>dagger-compiler</artifactId>
                 <version>${dagger.version}</version>
                 <optional>true</optional>
+            </dependency>
+
+            <dependency>
+                <groupId>com.hazelcast</groupId>
+                <artifactId>hazelcast</artifactId>
+                <version>${hazelcast.version}</version>
             </dependency>
 
             <dependency>

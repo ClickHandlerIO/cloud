@@ -12,6 +12,7 @@ public class ActionHolder {
     RemoteAction remoteAction;
     QueueAction queueAction;
     InternalAction internalAction;
+    StoreAction storeAction;
     ActionConfig config;
     TypeElement type;
     DeclaredTypeVar inType;
@@ -31,6 +32,10 @@ public class ActionHolder {
         return internalAction != null;
     }
 
+    public boolean isStore() {
+        return storeAction != null;
+    }
+
     public ClassName getProviderTypeName() {
         Class providerClass = null;
         if (config != null) {
@@ -47,6 +52,8 @@ public class ActionHolder {
             return ClassName.get(InternalActionProvider.class);
         } else if (isQueue()) {
             return ClassName.get(QueueActionProvider.class);
+        } else if (isStore()) {
+            return ClassName.get(StoreActionProvider.class);
         } else {
             return ClassName.get(ActionProvider.class);
         }

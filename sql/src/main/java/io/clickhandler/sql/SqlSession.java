@@ -23,28 +23,12 @@ public class SqlSession {
     protected final SqlDatabase db;
     protected final Stack<Configuration> configurationStack = new Stack<>();
     private final RecordListener recordListener = new RecordListenerImpl();
-    private Multimap<TableMapping, AbstractEntity> cachePuts;
-    private Multimap<TableMapping, String> cacheInvalidates;
     private Configuration configuration;
 
     SqlSession(final SqlDatabase db,
                final Configuration configuration) {
         this.db = db;
         this.configuration = configuration.derive(new DefaultRecordListenerProvider(recordListener));
-    }
-
-    protected Multimap<TableMapping, AbstractEntity> getCachePuts() {
-        if (cachePuts == null) {
-            cachePuts = Multimaps.newSetMultimap(Maps.newHashMap(), Sets::newHashSet);
-        }
-        return cachePuts;
-    }
-
-    protected Multimap<TableMapping, String> getCacheInvalidates() {
-        if (cacheInvalidates == null) {
-            cacheInvalidates = Multimaps.newSetMultimap(Maps.newHashMap(), Sets::newHashSet);
-        }
-        return cacheInvalidates;
     }
 
     public SqlResult success() {
@@ -296,8 +280,8 @@ public class SqlSession {
      * @return
      */
     public <R extends Record> List<R> getRecords(final TableMapping mapping,
-                                                             final Collection<String> collection,
-                                                             final int batchSize) {
+                                                 final Collection<String> collection,
+                                                 final int batchSize) {
         Preconditions.checkNotNull(mapping);
 
         if (collection == null) {
@@ -1120,13 +1104,13 @@ public class SqlSession {
      */
     public <E extends AbstractEntity> SqlResult<Integer> store(E entity) {
         Preconditions.checkNotNull(entity, "entity must be specified");
-        if(entity.getC() == null) {
+        if (entity.getC() == null) {
             entity.setC(new Date());
         }
         // Get mapper.
         final EntityMapper<E, Record> mapper = db.entityMapper(entity.getClass());
         // Map to Record.
-        final UpdatableRecord record = (UpdatableRecord)mapper.map(entity);
+        final UpdatableRecord record = (UpdatableRecord) mapper.map(entity);
         // Attach record.
         attach(record);
         // Store it.
@@ -1144,13 +1128,13 @@ public class SqlSession {
      */
     public <E extends AbstractEntity> SqlResult<Integer> insert(E entity) {
         Preconditions.checkNotNull(entity, "entity must be specified");
-        if(entity.getC() == null) {
+        if (entity.getC() == null) {
             entity.setC(new Date());
         }
         // Get mapper.
         final EntityMapper<E, Record> mapper = db.entityMapper(entity.getClass());
         // Map to Record.
-        final UpdatableRecord record = (UpdatableRecord)mapper.map(entity);
+        final UpdatableRecord record = (UpdatableRecord) mapper.map(entity);
         // Attach record.
         attach(record);
         // Store it.
@@ -1175,10 +1159,10 @@ public class SqlSession {
         final Map<E, UpdatableRecord> recordMap = Maps.newHashMapWithExpectedSize(entities.size());
         final List<UpdatableRecord<?>> records = Lists.newArrayList();
         for (E entity : entities) {
-            if(entity.getC() == null) {
+            if (entity.getC() == null) {
                 entity.setC(new Date());
             }
-            final UpdatableRecord record = (UpdatableRecord)mapper.map(entity);
+            final UpdatableRecord record = (UpdatableRecord) mapper.map(entity);
             records.add(record);
             recordMap.put(entity, record);
         }
@@ -1199,13 +1183,13 @@ public class SqlSession {
      */
     public <E extends AbstractEntity> SqlResult<Integer> update(final E entity) {
         Preconditions.checkNotNull(entity, "entity must be specified");
-        if(entity.getC() == null) {
+        if (entity.getC() == null) {
             entity.setC(new Date());
         }
         // Get mapper.
         final EntityMapper<E, Record> mapper = db.entityMapper(entity.getClass());
         // Map to Record.
-        final UpdatableRecord record = (UpdatableRecord)mapper.map(entity);
+        final UpdatableRecord record = (UpdatableRecord) mapper.map(entity);
         // Attach record.
         attach(record);
         // Store it.
@@ -1229,10 +1213,10 @@ public class SqlSession {
         final Map<E, UpdatableRecord<?>> recordMap = Maps.newHashMapWithExpectedSize(entities.size());
         final List<UpdatableRecord<?>> records = Lists.newArrayList();
         for (E entity : entities) {
-            if(entity.getC() == null) {
+            if (entity.getC() == null) {
                 entity.setC(new Date());
             }
-            final UpdatableRecord<?> record = (UpdatableRecord<?>)mapper.map(entity);
+            final UpdatableRecord<?> record = (UpdatableRecord<?>) mapper.map(entity);
             records.add(record);
             recordMap.put(entity, record);
         }
@@ -1254,7 +1238,7 @@ public class SqlSession {
     public <E extends AbstractEntity, R extends Record> SqlResult<Integer> delete(final E object) {
         Preconditions.checkNotNull(object, "object must be specified");
         final EntityMapper<E, Record> mapper = mapper(object.getClass());
-        final UpdatableRecord record = (UpdatableRecord)mapper.map(object);
+        final UpdatableRecord record = (UpdatableRecord) mapper.map(object);
         attach(record);
         final int ret = record.delete();
         mapper.merge(record, object);
@@ -1274,7 +1258,7 @@ public class SqlSession {
         final Map<E, UpdatableRecord<?>> recordMap = Maps.newHashMapWithExpectedSize(entities.size());
         final List<UpdatableRecord<?>> records = Lists.newArrayList();
         for (E entity : entities) {
-            final UpdatableRecord<?> record = (UpdatableRecord<?>)mapper.map(entity);
+            final UpdatableRecord<?> record = (UpdatableRecord<?>) mapper.map(entity);
             records.add(record);
             recordMap.put(entity, record);
         }
@@ -1336,7 +1320,7 @@ public class SqlSession {
         }
 
         // Insert Journal Record.
-        final UpdatableRecord journalRecord = (UpdatableRecord)db.journalMapper(mapping).map(record);
+        final UpdatableRecord journalRecord = (UpdatableRecord) db.journalMapper(mapping).map(record);
         journalRecord.attach(configuration);
         journalRecord.insert();
     }
@@ -1347,24 +1331,11 @@ public class SqlSession {
         }
 
         // Insert Journal Record.
-        final UpdatableRecord journalRecord = (UpdatableRecord)db.journalMapper(mapping).map(record);
+        final UpdatableRecord journalRecord = (UpdatableRecord) db.journalMapper(mapping).map(record);
         journalRecord.setValue(mapping.JOURNAL_VERSION(), -2L);
         journalRecord.setValue(mapping.JOURNAL_CHANGED(), record.getValue(mapping.CHANGED()));
         journalRecord.attach(configuration);
         journalRecord.insert();
-    }
-
-    void updateCache() {
-        if (!cachePuts.isEmpty()) {
-            cachePuts.keySet().forEach(mapping -> {
-
-            });
-        }
-        if (!cacheInvalidates.isEmpty()) {
-            cacheInvalidates.keySet().forEach(mapping -> {
-
-            });
-        }
     }
 
     private final class RecordListenerImpl implements RecordListener {

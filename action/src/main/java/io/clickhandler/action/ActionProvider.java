@@ -17,6 +17,7 @@ import javax.inject.Provider;
  */
 public class ActionProvider<A, IN, OUT> {
     static final long DEFAULT_TIMEOUT_MILLIS = 5000;
+    private final HystrixCommandProperties.Setter commandPropertiesDefaults = HystrixCommandProperties.Setter();
     @Inject
     Vertx vertx;
     Scheduler scheduler;
@@ -30,9 +31,8 @@ public class ActionProvider<A, IN, OUT> {
     private Class<IN> inClass;
     private Class<OUT> outClass;
     private boolean inited;
-
-    private final HystrixCommandProperties.Setter commandPropertiesDefaults = HystrixCommandProperties.Setter();
     private boolean executionTimeoutEnabled;
+    private long timeoutMillis;
 
     @Inject
     public ActionProvider() {
@@ -44,6 +44,14 @@ public class ActionProvider<A, IN, OUT> {
 
     public Provider<A> getActionProvider() {
         return actionProvider;
+    }
+
+    public boolean isExecutionTimeoutEnabled() {
+        return executionTimeoutEnabled;
+    }
+
+    public long getTimeoutMillis() {
+        return timeoutMillis;
     }
 
     @Inject
@@ -125,10 +133,13 @@ public class ActionProvider<A, IN, OUT> {
             }
         }
 
+        this.timeoutMillis = timeoutMillis;
+
         // Enable timeout?
         if (timeoutMillis > 0) {
             commandPropertiesDefaults.withExecutionTimeoutEnabled(true);
             commandPropertiesDefaults.withExecutionTimeoutInMilliseconds((int) timeoutMillis);
+            this.executionTimeoutEnabled = true;
         }
 
         // Default isolation strategy.
@@ -303,6 +314,35 @@ public class ActionProvider<A, IN, OUT> {
         // Set the subscribe on scheduler.
         observable.subscribeOn(subscribeOnScheduler());
         return observable;
+    }
+
+    /**
+     * @param request\
+     */
+    protected Observable<OUT> send(
+        final String address,
+        final IN request) {
+
+        // Find address.
+
+//        final AbstractAction<IN, OUT> abstractAction;
+//        try {
+//            abstractAction = (AbstractAction<IN, OUT>) action;
+//            abstractAction.setContext(context);
+//            abstractAction.setRequest(request);
+//        } catch (Exception e) {
+//            // Ignore.
+//            return Observable.error(e);
+//        }
+//
+//        // Build observable.
+//        final Observable observable = abstractAction.toObservable();
+//        // Set the observe on scheduler.
+//        observable.observeOn(observeOnScheduler());
+//        // Set the subscribe on scheduler.
+//        observable.subscribeOn(subscribeOnScheduler());
+//        return observable;
+        return Observable.just(null);
     }
 
     protected Scheduler observeOnScheduler() {

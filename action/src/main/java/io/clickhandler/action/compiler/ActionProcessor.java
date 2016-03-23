@@ -21,6 +21,8 @@ import java.util.TreeMap;
 
 /**
  * Action annotation processor.
+ *
+ * @author Clay Molocznik
  */
 @AutoService(Processor.class)
 public class ActionProcessor extends AbstractProcessor {
@@ -60,6 +62,7 @@ public class ActionProcessor extends AbstractProcessor {
         annotataions.add(RemoteAction.class.getCanonicalName());
         annotataions.add(QueueAction.class.getCanonicalName());
         annotataions.add(InternalAction.class.getCanonicalName());
+        annotataions.add(StoreAction.class.getCanonicalName());
 //        annotataions.add(ActionConfig.class.getCanonicalName());
         return annotataions;
     }
@@ -75,6 +78,7 @@ public class ActionProcessor extends AbstractProcessor {
             final Set<? extends Element> remoteElements = roundEnv.getElementsAnnotatedWith(RemoteAction.class);
             final Set<? extends Element> queueElements = roundEnv.getElementsAnnotatedWith(QueueAction.class);
             final Set<? extends Element> internalElements = roundEnv.getElementsAnnotatedWith(InternalAction.class);
+            final Set<? extends Element> storeElements = roundEnv.getElementsAnnotatedWith(StoreAction.class);
 
             final HashSet<Element> elements = new HashSet<>();
 
@@ -93,6 +97,7 @@ public class ActionProcessor extends AbstractProcessor {
                 final RemoteAction remoteAction = annotatedElement.getAnnotation(RemoteAction.class);
                 final QueueAction queueAction = annotatedElement.getAnnotation(QueueAction.class);
                 final InternalAction internalAction = annotatedElement.getAnnotation(InternalAction.class);
+                final StoreAction storeAction = annotatedElement.getAnnotation(StoreAction.class);
 
                 final TypeElement element = elementUtils.getTypeElement(annotatedElement.toString());
 
@@ -121,12 +126,16 @@ public class ActionProcessor extends AbstractProcessor {
                 if (holder.internalAction == null) {
                     holder.internalAction = internalAction;
                 }
+                if (holder.storeAction == null) {
+                    holder.storeAction = storeAction;
+                }
 
                 // Ensure only 1 action annotation was used.
                 int actionAnnotationCount = 0;
                 if (holder.remoteAction != null) actionAnnotationCount++;
                 if (holder.queueAction != null) actionAnnotationCount++;
                 if (holder.internalAction != null) actionAnnotationCount++;
+                if (holder.storeAction != null) actionAnnotationCount++;
                 if (actionAnnotationCount > 1) {
                     messager.printMessage(Diagnostic.Kind.ERROR, element.getQualifiedName() + "  has multiple Action annotations. Only one of the following may be used... @RemoteAction or @QueueAction or @InternalAction");
                     continue;
