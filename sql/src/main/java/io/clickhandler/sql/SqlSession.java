@@ -306,7 +306,7 @@ public class SqlSession {
             return fetch(mapping, ids);
         }
 
-        // Copy and store original sort order.
+        // Copy and io.clickhandler.action.store original sort order.
         Collections.sort(ids);
 
         final List<R> records = Lists.newArrayListWithCapacity(ids.size());

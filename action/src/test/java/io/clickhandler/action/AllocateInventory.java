@@ -8,7 +8,7 @@ import javax.inject.Inject;
  *
  */
 //@InternalAction
-@RemoteAction(path = "/some/path")
+//@RemoteAction(path = "/some/path")
 public class AllocateInventory extends AbstractObservableAction<String, String> {
     @Inject
     public AllocateInventory() {

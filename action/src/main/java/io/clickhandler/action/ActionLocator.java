@@ -1,5 +1,7 @@
 package io.clickhandler.action;
 
+import com.google.common.collect.ImmutableMap;
+
 import javax.inject.Inject;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -14,6 +16,7 @@ public abstract class ActionLocator {
     private final Map<Object, RemoteActionProvider<?, ?, ?>> remoteActionMap = new HashMap<>();
     private final Map<Object, QueueActionProvider<?, ?, ?>> queueActionMap = new HashMap<>();
     private final Map<Object, InternalActionProvider<?, ?, ?>> internalActionMap = new HashMap<>();
+    private final Map<Object, ActorActionProvider<?, ?, ?, ?>> actorActionMap = new HashMap<>();
     protected Map<Object, ActionProvider<?, ?, ?>> actionMap = new HashMap<>();
     private ActionManager actionManager;
     private boolean inited;
@@ -21,6 +24,26 @@ public abstract class ActionLocator {
     @Inject
     void setActionManager(ActionManager actionManager) {
         this.actionManager = actionManager;
+    }
+
+    public Map<Object, RemoteActionProvider<?, ?, ?>> getRemoteActionMap() {
+        return ImmutableMap.copyOf(remoteActionMap);
+    }
+
+    public Map<Object, QueueActionProvider<?, ?, ?>> getQueueActionMap() {
+        return ImmutableMap.copyOf(queueActionMap);
+    }
+
+    public Map<Object, InternalActionProvider<?, ?, ?>> getInternalActionMap() {
+        return ImmutableMap.copyOf(internalActionMap);
+    }
+
+    public Map<Object, ActorActionProvider<?, ?, ?, ?>> getActorActionMap() {
+        return ImmutableMap.copyOf(actorActionMap);
+    }
+
+    public Map<Object, ActionProvider<?, ?, ?>> getActionMap() {
+        return ImmutableMap.copyOf(actionMap);
     }
 
     public void register() {

@@ -11,6 +11,7 @@ import javax.lang.model.SourceVersion;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
+import javax.lang.model.type.MirroredTypeException;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
@@ -62,7 +63,7 @@ public class ActionProcessor extends AbstractProcessor {
         annotataions.add(RemoteAction.class.getCanonicalName());
         annotataions.add(QueueAction.class.getCanonicalName());
         annotataions.add(InternalAction.class.getCanonicalName());
-        annotataions.add(StoreAction.class.getCanonicalName());
+        annotataions.add(ActorAction.class.getCanonicalName());
 //        annotataions.add(ActionConfig.class.getCanonicalName());
         return annotataions;
     }
@@ -78,7 +79,7 @@ public class ActionProcessor extends AbstractProcessor {
             final Set<? extends Element> remoteElements = roundEnv.getElementsAnnotatedWith(RemoteAction.class);
             final Set<? extends Element> queueElements = roundEnv.getElementsAnnotatedWith(QueueAction.class);
             final Set<? extends Element> internalElements = roundEnv.getElementsAnnotatedWith(InternalAction.class);
-            final Set<? extends Element> storeElements = roundEnv.getElementsAnnotatedWith(StoreAction.class);
+            final Set<? extends Element> actionElements = roundEnv.getElementsAnnotatedWith(ActorAction.class);
 
             final HashSet<Element> elements = new HashSet<>();
 
@@ -91,13 +92,16 @@ public class ActionProcessor extends AbstractProcessor {
             if (internalElements != null) {
                 elements.addAll(internalElements);
             }
+            if (actionElements != null) {
+                elements.addAll(actionElements);
+            }
 
             boolean allGood = true;
             for (Element annotatedElement : elements) {
                 final RemoteAction remoteAction = annotatedElement.getAnnotation(RemoteAction.class);
                 final QueueAction queueAction = annotatedElement.getAnnotation(QueueAction.class);
                 final InternalAction internalAction = annotatedElement.getAnnotation(InternalAction.class);
-                final StoreAction storeAction = annotatedElement.getAnnotation(StoreAction.class);
+                final ActorAction actorAction = annotatedElement.getAnnotation(ActorAction.class);
 
                 final TypeElement element = elementUtils.getTypeElement(annotatedElement.toString());
 
@@ -126,8 +130,8 @@ public class ActionProcessor extends AbstractProcessor {
                 if (holder.internalAction == null) {
                     holder.internalAction = internalAction;
                 }
-                if (holder.storeAction == null) {
-                    holder.storeAction = storeAction;
+                if (holder.actorAction == null) {
+                    holder.actorAction = actorAction;
                 }
 
                 // Ensure only 1 action annotation was used.
@@ -135,9 +139,9 @@ public class ActionProcessor extends AbstractProcessor {
                 if (holder.remoteAction != null) actionAnnotationCount++;
                 if (holder.queueAction != null) actionAnnotationCount++;
                 if (holder.internalAction != null) actionAnnotationCount++;
-                if (holder.storeAction != null) actionAnnotationCount++;
+                if (holder.actorAction != null) actionAnnotationCount++;
                 if (actionAnnotationCount > 1) {
-                    messager.printMessage(Diagnostic.Kind.ERROR, element.getQualifiedName() + "  has multiple Action annotations. Only one of the following may be used... @RemoteAction or @QueueAction or @InternalAction");
+                    messager.printMessage(Diagnostic.Kind.ERROR, element.getQualifiedName() + "  has multiple Action annotations. Only one of the following may be used... @RemoteAction or @QueueAction or @InternalAction or @ActorAction");
                     continue;
                 }
 
@@ -161,6 +165,25 @@ public class ActionProcessor extends AbstractProcessor {
                     if (holder.outType != null) {
                         messager.printMessage(Diagnostic.Kind.WARNING, "OUT = " + holder.outType.getResolvedElement().getQualifiedName().toString());
                     }
+                }
+
+                if (holder.isActor() && holder.actorTypeClass == null) {
+                    try {
+                        actorAction.actor();
+                    } catch (MirroredTypeException e) {
+                        holder.actorTypeClass = e.getTypeMirror();
+                    } catch (Throwable e) {
+                        messager.printMessage(Diagnostic.Kind.ERROR, "YAYYYYYY!!!!!");
+                    }
+//                    final TypeParameterResolver typeParameterResolver = new TypeParameterResolver(element);
+//
+////                    holder.actorType = typeParameterResolver.resolve(AbstractActorAction.class, 0);
+//
+//                    if (holder.actorType != null) {
+//                        messager.printMessage(Diagnostic.Kind.WARNING, "ACTOR = " + holder.actorType.getResolvedElement().getQualifiedName().toString());
+//                    } else {
+//                        messager.printMessage(Diagnostic.Kind.WARNING, "ACTOR = NULL");
+//                    }
                 }
 
                 actionMap.put(element.getQualifiedName().toString(), holder);
@@ -313,12 +336,31 @@ public class ActionProcessor extends AbstractProcessor {
                 // Get Action OUT resolved name.
                 ClassName outName = ClassName.get(action.outType.getResolvedElement());
 
-                TypeName actionProviderBuilder = ParameterizedTypeName.get(
-                    action.getProviderTypeName(),
-                    actionName,
-                    inName,
-                    outName
-                );
+                TypeName actionProviderBuilder;
+
+                if (action.isActor()) {
+                    TypeName actorName;
+                    if (action.actorType == null) {
+                        actorName = ClassName.get(action.actorTypeClass);
+//                        actorName = ClassName.get(action.actorAction.actor());
+                    } else {
+                        actorName = ClassName.get(action.actorType.getResolvedElement());
+                    }
+                    actionProviderBuilder = ParameterizedTypeName.get(
+                        action.getProviderTypeName(),
+                        actionName,
+                        actorName,
+                        inName,
+                        outName
+                    );
+                } else {
+                    actionProviderBuilder = ParameterizedTypeName.get(
+                        action.getProviderTypeName(),
+                        actionName,
+                        inName,
+                        outName
+                    );
+                }
 
                 type.addField(
                     FieldSpec.builder(actionProviderBuilder, action.getFieldName())

@@ -20,28 +20,28 @@ public class ActionManager extends AbstractExecutionThreadService {
     private final static Map<Object, RemoteActionProvider<?, ?, ?>> remoteActionMap = new HashMap<>();
     private final static Map<Object, QueueActionProvider<?, ?, ?>> queueActionMap = new HashMap<>();
     private final static Map<Object, InternalActionProvider<?, ?, ?>> internalActionMap = new HashMap<>();
-    private final static Map<Object, StoreActionProvider<?, ?, ?, ?>> storeActionMap = new HashMap<>();
+    private final static Map<Object, ActorActionProvider<?, ?, ?, ?>> storeActionMap = new HashMap<>();
 
-    private final static Map<String, StoreActionProvider<?, ?, ?, ?>> storeActionsByName = new HashMap<>();
-    private final static Map<String, StoreManager> storeFactoryMap = new HashMap<>();
+    private final static Map<String, ActorActionProvider<?, ?, ?, ?>> storeActionsByName = new HashMap<>();
+    private final static Map<String, ActorManager> storeFactoryMap = new HashMap<>();
 
     @Inject
     Vertx vertx;
     @Inject
     HazelcastInstance hazelcast;
 
-    private StoreActionSerializer storeActionSerializer = new StoreActionSerializerImpl();
+    private ActorActionSerializer actorActionSerializer = new ActorActionSerializerImpl();
 
     @Inject
     public ActionManager() {
     }
 
-    public StoreActionSerializer getStoreActionSerializer() {
-        return storeActionSerializer;
+    public ActorActionSerializer getActorActionSerializer() {
+        return actorActionSerializer;
     }
 
-    public void setStoreActionSerializer(StoreActionSerializer storeActionSerializer) {
-        this.storeActionSerializer = storeActionSerializer;
+    public void setActorActionSerializer(ActorActionSerializer actorActionSerializer) {
+        this.actorActionSerializer = actorActionSerializer;
     }
 
     @Override
@@ -59,7 +59,7 @@ public class ActionManager extends AbstractExecutionThreadService {
         }
     }
 
-    public StoreActionProvider<?, ?, ?, ?> getStoreAction(String key) {
+    public ActorActionProvider<?, ?, ?, ?> getStoreAction(String key) {
         return storeActionsByName.get(key);
     }
 
@@ -80,15 +80,15 @@ public class ActionManager extends AbstractExecutionThreadService {
                 queueActionMap.put(key, (QueueActionProvider<?, ?, ?>) value);
             } else if (value instanceof InternalActionProvider) {
                 internalActionMap.put(key, (InternalActionProvider<?, ?, ?>) value);
-            } else if (value instanceof StoreActionProvider<?, ?, ?, ?>) {
-                StoreActionProvider<?, ?, ?, ?> storeActionProvider = (StoreActionProvider<?, ?, ?, ?>) value;
+            } else if (value instanceof ActorActionProvider<?, ?, ?, ?>) {
+                ActorActionProvider<?, ?, ?, ?> actorActionProvider = (ActorActionProvider<?, ?, ?, ?>) value;
 
-                final StoreManager storeManager = new StoreManager(vertx, hazelcast, this, storeActionProvider.getStoreProvider());
-                storeManager.addStoreActionProvider(storeActionProvider);
+                final ActorManager actorManager = new ActorManager(vertx, hazelcast, this, actorActionProvider.getActorFactory());
+                actorManager.addStoreActionProvider(actorActionProvider);
 
-                storeFactoryMap.putIfAbsent(storeActionProvider.getName(), storeManager);
-                storeActionsByName.put(storeActionProvider.getName(), storeActionProvider);
-                storeActionMap.put(key, storeActionProvider);
+                storeFactoryMap.putIfAbsent(actorActionProvider.getName(), actorManager);
+                storeActionsByName.put(actorActionProvider.getName(), actorActionProvider);
+                storeActionMap.put(key, actorActionProvider);
             }
         });
     }

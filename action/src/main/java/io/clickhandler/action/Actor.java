@@ -1,15 +1,20 @@
 package io.clickhandler.action;
 
+import io.vertx.rxjava.core.Context;
 import io.vertx.rxjava.core.Future;
 import rx.Scheduler;
 
 /**
  *
  */
-public interface Store {
+public interface Actor {
     String getName();
 
     String getKey();
+
+    Context getContext();
+
+    void setContext(Context context);
 
     Scheduler getScheduler();
 

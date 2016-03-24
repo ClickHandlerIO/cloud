@@ -1,6 +1,7 @@
-package store;
+package io.clickhandler.action.store;
 
-import io.clickhandler.action.AbstractStoreAction;
+import io.clickhandler.action.AbstractActorAction;
+import io.clickhandler.action.ActorAction;
 import rx.Subscriber;
 
 import javax.inject.Inject;
@@ -9,14 +10,15 @@ import java.util.UUID;
 /**
  *
  */
-//@StoreAction(store = MyStore.class)
-public class MyStoreAction extends AbstractStoreAction<MyStore, MyStoreAction.Request, MyStoreAction.Response> {
+@ActorAction(actor = MyActor.class)
+public class MyActorAction extends AbstractActorAction<MyActor, MyActorAction.Request, MyActorAction.Response> {
     @Inject
-    public MyStoreAction() {
+    public MyActorAction() {
     }
 
     @Override
     protected void start(Subscriber<? super Response> subscriber) {
+
         getStore().getWatchers().add(UUID.randomUUID().toString());
     }
 

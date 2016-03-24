@@ -11,57 +11,56 @@ import java.util.Objects;
 /**
  *
  */
-public class StoreActionProvider<A extends Action<IN, OUT>, STORE extends Store, IN, OUT> extends ActionProvider<A, IN, OUT> {
+public class ActorActionProvider<A extends Action<IN, OUT>, ACTOR extends Actor, IN, OUT> extends ActionProvider<A, IN, OUT> {
     private static final Object DEFAULT_CONTEXT = new Object();
     private static final int LATENCY_OFFSET_MILLIS = 500;
 
     @Inject
     Vertx vertx;
     @Inject
-    Provider<STORE> storeProvider;
+    Provider<ACTOR> actorFactory;
 
-    private StoreAction storeAction;
+    private ActorAction actorAction;
     private String name = "";
-    private StoreManager storeManager;
+    private ActorManager actorManager;
 
     @Inject
-    public StoreActionProvider() {
+    public ActorActionProvider() {
     }
 
     public String getName() {
         return name;
     }
 
-    public Provider<STORE> getStoreProvider() {
-        return storeProvider;
+    public Provider<ACTOR> getActorFactory() {
+        return actorFactory;
     }
 
-    public StoreManager getStoreManager() {
-        return storeManager;
+    public ActorManager getActorManager() {
+        return actorManager;
     }
 
-    void setStoreManager(StoreManager storeManager) {
-        this.storeManager = storeManager;
+    void setActorManager(ActorManager actorManager) {
+        this.actorManager = actorManager;
     }
 
     @Override
     protected void init() {
-        storeAction = getActionClass().getAnnotation(StoreAction.class);
+        actorAction = getActionClass().getAnnotation(ActorAction.class);
         name = Objects.toString(
-            Strings.emptyToNull(storeAction.name()),
+            Strings.emptyToNull(actorAction.name()),
             getActionClass().getClass().getCanonicalName()
         );
         super.init();
     }
 
     /**
-     *
-     * @param store
+     * @param ACTOR
      * @param request
      * @return
      */
-    protected Observable<OUT> observe(STORE store, IN request) {
-        return observe(store, request);
+    protected Observable<OUT> observe(ACTOR ACTOR, IN request) {
+        return observe(ACTOR, request);
     }
 
     public Observable<OUT> ask(String key, IN request) {
@@ -69,7 +68,7 @@ public class StoreActionProvider<A extends Action<IN, OUT>, STORE extends Store,
     }
 
     public Observable<OUT> ask(String key, int timeoutMillis, IN request) {
-        return storeManager.ask(this, timeoutMillis, key, request);
+        return actorManager.ask(this, timeoutMillis, key, request);
     }
 
     /**

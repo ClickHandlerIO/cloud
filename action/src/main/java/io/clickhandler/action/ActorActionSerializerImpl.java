@@ -13,7 +13,7 @@ import java.io.InputStream;
 /**
  *
  */
-public class StoreActionSerializerImpl implements StoreActionSerializer {
+public class ActorActionSerializerImpl implements ActorActionSerializer {
     @Override
     public byte[] byteify(Object value) {
         return WireFormat.byteify(value);

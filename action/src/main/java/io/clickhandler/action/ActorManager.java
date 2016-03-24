@@ -27,11 +27,11 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Manages a single Store type. The local cache
+ * Manages a single Actor type. The local cache
  *
  * @author Clay Molocznik
  */
-public class StoreManager extends AbstractVerticle {
+public class ActorManager extends AbstractVerticle {
     public static final int ASK = 0;
     public static final int REPLY = 1;
     public static final int ACTION_NOT_FOUND = 2;
@@ -48,17 +48,16 @@ public class StoreManager extends AbstractVerticle {
     protected final HazelcastInstance hazelcast;
     protected final PartitionService partitionService;
     protected final ActionManager actionManager;
-    protected final Provider<? extends Store> storeProvider;
+    protected final Provider<? extends AbstractActor<?>> actorProvider;
 
     private final MigrationListener migrationListener = new MigrationListenerImpl();
     private final DistributedMapListener entryListener = new DistributedMapListener();
-
     private final ConcurrentMap<Integer, PartitionProxy> partitionMap = new ConcurrentHashMap<>();
-    private final ConcurrentMap<String, StoreActionProvider<?, ?, ?, ?>> actionProviderMap = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, ActorActionProvider<?, ?, ?, ?>> actionProviderMap = new ConcurrentHashMap<>();
 
     private IMap<String, byte[]> hzMap;
-    private final Cache<String, Store> localCache = CacheBuilder.newBuilder()
-        .removalListener((RemovalListener<String, Store>) removalNotification -> {
+    private final Cache<String, AbstractActor<?>> localCache = CacheBuilder.newBuilder()
+        .removalListener((RemovalListener<String, Actor>) removalNotification -> {
             removalNotification.getValue().stop(Future.<Void>future().setHandler(event -> {
             }));
 
@@ -70,32 +69,36 @@ public class StoreManager extends AbstractVerticle {
         .build();
     private String migrationListenerId = null;
     private String entryListenerId = null;
-    private String storeName = "";
+    private String actorName = "";
     private Member localMember;
 
-    public StoreManager(Vertx vertx, HazelcastInstance hazelcast, ActionManager actionManager, Provider<? extends Store> storeProvider) {
+    public ActorManager(Vertx vertx, HazelcastInstance hazelcast, ActionManager actionManager, Provider<? extends AbstractActor<?>> actorProvider) {
         this.vertx = vertx;
         this.hazelcast = hazelcast;
         this.partitionService = hazelcast == null ? null : hazelcast.getPartitionService();
         this.actionManager = actionManager;
-        this.storeProvider = storeProvider;
-        this.storeName = storeProvider.get().getName();
-        this.log = LoggerFactory.getLogger(getClass() + "." + storeName);
+        this.actorProvider = actorProvider;
+        this.actorName = actorProvider.get().getName();
+        this.log = LoggerFactory.getLogger(getClass() + "." + actorName);
     }
 
-    void addStoreActionProvider(StoreActionProvider<?, ?, ?, ?> storeActionProvider) {
-        storeActionProvider.setStoreManager(this);
-        actionProviderMap.put(storeActionProvider.getName(), storeActionProvider);
+    protected String clusterMapName() {
+        return "___actor-" + actorName;
+    }
+
+    void addStoreActionProvider(ActorActionProvider<?, ?, ?, ?> actorActionProvider) {
+        actorActionProvider.setActorManager(this);
+        actionProviderMap.put(actorActionProvider.getName(), actorActionProvider);
     }
 
     @Override
     public void start(io.vertx.core.Future<Void> startFuture) throws Exception {
-        storeName = storeProvider.get().getName();
+        actorName = actorProvider.get().getName();
 
         if (hazelcast != null) {
             vertx.executeBlockingObservable(event -> {
                 migrationListenerId = partitionService.addMigrationListener(migrationListener);
-                hzMap = hazelcast.getMap("___stores-" + storeName);
+                hzMap = hazelcast.getMap(clusterMapName());
                 entryListenerId = hzMap.addLocalEntryListener(entryListener);
 
                 localMember = hazelcast.getCluster().getLocalMember();
@@ -184,7 +187,7 @@ public class StoreManager extends AbstractVerticle {
      * @return
      */
     protected String buildAddress(int partition) {
-        return "__store|" + partition + "|" + storeName;
+        return "__store|" + partition + "|" + actorName;
     }
 
     /**
@@ -193,7 +196,7 @@ public class StoreManager extends AbstractVerticle {
      * @param addToCluster
      * @return
      */
-    protected Observable<Store> getOrCreate(String key, byte[] state, boolean addToCluster) {
+    protected Observable<Actor> getOrCreate(String key, byte[] state, boolean addToCluster) {
         return Observable.create(subscriber -> {
             if (subscriber.isUnsubscribed())
                 return;
@@ -210,15 +213,16 @@ public class StoreManager extends AbstractVerticle {
             }
 
             final AtomicBoolean created = new AtomicBoolean(false);
-            final Store store = Try.of(() -> localCache.get(key,
+            final AbstractActor<?> actor = Try.of(() -> localCache.get(key,
                 () -> {
                     created.set(true);
-                    // Create a new instance of the store.
-                    final Store s = storeProvider.get();
+                    // Create a new instance of the actor.
+                    final AbstractActor<?> s = actorProvider.get();
                     s.setKey(key);
                     s.start(Future.<Void>future().setHandler(event -> {
 
                     }));
+                    s.setContext(vertx.getOrCreateContext());
                     s.setScheduler(RxHelper.scheduler(vertx.getOrCreateContext()));
                     return s;
                 })
@@ -233,7 +237,7 @@ public class StoreManager extends AbstractVerticle {
                             return;
 
                         try {
-                            subscriber.onNext(store);
+                            subscriber.onNext(actor);
                             subscriber.onCompleted();
                         } catch (Throwable e) {
                             Try.run(() -> subscriber.onError(e));
@@ -247,7 +251,7 @@ public class StoreManager extends AbstractVerticle {
                 });
             } else {
                 try {
-                    subscriber.onNext(store);
+                    subscriber.onNext(actor);
                     subscriber.onCompleted();
                 } catch (Throwable e) {
                     Try.run(() -> subscriber.onError(e));
@@ -267,7 +271,7 @@ public class StoreManager extends AbstractVerticle {
      * @param <OUT>
      * @return
      */
-    public <A extends Action<IN, OUT>, S extends Store, IN, OUT> Observable<OUT> ask(StoreActionProvider<A, S, IN, OUT> actionProvider,
+    public <A extends Action<IN, OUT>, S extends Actor, IN, OUT> Observable<OUT> ask(ActorActionProvider<A, S, IN, OUT> actionProvider,
                                                                                      int timeoutMillis,
                                                                                      String key,
                                                                                      IN request) {
@@ -276,7 +280,7 @@ public class StoreManager extends AbstractVerticle {
             return Observable.create(subscriber -> getOrCreate(key, new byte[]{(byte) 0}, true).subscribe(
                 store -> {
                     if (store == null) {
-                        Try.run(() -> subscriber.onError(new RuntimeException("Store not found for key [" + key + "]")));
+                        Try.run(() -> subscriber.onError(new RuntimeException("Actor not found for key [" + key + "]")));
                         return;
                     }
 
@@ -317,7 +321,7 @@ public class StoreManager extends AbstractVerticle {
 
         // Build address.
         final String deliveryAddress = buildAddress(partition.getPartitionId());
-        final byte[] payload = actionManager.getStoreActionSerializer().byteify(request);
+        final byte[] payload = actionManager.getActorActionSerializer().byteify(request);
 
         return Observable.create(subscriber -> {
             MessageBufferPacker packer = MessagePack.newDefaultBufferPacker();
@@ -326,7 +330,7 @@ public class StoreManager extends AbstractVerticle {
                 packer.packInt(ASK);
                 packer.packInt(partition.getPartitionId());
                 packer.packString(partition.getOwner().getUuid());
-                packer.packString(storeName);
+                packer.packString(actorName);
                 packer.packString(actionProvider.getName());
                 packer.packString(key);
                 packer.writePayload(payload);
@@ -367,7 +371,7 @@ public class StoreManager extends AbstractVerticle {
 
                 try {
                     subscriber.onNext(
-                        actionManager.getStoreActionSerializer().parse(
+                        actionManager.getActorActionSerializer().parse(
                             actionProvider.getOutClass(),
                             replyBody
                         )
@@ -410,7 +414,7 @@ public class StoreManager extends AbstractVerticle {
             return;
         }
 
-        final StoreActionProvider actionProvider = actionProviderMap.get(header.getActionName());
+        final ActorActionProvider actionProvider = actionProviderMap.get(header.getActionName());
         if (actionProvider == null) {
             // Respond with ACTION_NOT_FOUND
             message.fail(ACTION_NOT_FOUND, "Action Not Found");
@@ -418,7 +422,7 @@ public class StoreManager extends AbstractVerticle {
         }
         final Object request;
         try {
-            request = actionManager.getStoreActionSerializer()
+            request = actionManager.getActorActionSerializer()
                 .parse(actionProvider.getInClass(), body, header.getHeaderSize(), header.getBodySize());
         } catch (Throwable e) {
             message.fail(BAD_REQUEST_FORMAT, "Bad Request Format");
@@ -437,7 +441,7 @@ public class StoreManager extends AbstractVerticle {
                                 // Serialize response.
                                 final byte[] responsePaylod;
                                 try {
-                                    responsePaylod = actionManager.getStoreActionSerializer().byteify(actionResponse);
+                                    responsePaylod = actionManager.getActorActionSerializer().byteify(actionResponse);
                                 } catch (Throwable e) {
                                     message.fail(REMOTE_FAILURE, e.getMessage());
                                     log.warn("Failed to serialize Response Type [" + actionProvider.getOutClass().getCanonicalName() + "]", e);
@@ -450,14 +454,14 @@ public class StoreManager extends AbstractVerticle {
                             }
                         );
                     } catch (Throwable e) {
-                        log.error("Failed to invoke StoreActionProvider", e);
+                        log.error("Failed to invoke ActorActionProvider", e);
                         message.fail(REMOTE_FAILURE, e.getMessage());
                     }
                 }
             },
             e -> {
                 // Respond with STORE_UNAVAILABLE.
-                message.fail(STORE_NOT_FOUND, "Store Not Found");
+                message.fail(STORE_NOT_FOUND, "Actor Not Found");
             }
         );
     }
@@ -604,7 +608,7 @@ public class StoreManager extends AbstractVerticle {
                 consumer = vertx.eventBus().consumer(address);
             }
 
-            consumer.handler(StoreManager.this::receive);
+            consumer.handler(ActorManager.this::receive);
         }
 
         public void unsubscribe() {
@@ -624,7 +628,6 @@ public class StoreManager extends AbstractVerticle {
         @Override
         public void migrationStarted(MigrationEvent migrationEvent) {
             // If we are to receive
-
         }
 
         @Override
@@ -656,7 +659,7 @@ public class StoreManager extends AbstractVerticle {
 
         @Override
         public void entryRemoved(EntryEvent<String, byte[]> event) {
-            // TODO: Remove local store.
+            // TODO: Remove local io.clickhandler.action.actor.
             localCache.invalidate(event.getKey());
         }
 

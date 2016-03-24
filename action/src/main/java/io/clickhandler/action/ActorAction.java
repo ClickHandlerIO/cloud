@@ -3,17 +3,17 @@ package io.clickhandler.action;
 import java.lang.annotation.*;
 
 /**
- * Internal Distributed Action for an instance of a Store.
- * The Store is stored on a single node in the cluster.
+ * Internal Distributed Action for an instance of a Actor.
+ * The Actor is stored on a single node in the cluster.
  */
 @Documented
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.TYPE})
-public @interface StoreAction {
+public @interface ActorAction {
     /**
      * @return
      */
-    Class store() default Object.class;
+    Class actor() default Object.class;
 
     /**
      * @return

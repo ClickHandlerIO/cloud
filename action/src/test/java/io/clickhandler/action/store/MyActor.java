@@ -1,6 +1,6 @@
-package store;
+package io.clickhandler.action.store;
 
-import io.clickhandler.action.AbstractStore;
+import io.clickhandler.action.AbstractActor;
 import io.vertx.rxjava.core.Future;
 
 import java.util.ArrayList;
@@ -9,16 +9,16 @@ import java.util.List;
 /**
  *
  */
-public class MyStore extends AbstractStore {
+public class MyActor extends AbstractActor {
     private List<String> watchers = new ArrayList<>();
 
     @Override
-    protected void startUp(Future startFuture) {
+    protected void finishStart(Future startFuture) {
         startFuture.complete();
     }
 
     @Override
-    protected void shutDown(Future stopFuture) {
+    protected void finishStop(Future stopFuture) {
         stopFuture.complete();
     }
 

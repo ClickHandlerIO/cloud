@@ -3,7 +3,7 @@ package io.clickhandler.action;
 /**
  *
  */
-public interface StoreActionSerializer {
+public interface ActorActionSerializer {
     byte[] byteify(Object value);
 
     <T> T parse(Class<T> type, byte[] data);

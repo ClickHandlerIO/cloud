@@ -4,6 +4,7 @@ import com.squareup.javapoet.ClassName;
 import io.clickhandler.action.*;
 
 import javax.lang.model.element.TypeElement;
+import javax.lang.model.type.TypeMirror;
 
 /**
  *
@@ -12,9 +13,11 @@ public class ActionHolder {
     RemoteAction remoteAction;
     QueueAction queueAction;
     InternalAction internalAction;
-    StoreAction storeAction;
+    ActorAction actorAction;
     ActionConfig config;
     TypeElement type;
+    TypeMirror actorTypeClass;
+    DeclaredTypeVar actorType;
     DeclaredTypeVar inType;
     DeclaredTypeVar outType;
 
@@ -32,8 +35,8 @@ public class ActionHolder {
         return internalAction != null;
     }
 
-    public boolean isStore() {
-        return storeAction != null;
+    public boolean isActor() {
+        return actorAction != null;
     }
 
     public ClassName getProviderTypeName() {
@@ -52,8 +55,8 @@ public class ActionHolder {
             return ClassName.get(InternalActionProvider.class);
         } else if (isQueue()) {
             return ClassName.get(QueueActionProvider.class);
-        } else if (isStore()) {
-            return ClassName.get(StoreActionProvider.class);
+        } else if (isActor()) {
+            return ClassName.get(ActorActionProvider.class);
         } else {
             return ClassName.get(ActionProvider.class);
         }

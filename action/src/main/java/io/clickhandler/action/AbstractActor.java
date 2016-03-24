@@ -1,5 +1,6 @@
 package io.clickhandler.action;
 
+import io.vertx.rxjava.core.Context;
 import io.vertx.rxjava.core.Future;
 import javaslang.control.Try;
 import rx.Scheduler;
@@ -11,10 +12,11 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  *
  */
-public class AbstractStore<S> implements Store {
+public class AbstractActor<S> implements Actor {
     private final AtomicReference<Status> status = new AtomicReference<>(Status.NEW);
     private final AtomicReference<S> state = new AtomicReference<>();
     private final String name;
+    private Context context;
     private Scheduler scheduler;
     private AtomicReference<String> key = new AtomicReference<>();
     private long startBegin;
@@ -25,7 +27,7 @@ public class AbstractStore<S> implements Store {
     private List<Future<Void>> stopList;
     private Throwable cause;
 
-    public AbstractStore() {
+    public AbstractActor() {
         this.name = getClass().getCanonicalName();
     }
 
@@ -41,6 +43,16 @@ public class AbstractStore<S> implements Store {
 
     public void setKey(String key) {
         this.key.compareAndSet(null, key);
+    }
+
+    @Override
+    public Context getContext() {
+        return context;
+    }
+
+    @Override
+    public void setContext(Context context) {
+        this.context = context;
     }
 
     public Scheduler getScheduler() {
@@ -63,7 +75,7 @@ public class AbstractStore<S> implements Store {
 
         if (status.compareAndSet(Status.NEW, Status.STARTING)) {
             startBegin = System.currentTimeMillis();
-            startUp(Future.<Void>future().setHandler(event -> {
+            finishStart(Future.<Void>future().setHandler(event -> {
                 startEnd = System.currentTimeMillis();
                 Try.run(() -> {
                     if (event.failed()) {
@@ -75,6 +87,7 @@ public class AbstractStore<S> implements Store {
                         status.set(Status.STOPPED);
                         Try.run(startFuture::complete);
                         Try.run(() -> childStart(null));
+                        context.runOnContext($ -> started());
                     }
                 });
             }));
@@ -83,8 +96,12 @@ public class AbstractStore<S> implements Store {
         }
     }
 
-    protected void startUp(Future<Void> startFuture) {
+    protected void finishStart(Future<Void> startFuture) {
         startFuture.complete();
+    }
+
+    protected void started() {
+
     }
 
     protected synchronized void childStart(Future<Void> future) {
@@ -115,7 +132,7 @@ public class AbstractStore<S> implements Store {
         }
 
         stopBegin = System.currentTimeMillis();
-        shutDown(Future.<Void>future().setHandler(event -> {
+        finishStop(Future.<Void>future().setHandler(event -> {
             stopEnd = System.currentTimeMillis();
             Try.run(() -> {
                 if (event.failed()) {
@@ -127,6 +144,7 @@ public class AbstractStore<S> implements Store {
                     status.set(Status.STOPPED);
                     Try.run(stopFuture::complete);
                     Try.run(() -> childStop(null));
+                    context.runOnContext($ -> stopped());
                 }
             });
         }));
@@ -151,8 +169,12 @@ public class AbstractStore<S> implements Store {
         }
     }
 
-    protected void shutDown(Future<Void> stopFuture) {
+    protected void finishStop(Future<Void> stopFuture) {
         stopFuture.complete();
+    }
+
+    protected void stopped() {
+
     }
 
     private void empty(List<Future<Void>> futures) {
