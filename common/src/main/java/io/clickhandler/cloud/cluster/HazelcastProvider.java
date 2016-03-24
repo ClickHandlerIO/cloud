@@ -1,4 +1,4 @@
-package io.clickhandler.action;
+package io.clickhandler.cloud.cluster;
 
 import com.hazelcast.core.HazelcastInstance;
 

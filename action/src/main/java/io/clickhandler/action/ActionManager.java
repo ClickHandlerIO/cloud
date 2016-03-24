@@ -1,6 +1,7 @@
 package io.clickhandler.action;
 
 import com.google.common.util.concurrent.AbstractExecutionThreadService;
+import io.clickhandler.cloud.cluster.HazelcastProvider;
 import io.vertx.rxjava.core.Vertx;
 
 import javax.inject.Inject;

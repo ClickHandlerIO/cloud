@@ -7,6 +7,7 @@ import dagger.Provides;
 import io.Action_LocatorRoot;
 import io.Io_Locator;
 import io.clickhandler.action.store.MyActorAction;
+import io.clickhandler.cloud.cluster.HazelcastProvider;
 import io.vertx.rxjava.core.Vertx;
 
 import javax.inject.Singleton;
