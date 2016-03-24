@@ -54,16 +54,16 @@ public class Keys {
 	// UNIQUE and PRIMARY KEY definitions
 	// -------------------------------------------------------------------------
 
+	public static final UniqueKey<EvolutionChangeRecord> PK_EVOLUTION_CHANGE = UniqueKeys0.PK_EVOLUTION_CHANGE;
 	public static final UniqueKey<FileRecord> PK_FILE = UniqueKeys0.PK_FILE;
 	public static final UniqueKey<FileJnlRecord> PK_FILE_JNL = UniqueKeys0.PK_FILE_JNL;
-	public static final UniqueKey<EmailAttachmentRecord> PK_EMAIL_ATTACHMENT = UniqueKeys0.PK_EMAIL_ATTACHMENT;
-	public static final UniqueKey<EmailAttachmentJnlRecord> PK_EMAIL_ATTACHMENT_JNL = UniqueKeys0.PK_EMAIL_ATTACHMENT_JNL;
 	public static final UniqueKey<EmailRecord> PK_EMAIL = UniqueKeys0.PK_EMAIL;
 	public static final UniqueKey<EmailJnlRecord> PK_EMAIL_JNL = UniqueKeys0.PK_EMAIL_JNL;
-	public static final UniqueKey<EvolutionChangeRecord> PK_EVOLUTION_CHANGE = UniqueKeys0.PK_EVOLUTION_CHANGE;
-	public static final UniqueKey<EvolutionRecord> PK_EVOLUTION = UniqueKeys0.PK_EVOLUTION;
+	public static final UniqueKey<EmailAttachmentRecord> PK_EMAIL_ATTACHMENT = UniqueKeys0.PK_EMAIL_ATTACHMENT;
+	public static final UniqueKey<EmailAttachmentJnlRecord> PK_EMAIL_ATTACHMENT_JNL = UniqueKeys0.PK_EMAIL_ATTACHMENT_JNL;
 	public static final UniqueKey<EmailRecipientRecord> PK_EMAIL_RECIPIENT = UniqueKeys0.PK_EMAIL_RECIPIENT;
 	public static final UniqueKey<EmailRecipientJnlRecord> PK_EMAIL_RECIPIENT_JNL = UniqueKeys0.PK_EMAIL_RECIPIENT_JNL;
+	public static final UniqueKey<EvolutionRecord> PK_EVOLUTION = UniqueKeys0.PK_EVOLUTION;
 
 	// -------------------------------------------------------------------------
 	// FOREIGN KEY definitions
@@ -75,15 +75,15 @@ public class Keys {
 	// -------------------------------------------------------------------------
 
 	private static class UniqueKeys0 extends AbstractKeys {
+		public static final UniqueKey<EvolutionChangeRecord> PK_EVOLUTION_CHANGE = createUniqueKey(EvolutionChange.EVOLUTION_CHANGE, EvolutionChange.EVOLUTION_CHANGE.ID);
 		public static final UniqueKey<FileRecord> PK_FILE = createUniqueKey(File.FILE, File.FILE.ID);
 		public static final UniqueKey<FileJnlRecord> PK_FILE_JNL = createUniqueKey(FileJnl.FILE_JNL, FileJnl.FILE_JNL.ID, FileJnl.FILE_JNL.V);
-		public static final UniqueKey<EmailAttachmentRecord> PK_EMAIL_ATTACHMENT = createUniqueKey(EmailAttachment.EMAIL_ATTACHMENT, EmailAttachment.EMAIL_ATTACHMENT.ID);
-		public static final UniqueKey<EmailAttachmentJnlRecord> PK_EMAIL_ATTACHMENT_JNL = createUniqueKey(EmailAttachmentJnl.EMAIL_ATTACHMENT_JNL, EmailAttachmentJnl.EMAIL_ATTACHMENT_JNL.ID, EmailAttachmentJnl.EMAIL_ATTACHMENT_JNL.V);
 		public static final UniqueKey<EmailRecord> PK_EMAIL = createUniqueKey(Email.EMAIL, Email.EMAIL.ID);
 		public static final UniqueKey<EmailJnlRecord> PK_EMAIL_JNL = createUniqueKey(EmailJnl.EMAIL_JNL, EmailJnl.EMAIL_JNL.ID, EmailJnl.EMAIL_JNL.V);
-		public static final UniqueKey<EvolutionChangeRecord> PK_EVOLUTION_CHANGE = createUniqueKey(EvolutionChange.EVOLUTION_CHANGE, EvolutionChange.EVOLUTION_CHANGE.ID);
-		public static final UniqueKey<EvolutionRecord> PK_EVOLUTION = createUniqueKey(Evolution.EVOLUTION, Evolution.EVOLUTION.ID);
+		public static final UniqueKey<EmailAttachmentRecord> PK_EMAIL_ATTACHMENT = createUniqueKey(EmailAttachment.EMAIL_ATTACHMENT, EmailAttachment.EMAIL_ATTACHMENT.ID);
+		public static final UniqueKey<EmailAttachmentJnlRecord> PK_EMAIL_ATTACHMENT_JNL = createUniqueKey(EmailAttachmentJnl.EMAIL_ATTACHMENT_JNL, EmailAttachmentJnl.EMAIL_ATTACHMENT_JNL.ID, EmailAttachmentJnl.EMAIL_ATTACHMENT_JNL.V);
 		public static final UniqueKey<EmailRecipientRecord> PK_EMAIL_RECIPIENT = createUniqueKey(EmailRecipient.EMAIL_RECIPIENT, EmailRecipient.EMAIL_RECIPIENT.ID);
 		public static final UniqueKey<EmailRecipientJnlRecord> PK_EMAIL_RECIPIENT_JNL = createUniqueKey(EmailRecipientJnl.EMAIL_RECIPIENT_JNL, EmailRecipientJnl.EMAIL_RECIPIENT_JNL.ID, EmailRecipientJnl.EMAIL_RECIPIENT_JNL.V);
+		public static final UniqueKey<EvolutionRecord> PK_EVOLUTION = createUniqueKey(Evolution.EVOLUTION, Evolution.EVOLUTION.ID);
 	}
 }

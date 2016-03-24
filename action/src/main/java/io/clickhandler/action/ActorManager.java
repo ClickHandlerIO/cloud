@@ -3,7 +3,6 @@ package io.clickhandler.action;
 import com.google.common.base.Strings;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.RemovalListener;
 import com.hazelcast.core.*;
 import com.hazelcast.map.listener.*;
 import io.vertx.core.eventbus.DeliveryOptions;
@@ -11,7 +10,6 @@ import io.vertx.core.eventbus.ReplyException;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 import io.vertx.rxjava.core.AbstractVerticle;
-import io.vertx.rxjava.core.Future;
 import io.vertx.rxjava.core.RxHelper;
 import io.vertx.rxjava.core.Vertx;
 import io.vertx.rxjava.core.eventbus.MessageConsumer;
@@ -48,31 +46,24 @@ public class ActorManager extends AbstractVerticle {
     protected final HazelcastInstance hazelcast;
     protected final PartitionService partitionService;
     protected final ActionManager actionManager;
-    protected final Provider<? extends AbstractActor<?>> actorProvider;
+    protected final Provider<? extends AbstractActor> actorProvider;
 
     private final MigrationListener migrationListener = new MigrationListenerImpl();
     private final DistributedMapListener entryListener = new DistributedMapListener();
     private final ConcurrentMap<Integer, PartitionProxy> partitionMap = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, ActorActionProvider<?, ?, ?, ?>> actionProviderMap = new ConcurrentHashMap<>();
-
+    private final Cache<String, AbstractActor> localMap = CacheBuilder.newBuilder().build();
     private IMap<String, byte[]> hzMap;
-    private final Cache<String, AbstractActor<?>> localCache = CacheBuilder.newBuilder()
-        .removalListener((RemovalListener<String, Actor>) removalNotification -> {
-            removalNotification.getValue().stop(Future.<Void>future().setHandler(event -> {
-            }));
 
-            if (removalNotification.wasEvicted()) {
-                if (hzMap != null)
-                    hzMap.removeAsync(removalNotification.getKey());
-            }
-        })
-        .build();
     private String migrationListenerId = null;
     private String entryListenerId = null;
     private String actorName = "";
     private Member localMember;
 
-    public ActorManager(Vertx vertx, HazelcastInstance hazelcast, ActionManager actionManager, Provider<? extends AbstractActor<?>> actorProvider) {
+    public ActorManager(Vertx vertx,
+                        HazelcastInstance hazelcast,
+                        ActionManager actionManager,
+                        Provider<? extends AbstractActor> actorProvider) {
         this.vertx = vertx;
         this.hazelcast = hazelcast;
         this.partitionService = hazelcast == null ? null : hazelcast.getPartitionService();
@@ -157,7 +148,7 @@ public class ActorManager extends AbstractVerticle {
      */
     public Observable<Boolean> containsKey(String key) {
         if (hzMap == null) {
-            return Observable.just(localCache.asMap().containsKey(key));
+            return Observable.just(localMap.asMap().containsKey(key));
         }
 
         return Observable.create(subscriber -> {
@@ -196,10 +187,46 @@ public class ActorManager extends AbstractVerticle {
      * @param addToCluster
      * @return
      */
-    protected Observable<Actor> getOrCreate(String key, byte[] state, boolean addToCluster) {
-        return Observable.create(subscriber -> {
+    protected Observable<AbstractActor> getOrCreate(String key, byte[] state, boolean addToCluster) {
+        return Observable.<AbstractActor>create(subscriber -> {
             if (subscriber.isUnsubscribed())
                 return;
+
+            final AtomicBoolean created = new AtomicBoolean(false);
+
+            final AbstractActor actor = Try.of(() -> localMap.get(key,
+                () -> {
+                    created.set(true);
+                    // Create a new instance of the actor.
+                    final AbstractActor s = actorProvider.get();
+                    s.setKey(key);
+                    s.setVertx(vertx);
+                    s.setContext(vertx.getOrCreateContext());
+                    s.setScheduler(RxHelper.scheduler(s.getContext()));
+                    s.started();
+                    return s;
+                })
+            ).getOrElse(() -> null);
+
+            if (actor == null) {
+                try {
+                    subscriber.onNext(null);
+                    subscriber.onCompleted();
+                } catch (Throwable e) {
+                    Try.run(() -> subscriber.onError(e));
+                }
+                return;
+            }
+
+            if (hzMap == null || partitionMap == null) {
+                try {
+                    subscriber.onNext(actor);
+                    subscriber.onCompleted();
+                } catch (Throwable e) {
+                    Try.run(() -> subscriber.onError(e));
+                }
+                return;
+            }
 
             final Partition p = partitionService.getPartition(key);
             // Ensure partition started.
@@ -212,23 +239,7 @@ public class ActorManager extends AbstractVerticle {
                 }
             }
 
-            final AtomicBoolean created = new AtomicBoolean(false);
-            final AbstractActor<?> actor = Try.of(() -> localCache.get(key,
-                () -> {
-                    created.set(true);
-                    // Create a new instance of the actor.
-                    final AbstractActor<?> s = actorProvider.get();
-                    s.setKey(key);
-                    s.start(Future.<Void>future().setHandler(event -> {
-
-                    }));
-                    s.setContext(vertx.getOrCreateContext());
-                    s.setScheduler(RxHelper.scheduler(vertx.getOrCreateContext()));
-                    return s;
-                })
-            ).getOrElse(() -> null);
-
-            if (addToCluster && created.get() && hzMap != null) {
+            if (addToCluster && created.get()) {
                 // Ensure it's in the cluster map.
                 ((ICompletableFuture<byte[]>) hzMap.putAsync(key, state)).andThen(new ExecutionCallback<byte[]>() {
                     @Override
@@ -249,15 +260,8 @@ public class ActorManager extends AbstractVerticle {
                         Try.run(() -> subscriber.onError(t));
                     }
                 });
-            } else {
-                try {
-                    subscriber.onNext(actor);
-                    subscriber.onCompleted();
-                } catch (Throwable e) {
-                    Try.run(() -> subscriber.onError(e));
-                }
             }
-        });
+        });//.observeOn(scheduler).subscribeOn(scheduler);
     }
 
     /**
@@ -266,25 +270,26 @@ public class ActorManager extends AbstractVerticle {
      * @param key
      * @param request
      * @param <A>
-     * @param <S>
+     * @param <ACTOR>
      * @param <IN>
      * @param <OUT>
      * @return
      */
-    public <A extends Action<IN, OUT>, S extends Actor, IN, OUT> Observable<OUT> ask(ActorActionProvider<A, S, IN, OUT> actionProvider,
-                                                                                     int timeoutMillis,
-                                                                                     String key,
-                                                                                     IN request) {
+    public <A extends Action<IN, OUT>, ACTOR extends AbstractActor, IN, OUT> Observable<OUT> ask(ActorActionProvider<A, ACTOR, IN, OUT> actionProvider,
+                                                                                                 int timeoutMillis,
+                                                                                                 String key,
+                                                                                                 IN request) {
         // Is Owned locally?
         if (isOwnedLocally(key)) {
+            // Invoke locally.
             return Observable.create(subscriber -> getOrCreate(key, new byte[]{(byte) 0}, true).subscribe(
-                store -> {
-                    if (store == null) {
+                actor -> {
+                    if (actor == null) {
                         Try.run(() -> subscriber.onError(new RuntimeException("Actor not found for key [" + key + "]")));
                         return;
                     }
 
-                    actionProvider.observe(store, request).subscribe(
+                    actor.invoke(actionProvider, request).subscribe(
                         actionResponse -> {
                             if (subscriber.isUnsubscribed())
                                 return;
@@ -430,33 +435,34 @@ public class ActorManager extends AbstractVerticle {
         }
 
         getOrCreate(header.getKey(), new byte[]{(byte) 0}, true).subscribe(
-            store -> {
-                if (store == null) {
+            actor -> {
+                if (actor == null) {
                     // Respond with STORE_NOT_FOUND
                     message.reply(buildResponseEnvelope(STORE_NOT_FOUND));
-                } else {
-                    try {
-                        actionProvider.observe(store, request).subscribeOn(store.getScheduler()).observeOn(store.getScheduler()).subscribe(
-                            actionResponse -> {
-                                // Serialize response.
-                                final byte[] responsePaylod;
-                                try {
-                                    responsePaylod = actionManager.getActorActionSerializer().byteify(actionResponse);
-                                } catch (Throwable e) {
-                                    message.fail(REMOTE_FAILURE, e.getMessage());
-                                    log.warn("Failed to serialize Response Type [" + actionProvider.getOutClass().getCanonicalName() + "]", e);
-                                    return;
-                                }
-                                message.reply(responsePaylod);
-                            },
-                            e -> {
-                                message.fail(REMOTE_FAILURE, ((Throwable) e).getMessage());
+                    return;
+                }
+
+                try {
+                    actor.invoke(actionProvider, request).subscribe(
+                        actionResponse -> {
+                            // Serialize response.
+                            final byte[] responsePaylod;
+                            try {
+                                responsePaylod = actionManager.getActorActionSerializer().byteify(actionResponse);
+                            } catch (Throwable e) {
+                                message.fail(REMOTE_FAILURE, e.getMessage());
+                                log.warn("Failed to serialize Response Type [" + actionProvider.getOutClass().getCanonicalName() + "]", e);
+                                return;
                             }
-                        );
-                    } catch (Throwable e) {
-                        log.error("Failed to invoke ActorActionProvider", e);
-                        message.fail(REMOTE_FAILURE, e.getMessage());
-                    }
+                            message.reply(responsePaylod);
+                        },
+                        e -> {
+                            message.fail(REMOTE_FAILURE, ((Throwable) e).getMessage());
+                        }
+                    );
+                } catch (Throwable e) {
+                    log.error("Failed to invoke ActorActionProvider", e);
+                    message.fail(REMOTE_FAILURE, e.getMessage());
                 }
             },
             e -> {
@@ -507,6 +513,24 @@ public class ActorManager extends AbstractVerticle {
         }
 
         return packer.toByteArray();
+    }
+
+    void onStopped(AbstractActor actor) {
+        if (hzMap != null) {
+            ((ICompletableFuture<byte[]>) hzMap.removeAsync(actor.getKey())).andThen(new ExecutionCallback<byte[]>() {
+                @Override
+                public void onResponse(byte[] response) {
+                    localMap.invalidate(actor.getKey());
+                }
+
+                @Override
+                public void onFailure(Throwable t) {
+                    log.error("Failed to remove key [" + actor.getKey() + "] from ClusterMap [" + clusterMapName() + "]", t);
+                }
+            });
+        } else {
+            localMap.invalidate(actor.getKey());
+        }
     }
 
     /**
@@ -659,8 +683,10 @@ public class ActorManager extends AbstractVerticle {
 
         @Override
         public void entryRemoved(EntryEvent<String, byte[]> event) {
-            // TODO: Remove local io.clickhandler.action.actor.
-            localCache.invalidate(event.getKey());
+            final AbstractActor actor = localMap.getIfPresent(event.getKey());
+            if (actor != null) {
+                actor.stop();
+            }
         }
 
         @Override

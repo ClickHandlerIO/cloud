@@ -5,7 +5,7 @@
 http://www.w3.org/2001/XMLSchema-instance ">
 
     <!-- ====================================================================== -->
-    <!-- P R O J E C T  D E S C R I P T I O N                                   -->
+    <!-- P R O J E C OUT  D E ACTOR C R I P OUT I O N                                   -->
     <!-- ====================================================================== -->
     <modelVersion>4.0.0</modelVersion>
     <groupId>io.clickhandler</groupId>
@@ -131,7 +131,7 @@ http://www.w3.org/2001/XMLSchema-instance ">
 
 
     <!-- ====================================================================== -->
-    <!-- D E P E N D E N C I E S                                                -->
+    <!-- D E P E N D E N C I E ACTOR                                                -->
     <!-- ====================================================================== -->
     <dependencyManagement>
         <dependencies>

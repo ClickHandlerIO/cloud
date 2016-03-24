@@ -1,8 +1,8 @@
 package io.clickhandler.action.store;
 
 import io.clickhandler.action.AbstractActor;
-import io.vertx.rxjava.core.Future;
 
+import javax.inject.Inject;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -12,14 +12,8 @@ import java.util.List;
 public class MyActor extends AbstractActor {
     private List<String> watchers = new ArrayList<>();
 
-    @Override
-    protected void finishStart(Future startFuture) {
-        startFuture.complete();
-    }
-
-    @Override
-    protected void finishStop(Future stopFuture) {
-        stopFuture.complete();
+    @Inject
+    public MyActor() {
     }
 
     public void addWatcher(String watcher) {
@@ -28,5 +22,10 @@ public class MyActor extends AbstractActor {
 
     public List<String> getWatchers() {
         return watchers;
+    }
+
+    @Override
+    protected void started() {
+
     }
 }

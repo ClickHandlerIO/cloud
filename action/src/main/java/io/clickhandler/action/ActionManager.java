@@ -1,7 +1,6 @@
 package io.clickhandler.action;
 
 import com.google.common.util.concurrent.AbstractExecutionThreadService;
-import com.hazelcast.core.HazelcastInstance;
 import io.vertx.rxjava.core.Vertx;
 
 import javax.inject.Inject;
@@ -20,15 +19,15 @@ public class ActionManager extends AbstractExecutionThreadService {
     private final static Map<Object, RemoteActionProvider<?, ?, ?>> remoteActionMap = new HashMap<>();
     private final static Map<Object, QueueActionProvider<?, ?, ?>> queueActionMap = new HashMap<>();
     private final static Map<Object, InternalActionProvider<?, ?, ?>> internalActionMap = new HashMap<>();
-    private final static Map<Object, ActorActionProvider<?, ?, ?, ?>> storeActionMap = new HashMap<>();
+    private final static Map<Object, ActorActionProvider<?, ?, ?, ?>> actionActionMap = new HashMap<>();
 
-    private final static Map<String, ActorActionProvider<?, ?, ?, ?>> storeActionsByName = new HashMap<>();
-    private final static Map<String, ActorManager> storeFactoryMap = new HashMap<>();
+    private final static Map<String, ActorActionProvider<?, ?, ?, ?>> actorActionsByNameMap = new HashMap<>();
+    private final static Map<Object, ActorManager> actorManagerMap = new HashMap<>();
 
     @Inject
     Vertx vertx;
     @Inject
-    HazelcastInstance hazelcast;
+    HazelcastProvider hazelcast;
 
     private ActorActionSerializer actorActionSerializer = new ActorActionSerializerImpl();
 
@@ -59,10 +58,6 @@ public class ActionManager extends AbstractExecutionThreadService {
         }
     }
 
-    public ActorActionProvider<?, ?, ?, ?> getStoreAction(String key) {
-        return storeActionsByName.get(key);
-    }
-
     synchronized void register(Map<Object, ActionProvider<?, ?, ?>> map) {
         if (map == null || map.isEmpty()) {
             return;
@@ -83,12 +78,16 @@ public class ActionManager extends AbstractExecutionThreadService {
             } else if (value instanceof ActorActionProvider<?, ?, ?, ?>) {
                 ActorActionProvider<?, ?, ?, ?> actorActionProvider = (ActorActionProvider<?, ?, ?, ?>) value;
 
-                final ActorManager actorManager = new ActorManager(vertx, hazelcast, this, actorActionProvider.getActorFactory());
+                ActorManager actorManager = actorManagerMap.get(actorActionProvider.getActorFactory());
+                if (actorManager == null) {
+                    actorManager = new ActorManager(vertx, hazelcast.get(), this, actorActionProvider.getActorFactory());
+                    actorManagerMap.put(actorActionProvider.getActorFactory(), actorManager);
+                }
                 actorManager.addStoreActionProvider(actorActionProvider);
+                actorActionProvider.setActorManager(actorManager);
 
-                storeFactoryMap.putIfAbsent(actorActionProvider.getName(), actorManager);
-                storeActionsByName.put(actorActionProvider.getName(), actorActionProvider);
-                storeActionMap.put(key, actorActionProvider);
+                actorActionsByNameMap.put(actorActionProvider.getName(), actorActionProvider);
+                actionActionMap.put(key, actorActionProvider);
             }
         });
     }

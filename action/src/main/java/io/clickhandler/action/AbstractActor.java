@@ -1,37 +1,46 @@
 package io.clickhandler.action;
 
-import com.hazelcast.ringbuffer.Ringbuffer;
-import com.hazelcast.ringbuffer.impl.RingbufferProxy;
-import com.hazelcast.spi.NodeEngine;
+import io.vertx.core.Handler;
 import io.vertx.rxjava.core.Context;
-import io.vertx.rxjava.core.Future;
+import io.vertx.rxjava.core.Vertx;
 import javaslang.control.Try;
+import rx.Observable;
 import rx.Scheduler;
 
+import java.util.LinkedList;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  *
  */
-public class AbstractActor<S> implements Actor {
-    private final AtomicReference<Status> status = new AtomicReference<>(Status.NEW);
-    private final AtomicReference<S> state = new AtomicReference<>();
-    private final String name;
+public class AbstractActor implements Actor {
+    private Status status = Status.RUNNING;
+    private String name;
+    private Vertx vertx;
+    private String key;
     private Context context;
     private Scheduler scheduler;
-    private AtomicReference<String> key = new AtomicReference<>();
-    private long startBegin;
-    private long startEnd;
-    private long stopBegin;
-    private long stopEnd;
-    private List<Future<Void>> startList;
-    private List<Future<Void>> stopList;
-    private Throwable cause;
+    private ActorManager manager;
+    private List<Observable<?>> runningActions = new LinkedList<>();
 
     public AbstractActor() {
         this.name = getClass().getCanonicalName();
+    }
+
+    public Vertx getVertx() {
+        return vertx;
+    }
+
+    void setVertx(Vertx vertx) {
+        this.vertx = vertx;
+    }
+
+    public ActorManager getManager() {
+        return manager;
+    }
+
+    void setManager(ActorManager manager) {
+        this.manager = manager;
     }
 
     @Override
@@ -41,11 +50,11 @@ public class AbstractActor<S> implements Actor {
 
     @Override
     public String getKey() {
-        return key.get();
+        return key;
     }
 
-    public void setKey(String key) {
-        this.key.compareAndSet(null, key);
+    void setKey(String key) {
+        this.key = key;
     }
 
     @Override
@@ -53,8 +62,7 @@ public class AbstractActor<S> implements Actor {
         return context;
     }
 
-    @Override
-    public void setContext(Context context) {
+    void setContext(Context context) {
         this.context = context;
     }
 
@@ -62,145 +70,103 @@ public class AbstractActor<S> implements Actor {
         return scheduler;
     }
 
-    public void setScheduler(Scheduler scheduler) {
+    void setScheduler(Scheduler scheduler) {
         this.scheduler = scheduler;
     }
 
     @Override
     public Status getStatus() {
-        return status.get();
+        return status;
     }
 
-    @Override
-    public void start(Future<Void> startFuture) {
-        if (startFuture == null)
+    public void run(Handler<Void> action) {
+        context.runOnContext(action);
+    }
+
+    void stop() {
+        run(event -> {
+            if (runningActions.isEmpty())
+                finishStop();
+            else if (status == Status.RUNNING)
+                status = Status.STOPPING;
+        });
+    }
+
+    private void maybeStop() {
+        if (status != Status.STOPPING)
             return;
 
-        if (status.compareAndSet(Status.NEW, Status.STARTING)) {
-            startBegin = System.currentTimeMillis();
-            finishStart(Future.<Void>future().setHandler(event -> {
-                startEnd = System.currentTimeMillis();
-                Try.run(() -> {
-                    if (event.failed()) {
-                        cause = event.cause();
-                        status.set(Status.FAILED);
-                        Try.run(() -> startFuture.fail(cause));
-                        Try.run(() -> childStart(null));
-                    } else {
-                        status.set(Status.STOPPED);
-                        Try.run(startFuture::complete);
-                        Try.run(() -> childStart(null));
-                        context.runOnContext($ -> started());
+        if (!runningActions.isEmpty())
+            return;
+
+        finishStop();
+    }
+
+    private void finishStop() {
+        Try.run(() -> manager.onStopped(this));
+        Try.run(this::stopped);
+    }
+
+    <A extends Action<IN, OUT>, S extends AbstractActor, IN, OUT> Observable<OUT> invoke(
+        ActorActionProvider<A, S, IN, OUT> actionProvider,
+        IN request) {
+        final Observable<OUT> observable = Observable.create(subscriber -> {
+            if (status != Status.RUNNING) {
+                Try.run(() -> subscriber.onError(new ActorUnavailableException()));
+                return;
+            }
+
+            final Observable<OUT> actionObservable = actionProvider.observe(this, request)
+                .subscribeOn(scheduler)
+                .observeOn(scheduler);
+            runningActions.add(actionObservable);
+            actionObservable.subscribe(
+                $ -> {
+                    try {
+                        // Remove as running action.
+                        runningActions.remove(actionObservable);
+                        maybeStop();
+                    } finally {
+                        if (subscriber.isUnsubscribed())
+                            return;
+
+                        try {
+                            subscriber.onNext($);
+                            subscriber.onCompleted();
+                        } catch (Throwable e) {
+                            Try.run(() -> subscriber.onError(e));
+                        }
                     }
-                });
-            }));
-        } else {
-            childStart(startFuture);
-        }
+                },
+                e -> {
+                    try {
+                        // Remove as running action.
+                        runningActions.remove(actionObservable);
+                        maybeStop();
+                    } finally {
+                        if (subscriber.isUnsubscribed())
+                            return;
+
+                        Try.run(() -> subscriber.onError(e));
+                    }
+                }
+            );
+        });
+        observable.subscribeOn(scheduler).observeOn(scheduler);
+        return observable;
     }
 
-    protected void finishStart(Future<Void> startFuture) {
-        startFuture.complete();
-    }
-
+    /**
+     *
+     */
     protected void started() {
 
     }
 
-    protected synchronized void childStart(Future<Void> future) {
-        if (future == null) {
-            empty(startList);
-            return;
-        }
-
-        if (status.get() == Status.RUNNING) {
-            Try.run(() -> future.complete());
-        } else if (status.get() == Status.FAILED) {
-            Try.run(() -> future.fail(cause));
-        } else {
-            if (startList == null)
-                startList = new CopyOnWriteArrayList<>();
-            startList.add(future);
-        }
-    }
-
-    @Override
-    public void stop(Future<Void> stopFuture) {
-        if (stopFuture == null)
-            return;
-
-        if (!status.compareAndSet(Status.RUNNING, Status.STOPPING)) {
-            childStop(stopFuture);
-            return;
-        }
-
-        stopBegin = System.currentTimeMillis();
-        finishStop(Future.<Void>future().setHandler(event -> {
-            stopEnd = System.currentTimeMillis();
-            Try.run(() -> {
-                if (event.failed()) {
-                    cause = event.cause();
-                    status.set(Status.FAILED);
-                    Try.run(() -> stopFuture.fail(cause));
-                    Try.run(() -> childStop(null));
-                } else {
-                    status.set(Status.STOPPED);
-                    Try.run(stopFuture::complete);
-                    Try.run(() -> childStop(null));
-                    context.runOnContext($ -> stopped());
-                }
-            });
-        }));
-    }
-
-    protected synchronized void childStop(Future<Void> future) {
-        if (future == null) {
-            empty(stopList);
-            return;
-        }
-
-        if (status.get() == Status.STOPPED) {
-            Try.run(() -> future.complete());
-        } else if (status.get() == Status.FAILED) {
-            Try.run(() -> future.fail(cause));
-        } else if (status.get() == Status.RUNNING) {
-            Try.run(() -> future.fail(new RuntimeException("Stop Failed because it was in the process of STARTING when trying to STOP")));
-        } else {
-            if (stopList == null)
-                stopList = new CopyOnWriteArrayList<>();
-            stopList.add(future);
-        }
-    }
-
-    protected void finishStop(Future<Void> stopFuture) {
-        stopFuture.complete();
-    }
-
+    /**
+     *
+     */
     protected void stopped() {
 
-    }
-
-    private void empty(List<Future<Void>> futures) {
-        if (futures != null)
-            futures.forEach(this::failOrComplete);
-    }
-
-    private void failOrComplete(Future<Void> future) {
-        if (future == null)
-            return;
-
-        Try.run(() -> {
-            if (cause != null) {
-                future.fail(cause);
-            } else {
-                future.complete();
-            }
-        });
-    }
-
-    private Ringbuffer getBosRingbuffer(){
-        //todo: get the ring buffer.
-
-        return null;
     }
 }

@@ -11,7 +11,7 @@ import java.util.Objects;
 /**
  *
  */
-public class ActorActionProvider<A extends Action<IN, OUT>, ACTOR extends Actor, IN, OUT> extends ActionProvider<A, IN, OUT> {
+public class ActorActionProvider<A extends Action<IN, OUT>, ACTOR extends AbstractActor, IN, OUT> extends ActionProvider<A, IN, OUT> {
     private static final Object DEFAULT_CONTEXT = new Object();
     private static final int LATENCY_OFFSET_MILLIS = 500;
 
@@ -49,18 +49,9 @@ public class ActorActionProvider<A extends Action<IN, OUT>, ACTOR extends Actor,
         actorAction = getActionClass().getAnnotation(ActorAction.class);
         name = Objects.toString(
             Strings.emptyToNull(actorAction.name()),
-            getActionClass().getClass().getCanonicalName()
+            getActionClass().getCanonicalName()
         );
         super.init();
-    }
-
-    /**
-     * @param ACTOR
-     * @param request
-     * @return
-     */
-    protected Observable<OUT> observe(ACTOR ACTOR, IN request) {
-        return observe(ACTOR, request);
     }
 
     public Observable<OUT> ask(String key, IN request) {
