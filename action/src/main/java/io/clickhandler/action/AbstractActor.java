@@ -1,5 +1,8 @@
 package io.clickhandler.action;
 
+import com.hazelcast.ringbuffer.Ringbuffer;
+import com.hazelcast.ringbuffer.impl.RingbufferProxy;
+import com.hazelcast.spi.NodeEngine;
 import io.vertx.rxjava.core.Context;
 import io.vertx.rxjava.core.Future;
 import javaslang.control.Try;
@@ -193,5 +196,11 @@ public class AbstractActor<S> implements Actor {
                 future.complete();
             }
         });
+    }
+
+    private Ringbuffer getBosRingbuffer(){
+        //todo: get the ring buffer.
+
+        return null;
     }
 }
