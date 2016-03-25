@@ -9,7 +9,15 @@ public abstract class AbstractActorAction<S, IN, OUT> extends AbstractObservable
         return (S) super.getContext();
     }
 
+    protected S context() {
+        return getContext();
+    }
+
     public S getActor() {
+        return getContext();
+    }
+
+    protected S actor() {
         return getContext();
     }
 }

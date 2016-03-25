@@ -10,8 +10,8 @@ import java.lang.annotation.*;
 @Target({ElementType.TYPE})
 public @interface QueueAction {
     /**
-     * Base name of the queue.
-     * For scalability if, a number may be appended to this name.
+     * Base actorName of the queue.
+     * For scalability if, a number may be appended to this actorName.
      *
      * @return
      */

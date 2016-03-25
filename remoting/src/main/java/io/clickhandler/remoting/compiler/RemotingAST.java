@@ -267,6 +267,12 @@ public class RemotingAST {
                 dataType = new EnumType(type, vals);
             } else if (type.isArray()) {
                 dataType = new ArrayType(buildType(type.getComponentType()));
+            } else if (javaslang.collection.Set.class.isAssignableFrom(type)) {
+                final Class componentType = TypeToken.of(genericType).resolveType(javaslang.collection.Set.class.getTypeParameters()[0]).getRawType();
+                dataType = new ListType(buildType(componentType));
+            } else if (javaslang.collection.Seq.class.isAssignableFrom(type)) {
+                final Class componentType = TypeToken.of(genericType).resolveType(javaslang.collection.Seq.class.getTypeParameters()[0]).getRawType();
+                dataType = new ListType(buildType(componentType));
             } else if (List.class.isAssignableFrom(type)) {
                 final Class componentType = TypeToken.of(genericType).resolveType(List.class.getTypeParameters()[0]).getRawType();
                 dataType = new ListType(buildType(componentType));

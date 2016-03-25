@@ -1,12 +1,10 @@
-package io.clickhandler.action.store;
+package io.clickhandler.action.actor;
 
 import io.clickhandler.action.AbstractActorAction;
 import io.clickhandler.action.ActorAction;
-import rx.Subscriber;
+import javaslang.collection.Set;
 
 import javax.inject.Inject;
-import java.util.List;
-import java.util.UUID;
 
 /**
  *
@@ -18,10 +16,14 @@ public class MyActorAction extends AbstractActorAction<MyActor, MyActorAction.Re
     }
 
     @Override
-    protected void start(Subscriber<? super Response> subscriber) {
-        getActor().addWatcher(UUID.randomUUID().toString());
-        subscriber.onNext(new Response().threadName(Thread.currentThread().getName()).watchers(getActor().getWatchers().toJavaList()));
-        subscriber.onCompleted();
+    protected void start(Request request) {
+        actor().load().subscribe(
+            result -> respond(new Response()
+                .threadName(Thread.currentThread().getName())
+                .watchers(actor().state().addWatcher(result))),
+            e -> {
+            }
+        );
     }
 
     public static class Request {
@@ -32,7 +34,7 @@ public class MyActorAction extends AbstractActorAction<MyActor, MyActorAction.Re
 
     public static class Response {
         private String threadName;
-        private List<String> watchers;
+        private Set<String> watchers;
 
         @Inject
         public Response() {
@@ -47,11 +49,11 @@ public class MyActorAction extends AbstractActorAction<MyActor, MyActorAction.Re
             return this;
         }
 
-        public List<String> watchers() {
+        public Set<String> watchers() {
             return this.watchers;
         }
 
-        public Response watchers(final List<String> watchers) {
+        public Response watchers(final Set<String> watchers) {
             this.watchers = watchers;
             return this;
         }

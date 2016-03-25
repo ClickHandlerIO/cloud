@@ -1,8 +1,5 @@
 package io.clickhandler.action;
 
-import javaslang.control.Try;
-import rx.Subscriber;
-
 import javax.inject.Inject;
 
 /**
@@ -16,8 +13,7 @@ public class MyAsyncAction extends AbstractObservableAction<String, String> {
     }
 
     @Override
-    protected void start(Subscriber<? super String> subscriber) {
-//        Try.run(() -> Thread.sleep(5000));
-        subscriber.onNext(getRequest() + " - Back at You");
+    protected void start(String request) {
+        respond(getRequest() + " - Back at You");
     }
 }

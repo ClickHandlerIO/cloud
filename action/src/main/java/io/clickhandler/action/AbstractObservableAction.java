@@ -16,6 +16,8 @@ public abstract class AbstractObservableAction<IN, OUT>
     private final AtomicReference<HystrixObservableCommand<OUT>> command = new AtomicReference<>();
     private HystrixObservableCommand.Setter setter;
 
+    private Subscriber<? super OUT> subscriber;
+
     protected HystrixObservableCommand.Setter getCommandSetter() {
         return setter;
     }
@@ -74,7 +76,31 @@ public abstract class AbstractObservableAction<IN, OUT>
     /**
      * @param subscriber
      */
-    protected abstract void start(Subscriber<? super OUT> subscriber);
+    protected void start(Subscriber<? super OUT> subscriber) {
+        this.subscriber = subscriber;
+        start(getRequest());
+    }
+
+    /**
+     * @param request
+     */
+    protected abstract void start(IN request);
+
+    /**
+     * @param response
+     */
+    protected void respond(OUT response) {
+        complete(response);
+    }
+
+    /**
+     * @param response
+     */
+    protected void complete(OUT response) {
+        if (subscriber != null) {
+            complete(subscriber, response);
+        }
+    }
 
     /**
      * @param subscriber

@@ -1,7 +1,5 @@
 package io.clickhandler.action;
 
-import rx.Subscriber;
-
 import javax.inject.Inject;
 
 /**
@@ -15,7 +13,7 @@ public class AllocateInventory extends AbstractObservableAction<String, String> 
     }
 
     @Override
-    protected void start(Subscriber<? super String> subscriber) {
-        subscriber.onNext("TEST");
+    protected void start(String request) {
+        respond("TEST");
     }
 }

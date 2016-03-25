@@ -6,7 +6,7 @@ import dagger.Module;
 import dagger.Provides;
 import io.Action_LocatorRoot;
 import io.Io_Locator;
-import io.clickhandler.action.store.MyActorAction;
+import io.clickhandler.action.actor.MyActorAction;
 import io.clickhandler.cloud.cluster.HazelcastProvider;
 import io.vertx.rxjava.core.Vertx;
 
@@ -26,9 +26,9 @@ public class Main {
         actions().register();
 
         for (int p = 0; p < 4; p++)
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 1; i++) {
             final String key = "KEY_" + i;
-            actions().store().myActorAction().ask(key, new MyActorAction.Request()).subscribe(
+            actions().actor().myActorAction().ask(key, new MyActorAction.Request()).subscribe(
                 r -> {
                     synchronized (Main.class) {
                         System.out.println(key + " on " + r.threadName());

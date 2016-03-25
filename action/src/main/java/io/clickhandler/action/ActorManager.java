@@ -12,11 +12,7 @@ import io.vertx.core.logging.LoggerFactory;
 import io.vertx.rxjava.core.AbstractVerticle;
 import io.vertx.rxjava.core.RxHelper;
 import io.vertx.rxjava.core.Vertx;
-import io.vertx.rxjava.core.eventbus.MessageConsumer;
 import javaslang.control.Try;
-import org.msgpack.core.MessageBufferPacker;
-import org.msgpack.core.MessagePack;
-import org.msgpack.core.MessageUnpacker;
 import rx.Observable;
 
 import javax.inject.Provider;
@@ -30,16 +26,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * @author Clay Molocznik
  */
 public class ActorManager extends AbstractVerticle {
-    public static final int ASK = 0;
-    public static final int REPLY = 1;
-    public static final int ACTION_NOT_FOUND = 2;
-    public static final int STORE_NOT_FOUND = 3;
-    public static final int REMOTE_FAILURE = 4;
-    public static final int REMOTE_ACTION_TIMEOUT = 5;
-    public static final int BAD_ENVELOPE = 6;
-    public static final int NODE_CHANGED = 7;
-    public static final int BAD_REQUEST_FORMAT = 8;
-    public static final int EXPECTED_ASK = 9;
 
     protected final Logger log;
     protected final Vertx vertx;
@@ -48,14 +34,11 @@ public class ActorManager extends AbstractVerticle {
     protected final ActionManager actionManager;
     protected final Provider<? extends AbstractActor> actorProvider;
 
-    private final MigrationListener migrationListener = new MigrationListenerImpl();
     private final DistributedMapListener entryListener = new DistributedMapListener();
-    private final ConcurrentMap<Integer, PartitionProxy> partitionMap = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, ActorActionProvider<?, ?, ?, ?>> actionProviderMap = new ConcurrentHashMap<>();
     private final Cache<String, AbstractActor> localMap = CacheBuilder.newBuilder().build();
-    private IMap<String, byte[]> hzMap;
+    private IMap<String, byte[]> clusterMap;
 
-    private String migrationListenerId = null;
     private String entryListenerId = null;
     private String actorName = "";
     private Member localMember;
@@ -77,32 +60,35 @@ public class ActorManager extends AbstractVerticle {
         return "___actor-" + actorName;
     }
 
-    void addStoreActionProvider(ActorActionProvider<?, ?, ?, ?> actorActionProvider) {
+    /**
+     * @param actorActionProvider
+     */
+    void addAction(ActorActionProvider<?, ?, ?, ?> actorActionProvider) {
         actorActionProvider.setActorManager(this);
         actionProviderMap.put(actorActionProvider.getName(), actorActionProvider);
     }
 
+    /**
+     * @param name
+     * @return
+     */
+    ActorActionProvider<?, ?, ?, ?> getAction(String name) {
+        return actionProviderMap.get(name);
+    }
+
+    /**
+     * @param startFuture
+     * @throws Exception
+     */
     @Override
     public void start(io.vertx.core.Future<Void> startFuture) throws Exception {
         actorName = actorProvider.get().getName();
 
         if (hazelcast != null) {
             vertx.executeBlockingObservable(event -> {
-                migrationListenerId = partitionService.addMigrationListener(migrationListener);
-                hzMap = hazelcast.getMap(clusterMapName());
-                entryListenerId = hzMap.addLocalEntryListener(entryListener);
-
+                clusterMap = hazelcast.getMap(clusterMapName());
+                entryListenerId = clusterMap.addLocalEntryListener(entryListener);
                 localMember = hazelcast.getCluster().getLocalMember();
-
-                hazelcast.getPartitionService().getPartitions().forEach(p -> {
-                    if (!p.getOwner().equals(localMember))
-                        return;
-
-                    final PartitionProxy partition = new PartitionProxy(p.getPartitionId());
-                    partition.subscribe();
-
-                    partitionMap.put(p.getPartitionId(), partition);
-                });
             }).subscribe(
                 r -> {
                 },
@@ -113,18 +99,29 @@ public class ActorManager extends AbstractVerticle {
         }
     }
 
+    /**
+     * @param stopFuture
+     * @throws Exception
+     */
     @Override
     public void stop(io.vertx.core.Future<Void> stopFuture) throws Exception {
-        partitionMap.values().forEach(p -> p.unsubscribe());
-        if (migrationListenerId != null) {
-            partitionService.removeMigrationListener(migrationListenerId);
-            migrationListenerId = null;
-        }
         if (entryListenerId != null) {
-            hzMap.removeEntryListener(entryListenerId);
-            entryListenerId = null;
+            vertx.executeBlockingObservable(event -> {
+                clusterMap.removeEntryListener(entryListenerId);
+                entryListenerId = null;
+            }).subscribe(
+                result -> stopFuture.complete(),
+                e -> {
+                    log.error("Exception thrown while stopping", e);
+                    stopFuture.complete();
+                }
+            );
         }
         stopFuture.complete();
+    }
+
+    Partition getPartition(String key) {
+        return hazelcast == null ? null : hazelcast.getPartitionService().getPartition(key);
     }
 
     /**
@@ -147,12 +144,12 @@ public class ActorManager extends AbstractVerticle {
      * @return
      */
     public Observable<Boolean> containsKey(String key) {
-        if (hzMap == null) {
+        if (clusterMap == null) {
             return Observable.just(localMap.asMap().containsKey(key));
         }
 
         return Observable.create(subscriber -> {
-            ((ICompletableFuture<byte[]>) hzMap.getAsync(key)).andThen(new ExecutionCallback<byte[]>() {
+            ((ICompletableFuture<byte[]>) clusterMap.getAsync(key)).andThen(new ExecutionCallback<byte[]>() {
                 @Override
                 public void onResponse(byte[] response) {
                     if (subscriber.isUnsubscribed())
@@ -174,19 +171,11 @@ public class ActorManager extends AbstractVerticle {
     }
 
     /**
-     * @param partition
-     * @return
-     */
-    protected String buildAddress(int partition) {
-        return "__store|" + partition + "|" + actorName;
-    }
-
-    /**
      * @param key=
      * @param addToCluster
      * @return
      */
-    protected Observable<AbstractActor> getActor(String key, boolean addToCluster) {
+    Observable<AbstractActor> getActor(String key, boolean addToCluster) {
         return Observable.create(subscriber -> {
             if (subscriber.isUnsubscribed())
                 return;
@@ -217,7 +206,7 @@ public class ActorManager extends AbstractVerticle {
                 return;
             }
 
-            if (!created.get() || hzMap == null || partitionMap == null) {
+            if (!created.get() || clusterMap == null) {
                 try {
                     subscriber.onNext(actor);
                     subscriber.onCompleted();
@@ -227,20 +216,11 @@ public class ActorManager extends AbstractVerticle {
                 return;
             }
 
-            final Partition p = partitionService.getPartition(key);
-            // Ensure partition started.
-            PartitionProxy partition = partitionMap.get(p.getPartitionId());
-            if (partition == null) {
-                partition = new PartitionProxy(p.getPartitionId());
-                // Ensure partition is mapped.
-                if (partitionMap.putIfAbsent(partition.id, partition) == null) {
-                    partition.subscribe();
-                }
-            }
+            final Partition p = getPartition(key);
 
             if (addToCluster && created.get()) {
                 // Ensure it's in the cluster map.
-                ((ICompletableFuture<byte[]>) hzMap.putAsync(key, new byte[]{(byte) 0})).andThen(new ExecutionCallback<byte[]>() {
+                ((ICompletableFuture<byte[]>) clusterMap.putAsync(key, new byte[]{(byte) 0})).andThen(new ExecutionCallback<byte[]>() {
                     @Override
                     public void onResponse(byte[] response) {
                         if (subscriber.isUnsubscribed())
@@ -328,26 +308,26 @@ public class ActorManager extends AbstractVerticle {
             return Observable.error(e);
         }
 
-        // Find partition.
-        final Partition partition = partitionService.getPartition(key);
-
-        // Build deliver options.
-        final DeliveryOptions options = new DeliveryOptions();
-        options.setSendTimeout(timeoutMillis);
-
-        // Build address.
-        final String deliveryAddress = buildAddress(partition.getPartitionId());
-
+        // We need to ask a remote node.
         return Observable.create(subscriber -> {
-            MessageBufferPacker packer = MessagePack.newDefaultBufferPacker();
+            // Find partition.
+            final Partition partition = getPartition(key);
+
+            // Build deliver options.
+            final DeliveryOptions options = new DeliveryOptions();
+            options.setSendTimeout(timeoutMillis);
+
+            final EnvelopeHeader header = new EnvelopeHeader();
+            header.type = EnvelopeHeader.ASK;
+            header.partition = partition.getPartitionId();
+            header.nodeId = partition.getOwner().getUuid();
+            header.actorName = actorName;
+            header.key = Strings.nullToEmpty(key);
+            header.actionName = Strings.nullToEmpty(actionProvider.getName());
+
+            final byte[] messagePayload;
             try {
-                packer.packInt(ASK);
-                packer.packInt(partition.getPartitionId());
-                packer.packString(partition.getOwner().getUuid());
-                packer.packString(actorName);
-                packer.packString(key);
-                packer.packString(actionProvider.getName());
-                packer.writePayload(payload);
+                messagePayload = header.toByteArray(payload);
             } catch (Throwable e) {
                 if (subscriber.isUnsubscribed())
                     return;
@@ -357,7 +337,7 @@ public class ActorManager extends AbstractVerticle {
             }
 
             // Send request to partition owner.
-            vertx.eventBus().<byte[]>send(deliveryAddress, packer.toByteArray(), options, event -> {
+            actionManager.ask(header, messagePayload, options, event -> {
                 if (subscriber.isUnsubscribed())
                     return;
 
@@ -423,143 +403,9 @@ public class ActorManager extends AbstractVerticle {
         });
     }
 
-    /**
-     * @param message
-     */
-    @SuppressWarnings("unchecked")
-    protected void receive(io.vertx.rxjava.core.eventbus.Message<byte[]> message) {
-        final byte[] body = message.body();
-
-        if (body == null) {
-            message.fail(BAD_ENVELOPE, "");
-            return;
-        }
-
-        // Create unpacker.
-        final EnvelopeHeader header = parseHeader(body);
-        if (header == null) {
-            message.fail(BAD_ENVELOPE, "Bad Envelope");
-            return;
-        }
-
-        if (header.code != ASK) {
-            // Respond with EXPECTED_ASK code.
-            message.fail(EXPECTED_ASK, "Expected Ask");
-            return;
-        }
-
-        if (!header.nodeId.equals(localMember.getUuid())) {
-            message.fail(NODE_CHANGED, "Node Changed");
-            return;
-        }
-
-        final ActorActionProvider actionProvider = actionProviderMap.get(header.actionName);
-        if (actionProvider == null) {
-            // Respond with ACTION_NOT_FOUND
-            message.fail(ACTION_NOT_FOUND, "Action Not Found");
-            return;
-        }
-
-        final Object request;
-        try {
-            if (header.bodySize < 1)
-                request = actionProvider.getInProvider().get();
-            else
-                request = actionManager.getActorActionSerializer()
-                    .parse(actionProvider.getInClass(), body, header.headerSize, header.bodySize);
-        } catch (Throwable e) {
-            message.fail(BAD_REQUEST_FORMAT, "Bad Request Format");
-            return;
-        }
-
-        getActor(header.key, true).subscribe(
-            actor -> {
-                if (actor == null) {
-                    // Respond with STORE_NOT_FOUND
-                    message.reply(responseEnvelope(STORE_NOT_FOUND));
-                    return;
-                }
-
-                try {
-                    actor.invoke(actionProvider, request).subscribe(
-                        actionResponse -> {
-                            // Serialize response.
-                            final byte[] responsePaylod;
-                            try {
-                                responsePaylod = actionManager.getActorActionSerializer().byteify(actionResponse);
-                            } catch (Throwable e) {
-                                message.fail(REMOTE_FAILURE, e.getMessage());
-                                log.warn("Failed to serialize Response Type [" + actionProvider.getOutClass().getCanonicalName() + "]", e);
-                                return;
-                            }
-                            message.reply(responsePaylod);
-                        },
-                        e -> {
-                            message.fail(REMOTE_FAILURE, ((Throwable) e).getMessage());
-                        }
-                    );
-                } catch (Throwable e) {
-                    log.error("Failed to invoke ActorActionProvider", e);
-                    message.fail(REMOTE_FAILURE, e.getMessage());
-                }
-            },
-            e -> {
-                // Respond with STORE_UNAVAILABLE.
-                message.fail(STORE_NOT_FOUND, "Actor Not Found");
-            }
-        );
-    }
-
-    protected EnvelopeHeader parseHeader(byte[] data) {
-        // Create unpacker.
-        final MessageUnpacker unpacker = MessagePack.newDefaultUnpacker(data);
-        final EnvelopeHeader header = new EnvelopeHeader();
-
-        try {
-            header.code = unpacker.unpackInt();
-            header.partition = unpacker.unpackInt();
-            header.nodeId = Strings.nullToEmpty(unpacker.unpackString());
-            header.name = Strings.nullToEmpty(unpacker.unpackString());
-            header.key = Strings.nullToEmpty(unpacker.unpackString());
-            header.actionName = Strings.nullToEmpty(unpacker.unpackString());
-            header.headerSize = (int) unpacker.getTotalReadBytes();
-            header.bodySize = data.length - header.headerSize;
-        } catch (Throwable e) {
-            log.warn("Failed to Parse EnvelopeHeader", e);
-            return null;
-        }
-
-        return header;
-    }
-
-    protected byte[] responseEnvelope(int code) {
-        return responseEnvelope(code, 0, "", "", "", "");
-    }
-
-    protected byte[] responseEnvelope(int code,
-                                      int partition,
-                                      String nodeId,
-                                      String name,
-                                      String actionName,
-                                      String key) {
-        final MessageBufferPacker packer = MessagePack.newDefaultBufferPacker();
-        try {
-            packer.packInt(code);
-            packer.packInt(partition);
-            packer.packString(nodeId);
-            packer.packString(name);
-            packer.packString(actionName);
-            packer.packString(key);
-        } catch (Throwable e) {
-            log.error("Failed to Pack Response Envelope", e);
-        }
-
-        return packer.toByteArray();
-    }
-
     void onStopped(AbstractActor actor) {
-        if (hzMap != null) {
-            ((ICompletableFuture<byte[]>) hzMap.removeAsync(actor.getKey())).andThen(new ExecutionCallback<byte[]>() {
+        if (clusterMap != null) {
+            ((ICompletableFuture<byte[]>) clusterMap.removeAsync(actor.getKey())).andThen(new ExecutionCallback<byte[]>() {
                 @Override
                 public void onResponse(byte[] response) {
                     localMap.invalidate(actor.getKey());
@@ -572,72 +418,6 @@ public class ActorManager extends AbstractVerticle {
             });
         } else {
             localMap.invalidate(actor.getKey());
-        }
-    }
-
-    /**
-     *
-     */
-    static class EnvelopeHeader {
-        private int code;
-        private int partition;
-        private String nodeId;
-        private String name;
-        private String key;
-        private String actionName;
-        private int headerSize;
-        private int bodySize;
-    }
-
-    /**
-     *
-     */
-    class PartitionProxy {
-        private final int id;
-        private final String address;
-        private MessageConsumer<byte[]> consumer;
-
-        public PartitionProxy(int id) {
-            this.id = id;
-            this.address = buildAddress(id);
-        }
-
-        public void subscribe() {
-            synchronized (this) {
-                if (consumer != null)
-                    return;
-                consumer = vertx.eventBus().consumer(address);
-            }
-
-            consumer.handler(ActorManager.this::receive);
-        }
-
-        public void unsubscribe() {
-            synchronized (this) {
-                if (consumer == null)
-                    return;
-
-                consumer.unregister();
-            }
-        }
-    }
-
-    /**
-     *
-     */
-    class MigrationListenerImpl implements MigrationListener {
-        @Override
-        public void migrationStarted(MigrationEvent migrationEvent) {
-            // If we are to receive
-        }
-
-        @Override
-        public void migrationCompleted(MigrationEvent migrationEvent) {
-
-        }
-
-        @Override
-        public void migrationFailed(MigrationEvent migrationEvent) {
         }
     }
 
