@@ -45,7 +45,7 @@
             <artifactId>HikariCP</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.javaslang</groupId>
+            <groupId>io.javaslang</groupId>
             <artifactId>javaslang</artifactId>
         </dependency>
         <dependency>

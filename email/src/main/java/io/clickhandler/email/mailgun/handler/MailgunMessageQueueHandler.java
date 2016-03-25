@@ -97,7 +97,7 @@ public class MailgunMessageQueueHandler implements QueueHandler<Message>, Tables
     }
 
     private void handleReceive(ReceiveMessage message) {
-        // todo getOrCreate record of email received?
+        // todo getActor record of email received?
         eventBus.publish(MailgunEmailReceiveEvent.ADDRESS, new MailgunEmailReceiveEvent(message).toJson());
     }
 

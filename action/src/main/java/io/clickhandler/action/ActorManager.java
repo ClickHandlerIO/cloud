@@ -182,13 +182,12 @@ public class ActorManager extends AbstractVerticle {
     }
 
     /**
-     * @param key
-     * @param state
+     * @param key=
      * @param addToCluster
      * @return
      */
-    protected Observable<AbstractActor> getOrCreate(String key, byte[] state, boolean addToCluster) {
-        return Observable.<AbstractActor>create(subscriber -> {
+    protected Observable<AbstractActor> getActor(String key, boolean addToCluster) {
+        return Observable.create(subscriber -> {
             if (subscriber.isUnsubscribed())
                 return;
 
@@ -218,7 +217,7 @@ public class ActorManager extends AbstractVerticle {
                 return;
             }
 
-            if (hzMap == null || partitionMap == null) {
+            if (!created.get() || hzMap == null || partitionMap == null) {
                 try {
                     subscriber.onNext(actor);
                     subscriber.onCompleted();
@@ -241,7 +240,7 @@ public class ActorManager extends AbstractVerticle {
 
             if (addToCluster && created.get()) {
                 // Ensure it's in the cluster map.
-                ((ICompletableFuture<byte[]>) hzMap.putAsync(key, state)).andThen(new ExecutionCallback<byte[]>() {
+                ((ICompletableFuture<byte[]>) hzMap.putAsync(key, new byte[]{(byte) 0})).andThen(new ExecutionCallback<byte[]>() {
                     @Override
                     public void onResponse(byte[] response) {
                         if (subscriber.isUnsubscribed())
@@ -261,10 +260,12 @@ public class ActorManager extends AbstractVerticle {
                     }
                 });
             }
-        });//.observeOn(scheduler).subscribeOn(scheduler);
+        });
     }
 
     /**
+     * Invokes the ActorAction where the Actor lives.
+     *
      * @param actionProvider
      * @param timeoutMillis
      * @param key
@@ -282,7 +283,7 @@ public class ActorManager extends AbstractVerticle {
         // Is Owned locally?
         if (isOwnedLocally(key)) {
             // Invoke locally.
-            return Observable.create(subscriber -> getOrCreate(key, new byte[]{(byte) 0}, true).subscribe(
+            return Observable.create(subscriber -> getActor(key, true).subscribe(
                 actor -> {
                     if (actor == null) {
                         Try.run(() -> subscriber.onError(new RuntimeException("Actor not found for key [" + key + "]")));
@@ -318,26 +319,34 @@ public class ActorManager extends AbstractVerticle {
             ));
         }
 
+        // Serialize payload.
+        final byte[] payload;
+        try {
+            payload = actionManager.getActorActionSerializer().byteify(request);
+        } catch (Throwable e) {
+            log.error("ActorActionSerializer.byteify threw an exception trying to serialize type [" + actionProvider.getInClass().getCanonicalName() + "]");
+            return Observable.error(e);
+        }
+
         // Find partition.
         final Partition partition = partitionService.getPartition(key);
 
+        // Build deliver options.
         final DeliveryOptions options = new DeliveryOptions();
         options.setSendTimeout(timeoutMillis);
 
         // Build address.
         final String deliveryAddress = buildAddress(partition.getPartitionId());
-        final byte[] payload = actionManager.getActorActionSerializer().byteify(request);
 
         return Observable.create(subscriber -> {
             MessageBufferPacker packer = MessagePack.newDefaultBufferPacker();
-
             try {
                 packer.packInt(ASK);
                 packer.packInt(partition.getPartitionId());
                 packer.packString(partition.getOwner().getUuid());
                 packer.packString(actorName);
-                packer.packString(actionProvider.getName());
                 packer.packString(key);
+                packer.packString(actionProvider.getName());
                 packer.writePayload(payload);
             } catch (Throwable e) {
                 if (subscriber.isUnsubscribed())
@@ -354,33 +363,58 @@ public class ActorManager extends AbstractVerticle {
 
                 try {
                     if (event.failed()) {
+                        // We should have a ReplyException.
                         if (event.cause() instanceof ReplyException) {
                             ReplyException replyException = (ReplyException) event.cause();
+                            switch (replyException.failureType()) {
+                                case TIMEOUT:
+                                    // Remote node received the request, but we haven't heard
+                                    // back in the time allotted.
+                                    break;
+                                case NO_HANDLERS:
+                                    // No partition handler for this ActorType was found.
+                                    // We should tell the ActionManager to help us out with this.
+                                    break;
+                                case RECIPIENT_FAILURE:
+                                    // The node that processed this request didn't like something.
+                                    break;
+                            }
                         }
-                        subscriber.onError(event.cause());
+                        // Let our subscriber know of the failure.
+                        Try.run(() -> subscriber.onError(event.cause()));
                         return;
                     }
                 } catch (Throwable e) {
-                    subscriber.onError(e);
+                    Try.run(() -> subscriber.onError(event.cause()));
                     return;
                 }
 
+                // We received a response Message.
                 final io.vertx.rxjava.core.eventbus.Message<byte[]> message = event.result();
-
                 if (message == null) {
                     subscriber.onError(new RuntimeException("Reply was empty"));
                     return;
                 }
 
+                // Parse Response.
                 final byte[] replyBody = message.body();
+                final OUT out;
+                try {
+                    if (replyBody == null || replyBody.length == 0)
+                        out = actionProvider.getOutProvider().get();
+                    else
+                        out = actionManager.getActorActionSerializer().parse(
+                            actionProvider.getOutClass(),
+                            message.body()
+                        );
+                } catch (Throwable e) {
+                    log.error("Failed to parse Response JSON for type [" + actionProvider.getOutClass().getCanonicalName() + "]");
+                    subscriber.onError(e);
+                    return;
+                }
 
                 try {
-                    subscriber.onNext(
-                        actionManager.getActorActionSerializer().parse(
-                            actionProvider.getOutClass(),
-                            replyBody
-                        )
-                    );
+                    subscriber.onNext(out);
                     subscriber.onCompleted();
                 } catch (Throwable e) {
                     subscriber.onError(e);
@@ -408,37 +442,41 @@ public class ActorManager extends AbstractVerticle {
             return;
         }
 
-        if (header.getCode() != ASK) {
+        if (header.code != ASK) {
             // Respond with EXPECTED_ASK code.
             message.fail(EXPECTED_ASK, "Expected Ask");
             return;
         }
 
-        if (!header.getNodeId().equals(localMember.getUuid())) {
+        if (!header.nodeId.equals(localMember.getUuid())) {
             message.fail(NODE_CHANGED, "Node Changed");
             return;
         }
 
-        final ActorActionProvider actionProvider = actionProviderMap.get(header.getActionName());
+        final ActorActionProvider actionProvider = actionProviderMap.get(header.actionName);
         if (actionProvider == null) {
             // Respond with ACTION_NOT_FOUND
             message.fail(ACTION_NOT_FOUND, "Action Not Found");
             return;
         }
+
         final Object request;
         try {
-            request = actionManager.getActorActionSerializer()
-                .parse(actionProvider.getInClass(), body, header.getHeaderSize(), header.getBodySize());
+            if (header.bodySize < 1)
+                request = actionProvider.getInProvider().get();
+            else
+                request = actionManager.getActorActionSerializer()
+                    .parse(actionProvider.getInClass(), body, header.headerSize, header.bodySize);
         } catch (Throwable e) {
             message.fail(BAD_REQUEST_FORMAT, "Bad Request Format");
             return;
         }
 
-        getOrCreate(header.getKey(), new byte[]{(byte) 0}, true).subscribe(
+        getActor(header.key, true).subscribe(
             actor -> {
                 if (actor == null) {
                     // Respond with STORE_NOT_FOUND
-                    message.reply(buildResponseEnvelope(STORE_NOT_FOUND));
+                    message.reply(responseEnvelope(STORE_NOT_FOUND));
                     return;
                 }
 
@@ -478,14 +516,14 @@ public class ActorManager extends AbstractVerticle {
         final EnvelopeHeader header = new EnvelopeHeader();
 
         try {
-            header.setCode(unpacker.unpackInt());
-            header.setPartition(unpacker.unpackInt());
-            header.setNodeId(Strings.nullToEmpty(unpacker.unpackString()));
-            header.setName(Strings.nullToEmpty(unpacker.unpackString()));
-            header.setActionName(Strings.nullToEmpty(unpacker.unpackString()));
-            header.setKey(Strings.nullToEmpty(unpacker.unpackString()));
-            header.setHeaderSize((int) unpacker.getTotalReadBytes());
-            header.setBodySize(data.length - header.getHeaderSize());
+            header.code = unpacker.unpackInt();
+            header.partition = unpacker.unpackInt();
+            header.nodeId = Strings.nullToEmpty(unpacker.unpackString());
+            header.name = Strings.nullToEmpty(unpacker.unpackString());
+            header.key = Strings.nullToEmpty(unpacker.unpackString());
+            header.actionName = Strings.nullToEmpty(unpacker.unpackString());
+            header.headerSize = (int) unpacker.getTotalReadBytes();
+            header.bodySize = data.length - header.headerSize;
         } catch (Throwable e) {
             log.warn("Failed to Parse EnvelopeHeader", e);
             return null;
@@ -494,13 +532,17 @@ public class ActorManager extends AbstractVerticle {
         return header;
     }
 
-    protected byte[] buildResponseEnvelope(int code) {
-        return buildResponseEnvelope(code, 0, "", "", "", "");
+    protected byte[] responseEnvelope(int code) {
+        return responseEnvelope(code, 0, "", "", "", "");
     }
 
-    protected byte[] buildResponseEnvelope(int code, int partition, String nodeId, String name, String actionName, String key) {
-        MessageBufferPacker packer = MessagePack.newDefaultBufferPacker();
-
+    protected byte[] responseEnvelope(int code,
+                                      int partition,
+                                      String nodeId,
+                                      String name,
+                                      String actionName,
+                                      String key) {
+        final MessageBufferPacker packer = MessagePack.newDefaultBufferPacker();
         try {
             packer.packInt(code);
             packer.packInt(partition);
@@ -536,8 +578,7 @@ public class ActorManager extends AbstractVerticle {
     /**
      *
      */
-    public static class EnvelopeHeader {
-
+    static class EnvelopeHeader {
         private int code;
         private int partition;
         private String nodeId;
@@ -546,70 +587,6 @@ public class ActorManager extends AbstractVerticle {
         private String actionName;
         private int headerSize;
         private int bodySize;
-
-        public int getCode() {
-            return code;
-        }
-
-        public void setCode(int code) {
-            this.code = code;
-        }
-
-        public int getPartition() {
-            return partition;
-        }
-
-        public void setPartition(int partition) {
-            this.partition = partition;
-        }
-
-        public String getNodeId() {
-            return nodeId;
-        }
-
-        public void setNodeId(String nodeId) {
-            this.nodeId = nodeId;
-        }
-
-        public String getName() {
-            return name;
-        }
-
-        public void setName(String name) {
-            this.name = name;
-        }
-
-        public String getKey() {
-            return key;
-        }
-
-        public void setKey(String key) {
-            this.key = key;
-        }
-
-        public String getActionName() {
-            return actionName;
-        }
-
-        public void setActionName(String actionName) {
-            this.actionName = actionName;
-        }
-
-        public int getHeaderSize() {
-            return headerSize;
-        }
-
-        public void setHeaderSize(int headerSize) {
-            this.headerSize = headerSize;
-        }
-
-        public int getBodySize() {
-            return bodySize;
-        }
-
-        public void setBodySize(int bodySize) {
-            this.bodySize = bodySize;
-        }
     }
 
     /**
@@ -677,7 +654,12 @@ public class ActorManager extends AbstractVerticle {
         @Override
         public void entryAdded(EntryEvent<String, byte[]> event) {
             vertx.runOnContext($ -> {
-                getOrCreate(event.getKey(), event.getValue(), false);
+                getActor(event.getKey(), false).subscribe(
+                    r -> {
+                    },
+                    e -> {
+                    }
+                );
             });
         }
 

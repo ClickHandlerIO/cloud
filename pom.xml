@@ -72,7 +72,7 @@ http://www.w3.org/2001/XMLSchema-instance ">
         <jackson.version>2.7.2</jackson.version>
         <javax-mail.version>1.5.5</javax-mail.version>
         <javapoet.version>1.5.1</javapoet.version>
-        <javaslang.version>2.0.0-RC4</javaslang.version>
+        <javaslang.version>2.0.1</javaslang.version>
         <jooq.version>3.7.3</jooq.version>
         <junit.version>4.12</junit.version>
         <msgpack.version>0.8.3</msgpack.version>
@@ -274,7 +274,7 @@ http://www.w3.org/2001/XMLSchema-instance ">
             </dependency>
 
             <dependency>
-                <groupId>com.javaslang</groupId>
+                <groupId>io.javaslang</groupId>
                 <artifactId>javaslang</artifactId>
                 <version>${javaslang.version}</version>
             </dependency>

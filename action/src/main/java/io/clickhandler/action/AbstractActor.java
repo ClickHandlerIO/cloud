@@ -23,66 +23,122 @@ public class AbstractActor implements Actor {
     private ActorManager manager;
     private List<Observable<?>> runningActions = new LinkedList<>();
 
+    /**
+     *
+     */
     public AbstractActor() {
         this.name = getClass().getCanonicalName();
     }
 
+    /**
+     *
+     * @return
+     */
     public Vertx getVertx() {
         return vertx;
     }
 
+    /**
+     *
+     * @param vertx
+     */
     void setVertx(Vertx vertx) {
         this.vertx = vertx;
     }
 
+    /**
+     *
+     * @return
+     */
     public ActorManager getManager() {
         return manager;
     }
 
+    /**
+     *
+     * @param manager
+     */
     void setManager(ActorManager manager) {
         this.manager = manager;
     }
 
+    /**
+     *
+     * @return
+     */
     @Override
     public String getName() {
         return name;
     }
 
+    /**
+     *
+     * @return
+     */
     @Override
     public String getKey() {
         return key;
     }
 
+    /**
+     *
+     * @param key
+     */
     void setKey(String key) {
         this.key = key;
     }
 
+    /**
+     *
+     * @return
+     */
     @Override
     public Context getContext() {
         return context;
     }
 
+    /**
+     *
+     * @param context
+     */
     void setContext(Context context) {
         this.context = context;
     }
 
+    /**
+     *
+     * @return
+     */
     public Scheduler getScheduler() {
         return scheduler;
     }
 
+    /**
+     *
+     * @param scheduler
+     */
     void setScheduler(Scheduler scheduler) {
         this.scheduler = scheduler;
     }
 
+    /**
+     * @return
+     */
     @Override
     public Status getStatus() {
         return status;
     }
 
+    /**
+     * @param action
+     */
     public void run(Handler<Void> action) {
         context.runOnContext(action);
     }
 
+    /**
+     *
+     */
     void stop() {
         run(event -> {
             if (runningActions.isEmpty())
@@ -92,6 +148,9 @@ public class AbstractActor implements Actor {
         });
     }
 
+    /**
+     *
+     */
     private void maybeStop() {
         if (status != Status.STOPPING)
             return;
@@ -107,6 +166,16 @@ public class AbstractActor implements Actor {
         Try.run(this::stopped);
     }
 
+    /**
+     *
+     * @param actionProvider
+     * @param request
+     * @param <A>
+     * @param <S>
+     * @param <IN>
+     * @param <OUT>
+     * @return
+     */
     <A extends Action<IN, OUT>, S extends AbstractActor, IN, OUT> Observable<OUT> invoke(
         ActorActionProvider<A, S, IN, OUT> actionProvider,
         IN request) {
@@ -160,13 +229,11 @@ public class AbstractActor implements Actor {
      *
      */
     protected void started() {
-
     }
 
     /**
      *
      */
     protected void stopped() {
-
     }
 }

@@ -46,6 +46,10 @@
             <artifactId>vertx-rx-java</artifactId>
         </dependency>
         <dependency>
+            <groupId>io.vertx</groupId>
+            <artifactId>vertx-hazelcast</artifactId>
+        </dependency>
+        <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
         </dependency>
@@ -58,7 +62,7 @@
             <artifactId>slf4j-api</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.javaslang</groupId>
+            <groupId>io.javaslang</groupId>
             <artifactId>javaslang</artifactId>
         </dependency>
         <dependency>

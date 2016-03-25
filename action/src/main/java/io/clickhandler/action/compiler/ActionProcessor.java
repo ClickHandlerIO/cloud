@@ -270,6 +270,7 @@ public class ActionProcessor extends AbstractProcessor {
         }
 
         public String getClassName() {
+//            return "Action_Locator";
             return name == null || name.isEmpty() ? "Root" : Character.toUpperCase(name.charAt(0)) + name.substring(1) + (root ? LOCATOR_ROOT : LOCATOR);
         }
 

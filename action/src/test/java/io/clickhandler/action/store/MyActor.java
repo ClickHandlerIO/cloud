@@ -1,23 +1,22 @@
 package io.clickhandler.action.store;
 
 import io.clickhandler.action.AbstractActor;
+import javaslang.collection.List;
 
 import javax.inject.Inject;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  *
  */
 public class MyActor extends AbstractActor {
-    private List<String> watchers = new ArrayList<>();
+    private List<String> watchers = List.of();
 
     @Inject
     public MyActor() {
     }
 
     public void addWatcher(String watcher) {
-        watchers.add(watcher);
+        watchers = watchers.append(watcher);
     }
 
     public List<String> getWatchers() {
@@ -26,6 +25,5 @@ public class MyActor extends AbstractActor {
 
     @Override
     protected void started() {
-
     }
 }

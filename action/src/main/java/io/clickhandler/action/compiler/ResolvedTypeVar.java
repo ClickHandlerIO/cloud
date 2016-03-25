@@ -4,7 +4,7 @@ import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.DeclaredType;
 
 /**
- *
+ * @author Clay Molocznik
  */
 public class ResolvedTypeVar {
     private DeclaredType type;

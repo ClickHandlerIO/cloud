@@ -1,6 +1,5 @@
 package io.clickhandler.action.store;
 
-import com.google.common.collect.ImmutableList;
 import io.clickhandler.action.AbstractActorAction;
 import io.clickhandler.action.ActorAction;
 import rx.Subscriber;
@@ -20,8 +19,8 @@ public class MyActorAction extends AbstractActorAction<MyActor, MyActorAction.Re
 
     @Override
     protected void start(Subscriber<? super Response> subscriber) {
-        getActor().getWatchers().add(UUID.randomUUID().toString());
-        subscriber.onNext(new Response().threadName(Thread.currentThread().getName()).watchers(ImmutableList.copyOf(getActor().getWatchers())));
+        getActor().addWatcher(UUID.randomUUID().toString());
+        subscriber.onNext(new Response().threadName(Thread.currentThread().getName()).watchers(getActor().getWatchers().toJavaList()));
         subscriber.onCompleted();
     }
 

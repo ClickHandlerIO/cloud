@@ -6,7 +6,6 @@ import com.google.common.reflect.TypeToken;
 import io.clickhandler.action.Action;
 import io.clickhandler.action.RemoteActionProvider;
 import io.clickhandler.remoting.Push;
-import javaslang.control.Match;
 import javaslang.control.Try;
 import org.reflections.Reflections;
 
@@ -282,29 +281,46 @@ public class RemotingAST {
                 final Class valueType = TypeToken.of(genericType).resolveType(Map.class.getTypeParameters()[1]).getRawType();
                 dataType = new MapType(type, buildType(keyType), buildType(valueType));
             } else {
-                dataType = Match.of(type)
-                    .whenIs(byte.class).then((StandardType) new PrimitiveType(byte.class, DataType.BYTE, false))
-                    .whenIs(Byte.class).then(new PrimitiveType(Byte.class, DataType.BYTE, true))
-                    .whenIs(boolean.class).then(new PrimitiveType(boolean.class, DataType.BOOLEAN, false))
-                    .whenIs(Boolean.class).then(new PrimitiveType(Boolean.class, DataType.BOOLEAN, true))
-                    .whenIs(short.class).then(new PrimitiveType(short.class, DataType.SHORT, false))
-                    .whenIs(Short.class).then(new PrimitiveType(Short.class, DataType.SHORT, true))
-                    .whenIs(char.class).then(new PrimitiveType(char.class, DataType.CHAR, false))
-                    .whenIs(Character.class).then(new PrimitiveType(Character.class, DataType.CHAR, true))
-                    .whenIs(int.class).then(new PrimitiveType(int.class, DataType.INT, false))
-                    .whenIs(Integer.class).then(new PrimitiveType(Integer.class, DataType.INT, true))
-                    .whenIs(long.class).then(new PrimitiveType(long.class, DataType.LONG, false))
-                    .whenIs(Long.class).then(new PrimitiveType(Long.class, DataType.LONG, true))
-                    .whenIs(float.class).then(new PrimitiveType(float.class, DataType.FLOAT, false))
-                    .whenIs(Float.class).then(new PrimitiveType(Float.class, DataType.FLOAT, true))
-                    .whenIs(double.class).then(new PrimitiveType(double.class, DataType.DOUBLE, false))
-                    .whenIs(Double.class).then(new PrimitiveType(Double.class, DataType.DOUBLE, true))
-                    .whenIs(Date.class).then(new DateType())
-                    .whenIs(String.class).then(new StringType())
-                    .whenIs(Object.class).then(new WildcardType())
-                    .whenIs(Enum.class).then(new WildcardType())
-                    .otherwise((StandardType) null)
-                    .get();
+                if (type == byte.class)
+                    dataType = new PrimitiveType(byte.class, DataType.BYTE, false);
+                else if (type == Byte.class)
+                    dataType = new PrimitiveType(Byte.class, DataType.BYTE, true);
+                else if (type == boolean.class)
+                    dataType = new PrimitiveType(boolean.class, DataType.BOOLEAN, false);
+                else if (type == Boolean.class)
+                    dataType = new PrimitiveType(Boolean.class, DataType.BOOLEAN, true);
+                else if (type == short.class)
+                    dataType = new PrimitiveType(short.class, DataType.SHORT, false);
+                else if (type == Short.class)
+                    dataType = new PrimitiveType(Short.class, DataType.SHORT, true);
+                else if (type == char.class)
+                    dataType = new PrimitiveType(char.class, DataType.CHAR, false);
+                else if (type == Character.class)
+                    dataType = new PrimitiveType(Character.class, DataType.CHAR, true);
+                else if (type == int.class)
+                    dataType = new PrimitiveType(int.class, DataType.INT, false);
+                else if (type == Integer.class)
+                    dataType = new PrimitiveType(Integer.class, DataType.INT, true);
+                else if (type == long.class)
+                    dataType = new PrimitiveType(long.class, DataType.LONG, false);
+                else if (type == Long.class)
+                    dataType = new PrimitiveType(Long.class, DataType.LONG, true);
+                else if (type == float.class)
+                    dataType = new PrimitiveType(float.class, DataType.FLOAT, false);
+                else if (type == Float.class)
+                    dataType = new PrimitiveType(Float.class, DataType.FLOAT, true);
+                else if (type == double.class)
+                    dataType = new PrimitiveType(double.class, DataType.DOUBLE, false);
+                else if (type == Double.class)
+                    dataType = new PrimitiveType(Double.class, DataType.DOUBLE, true);
+                else if (type == Date.class)
+                    dataType = new DateType();
+                else if (type == String.class)
+                    dataType = new StringType();
+                else if (type == Object.class)
+                    dataType = new WildcardType();
+                else if (type == Enum.class)
+                    dataType = new WildcardType();
 
                 if (dataType == null) {
                     if (Action.class.isAssignableFrom(type)) {

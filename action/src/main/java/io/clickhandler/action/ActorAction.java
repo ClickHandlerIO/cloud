@@ -3,7 +3,7 @@ package io.clickhandler.action;
 import java.lang.annotation.*;
 
 /**
- * Internal Distributed Action for an instance of a Actor.
+ * Internal Distributed Action for an instance of an Actor.
  * The Actor is stored on a single node in the cluster.
  */
 @Documented
@@ -13,7 +13,7 @@ public @interface ActorAction {
     /**
      * @return
      */
-    Class actor() default Object.class;
+    Class<? extends AbstractActor> actor() default AbstractActor.class;
 
     /**
      * @return
