@@ -114,7 +114,7 @@ public class CodeGenerator {
             "<module>\n" +
             "    <inherits name=\"com.google.gwt.user.User\"/>\n" +
             "    <inherits name=\"com.google.gwt.resources.Resources\"/>\n" +
-            "    <inherits name=\"io.clickhandler.web.Web\" />\n" +
+            "    <inherits name=\"ClickHandlerCore\" />\n" +
             "\n" +
             "    <source path=\"\"/>\n" +
             "</module>\n";
