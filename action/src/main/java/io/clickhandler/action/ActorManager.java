@@ -36,7 +36,7 @@ public class ActorManager extends AbstractVerticle {
 
     private final DistributedMapListener entryListener = new DistributedMapListener();
     private final ConcurrentMap<String, ActorActionProvider<?, ?, ?, ?>> actionProviderMap = new ConcurrentHashMap<>();
-    private final Cache<String, AbstractActor> localMap = CacheBuilder.newBuilder().build();
+    private final Cache<String, AbstractActor<?>> localMap = CacheBuilder.newBuilder().build();
     private IMap<String, byte[]> clusterMap;
 
     private String entryListenerId = null;
@@ -175,14 +175,14 @@ public class ActorManager extends AbstractVerticle {
      * @param addToCluster
      * @return
      */
-    Observable<AbstractActor> getActor(String key, boolean addToCluster) {
+    Observable<AbstractActor<?>> getActor(String key, boolean addToCluster) {
         return Observable.create(subscriber -> {
             if (subscriber.isUnsubscribed())
                 return;
 
             final AtomicBoolean created = new AtomicBoolean(false);
 
-            final AbstractActor actor = Try.of(() -> localMap.get(key,
+            final AbstractActor<?> actor = Try.of(() -> localMap.get(key,
                 () -> {
                     created.set(true);
                     // Create a new instance of the actor.

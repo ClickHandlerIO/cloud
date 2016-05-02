@@ -6,7 +6,7 @@ import dagger.Module;
 import dagger.Provides;
 import io.Action_LocatorRoot;
 import io.Io_Locator;
-import io.clickhandler.action.actor.MyActorAction;
+import io.clickhandler.action.actor.api.MyActorAction;
 import io.clickhandler.cloud.cluster.HazelcastProvider;
 import io.vertx.rxjava.core.Vertx;
 
@@ -18,7 +18,7 @@ import javax.inject.Singleton;
 public class Main {
     public static void main(String[] args) {
 
-//        Observable<String> observable = actions().myAsyncAction().observe("HI");
+//        Observable<String> observable = actions().myAsyncAction().execute("HI");
 //        observable.subscribe(result -> {
 //            System.err.println("Another Subscriber: " + result);
 //        });
@@ -28,7 +28,7 @@ public class Main {
         for (int p = 0; p < 4; p++)
         for (int i = 0; i < 1; i++) {
             final String key = "KEY_" + i;
-            actions().actor().myActorAction().ask(key, new MyActorAction.Request()).subscribe(
+            actions().actor().api().myActorAction().ask(key, new MyActorAction.Request()).subscribe(
                 r -> {
                     synchronized (Main.class) {
                         System.out.println(key + " on " + r.threadName());
@@ -45,7 +45,7 @@ public class Main {
         }
 
 //        actions().myAsyncAction()
-//            .observe("Bye")
+//            .execute("Bye")
 //            .subscribe(System.err::println);
     }
 

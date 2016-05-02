@@ -46,14 +46,6 @@ public class ActionProvider<A, IN, OUT> {
         return actionProvider;
     }
 
-    public boolean isExecutionTimeoutEnabled() {
-        return executionTimeoutEnabled;
-    }
-
-    public long getTimeoutMillis() {
-        return timeoutMillis;
-    }
-
     @Inject
     void setActionProvider(Provider<A> actionProvider) {
         this.actionProvider = actionProvider;
@@ -62,6 +54,26 @@ public class ActionProvider<A, IN, OUT> {
         if (inProvider != null && outProvider != null) {
             init();
         }
+    }
+
+    public boolean isExecutionTimeoutEnabled() {
+        return executionTimeoutEnabled;
+    }
+
+    public void setExecutionTimeoutEnabled(boolean enabled) {
+        commandPropertiesDefaults.withExecutionTimeoutEnabled(enabled);
+
+        if (!inited)
+            init();
+
+        if (defaultObservableSetter != null)
+            defaultObservableSetter.andCommandPropertiesDefaults(commandPropertiesDefaults);
+        else if (defaultSetter != null)
+            defaultSetter.andCommandPropertiesDefaults(commandPropertiesDefaults);
+    }
+
+    public long getTimeoutMillis() {
+        return timeoutMillis;
     }
 
     public Provider<IN> getInProvider() {
@@ -90,18 +102,6 @@ public class ActionProvider<A, IN, OUT> {
         if (actionProvider != null && inProvider != null) {
             init();
         }
-    }
-
-    public void setExecutionTimeoutEnabled(boolean enabled) {
-        commandPropertiesDefaults.withExecutionTimeoutEnabled(enabled);
-
-        if (!inited)
-            init();
-
-        if (defaultObservableSetter != null)
-            defaultObservableSetter.andCommandPropertiesDefaults(commandPropertiesDefaults);
-        else if (defaultSetter != null)
-            defaultSetter.andCommandPropertiesDefaults(commandPropertiesDefaults);
     }
 
     public Class<A> getActionClass() {

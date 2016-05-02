@@ -26,6 +26,7 @@ class EnvelopeHeader {
     public static final int BAD_REQUEST_FORMAT = 10;
     public static final int EXPECTED_ASK = 11;
     public static final int ACTOR_UNAVAILABLE = 12;
+    public static final int PARTITION_MOVED = 13;
 
     private final static Logger log = LoggerFactory.getLogger(EnvelopeHeader.class);
 

@@ -183,7 +183,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         // Configure jOOQ settings.
         settings = new Settings();
         settings.setRenderSchema(false);
-        settings.setExecuteWithOptimisticLocking(true);
+        settings.setExecuteWithOptimisticLocking(false);
         settings.setRenderNameStyle(RenderNameStyle.QUOTED);
         settings.setRenderKeywordStyle(RenderKeywordStyle.UPPER);
         settings.setReflectionCaching(true);

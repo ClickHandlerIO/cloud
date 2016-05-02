@@ -4,13 +4,10 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd
 http://www.w3.org/2001/XMLSchema-instance ">
 
-    <!-- ====================================================================== -->
-    <!-- P R O J E C OUT  D E ACTOR C R I P OUT I O N                                   -->
-    <!-- ====================================================================== -->
     <modelVersion>4.0.0</modelVersion>
     <groupId>io.clickhandler</groupId>
     <artifactId>cloud</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.2.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>Cloud</name>
@@ -63,26 +60,26 @@ http://www.w3.org/2001/XMLSchema-instance ">
         <nexus-staging-maven-plugin.version>1.6.6</nexus-staging-maven-plugin.version>
 
         <auto-service.version>1.0-rc2</auto-service.version>
-        <hazelcast.version>3.6.1</hazelcast.version>
+        <hazelcast.version>3.6.2</hazelcast.version>
         <aws.version>1.10.56</aws.version>
         <cglib-nodep.version>3.2.1</cglib-nodep.version>
         <guava.version>19.0</guava.version>
-        <hikaricp.version>2.4.3</hikaricp.version>
-        <hystrix.version>1.5.1</hystrix.version>
-        <jackson.version>2.7.3</jackson.version>
+        <hikaricp.version>2.4.6</hikaricp.version>
+        <hystrix.version>1.5.2</hystrix.version>
+        <jackson.version>2.7.4</jackson.version>
         <jackson-msgpack.version>0.8.3</jackson-msgpack.version>
         <javax-mail.version>1.5.5</javax-mail.version>
-        <javapoet.version>1.5.1</javapoet.version>
-        <javaslang.version>2.0.1</javaslang.version>
+        <javapoet.version>1.7.0</javapoet.version>
+        <javaslang.version>2.0.2</javaslang.version>
         <jooq.version>3.7.3</jooq.version>
         <junit.version>4.12</junit.version>
-        <msgpack.version>0.8.3</msgpack.version>
+        <msgpack.version>0.8.7</msgpack.version>
         <mysql.version>5.1.38</mysql.version>
         <netty.version>4.0.33.Final</netty.version>
         <reflections.version>0.9.10</reflections.version>
         <slf4j.version>1.7.18</slf4j.version>
         <vertx.version>3.2.1</vertx.version>
-        <rxjava.version>1.1.1</rxjava.version>
+        <rxjava.version>1.1.3</rxjava.version>
         <javax-validation-api.version>1.1.0.Final</javax-validation-api.version>
         <selenium.version>2.52.0</selenium.version>
     </properties>

@@ -1,7 +1,8 @@
-package io.clickhandler.action.actor;
+package io.clickhandler.action.actor.api;
 
 import io.clickhandler.action.AbstractActorAction;
 import io.clickhandler.action.ActorAction;
+import io.clickhandler.action.actor.MyActor;
 import javaslang.collection.Set;
 
 import javax.inject.Inject;
@@ -10,7 +11,7 @@ import javax.inject.Inject;
  *
  */
 @ActorAction(actor = MyActor.class)
-public class MyActorAction extends AbstractActorAction<MyActor, MyActorAction.Request, MyActorAction.Response> {
+public class MyActorAction extends AbstractActorAction<MyActor, MyActor.State, MyActorAction.Request, MyActorAction.Response> {
     @Inject
     public MyActorAction() {
     }
@@ -20,7 +21,7 @@ public class MyActorAction extends AbstractActorAction<MyActor, MyActorAction.Re
         actor().load().subscribe(
             result -> respond(new Response()
                 .threadName(Thread.currentThread().getName())
-                .watchers(actor().state().addWatcher(result))),
+                .watchers(state().addWatcher(result))),
             e -> {
             }
         );

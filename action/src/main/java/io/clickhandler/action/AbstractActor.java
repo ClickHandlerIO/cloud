@@ -13,8 +13,9 @@ import java.util.List;
 /**
  *
  */
-public class AbstractActor implements Actor {
+public abstract class AbstractActor<S> implements Actor {
     private Status status = Status.RUNNING;
+    private S state;
     private String name;
     private Vertx vertx;
     private String key;
@@ -28,10 +29,16 @@ public class AbstractActor implements Actor {
      */
     public AbstractActor() {
         this.name = getClass().getCanonicalName();
+        this.state = initialState();
+    }
+
+    protected abstract S initialState();
+
+    public S state() {
+        return state;
     }
 
     /**
-     *
      * @return
      */
     public Vertx getVertx() {
@@ -39,7 +46,6 @@ public class AbstractActor implements Actor {
     }
 
     /**
-     *
      * @param vertx
      */
     void setVertx(Vertx vertx) {
@@ -47,7 +53,6 @@ public class AbstractActor implements Actor {
     }
 
     /**
-     *
      * @return
      */
     public ActorManager getManager() {
@@ -55,7 +60,6 @@ public class AbstractActor implements Actor {
     }
 
     /**
-     *
      * @param manager
      */
     void setManager(ActorManager manager) {
@@ -63,7 +67,6 @@ public class AbstractActor implements Actor {
     }
 
     /**
-     *
      * @return
      */
     @Override
@@ -72,7 +75,6 @@ public class AbstractActor implements Actor {
     }
 
     /**
-     *
      * @return
      */
     @Override
@@ -81,7 +83,6 @@ public class AbstractActor implements Actor {
     }
 
     /**
-     *
      * @param key
      */
     void setKey(String key) {
@@ -89,7 +90,6 @@ public class AbstractActor implements Actor {
     }
 
     /**
-     *
      * @return
      */
     @Override
@@ -98,7 +98,6 @@ public class AbstractActor implements Actor {
     }
 
     /**
-     *
      * @param context
      */
     void setContext(Context context) {
@@ -106,7 +105,6 @@ public class AbstractActor implements Actor {
     }
 
     /**
-     *
      * @return
      */
     public Scheduler getScheduler() {
@@ -114,7 +112,6 @@ public class AbstractActor implements Actor {
     }
 
     /**
-     *
      * @param scheduler
      */
     void setScheduler(Scheduler scheduler) {
@@ -166,8 +163,13 @@ public class AbstractActor implements Actor {
         Try.run(this::stopped);
     }
 
+    public <A extends Action<IN, OUT>, IN, OUT> Observable<OUT> call(
+        InternalActionProvider<A, IN, OUT> actionProvider,
+        IN request) {
+        return actionProvider.observe(this, request);
+    }
+
     /**
-     *
      * @param actionProvider
      * @param request
      * @param <A>
@@ -179,7 +181,7 @@ public class AbstractActor implements Actor {
     <A extends Action<IN, OUT>, S extends AbstractActor, IN, OUT> Observable<OUT> invoke(
         ActorActionProvider<A, S, IN, OUT> actionProvider,
         IN request) {
-        final Observable<OUT> observable = Observable.create(subscriber -> {
+        return Observable.<OUT>create(subscriber -> {
             if (status != Status.RUNNING) {
                 Try.run(() -> subscriber.onError(new ActorUnavailableException()));
                 return;
@@ -220,9 +222,7 @@ public class AbstractActor implements Actor {
                     }
                 }
             );
-        });
-        observable.subscribeOn(scheduler).observeOn(scheduler);
-        return observable;
+        }).subscribeOn(scheduler).observeOn(scheduler);
     }
 
     /**

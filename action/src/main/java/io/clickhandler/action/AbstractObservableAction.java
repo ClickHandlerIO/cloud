@@ -164,6 +164,12 @@ public abstract class AbstractObservableAction<IN, OUT>
         return observe(provider, in);
     }
 
+    protected <A extends Action<I, O>, I, O> Observable<O> observeWithSupplier(ActionProvider<A, I, O> provider, Func.Run1<I> inCallback) {
+        final I in = provider.getInProvider().get();
+        if (inCallback != null) inCallback.run(in);
+        return observe(provider, in);
+    }
+
     protected <A extends Action<I, O>, I, O> Observable<O> observe(ActionProvider<A, I, O> provider, I in) {
         return provider.observe(getContext(), in);
     }

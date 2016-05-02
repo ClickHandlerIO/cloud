@@ -61,16 +61,4 @@ public class ActorActionProvider<A extends Action<IN, OUT>, ACTOR extends Abstra
     public Observable<OUT> ask(String key, int timeoutMillis, IN request) {
         return actorManager.ask(this, timeoutMillis, key, request);
     }
-
-    /**
-     * @param request
-     * @return
-     */
-    public Observable<OUT> observe(final IN request) {
-        return observe(
-            DEFAULT_CONTEXT,
-            request,
-            create()
-        );
-    }
 }

@@ -3,7 +3,7 @@ package io.clickhandler.action;
 /**
  *
  */
-public abstract class AbstractActorAction<ACTOR extends AbstractActor<S>, S, IN, OUT> extends AbstractObservableAction<IN, OUT> {
+public abstract class AbstractInternalActorAction<ACTOR, IN, OUT> extends AbstractObservableAction<IN, OUT> implements InternalActorAction<ACTOR, IN, OUT> {
     @Override
     public ACTOR getContext() {
         return (ACTOR) super.getContext();
@@ -19,9 +19,5 @@ public abstract class AbstractActorAction<ACTOR extends AbstractActor<S>, S, IN,
 
     protected ACTOR actor() {
         return getContext();
-    }
-
-    protected S state() {
-        return getContext().state();
     }
 }

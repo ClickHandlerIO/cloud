@@ -71,8 +71,6 @@ public class ActionManager extends AbstractVerticle {
 
     @Override
     public void start(Future<Void> startFuture) throws Exception {
-
-
         if (hazelcast.get() != null) {
             vertx.executeBlockingObservable(event -> {
                 membershipListenerId = hazelcast.get().getCluster().addMembershipListener(membershipListener);
@@ -87,7 +85,8 @@ public class ActionManager extends AbstractVerticle {
                 startFuture::fail
             );
         } else {
-
+            // TODO: Load all ActorManagers.
+            startFuture.complete();
         }
     }
 
@@ -145,16 +144,16 @@ public class ActionManager extends AbstractVerticle {
         });
     }
 
+    public void setExecutionTimeoutEnabled(boolean enabled) {
+        actionProviderMap.forEach((k, v) -> v.setExecutionTimeoutEnabled(enabled));
+    }
+
     /**
      * @param partition
      * @return
      */
     String buildActorPartitionAddress(int partition) {
         return "___actor|" + partition;
-    }
-
-    public void setExecutionTimeoutEnabled(boolean enabled) {
-        actionProviderMap.forEach((k, v) -> v.setExecutionTimeoutEnabled(enabled));
     }
 
     private void syncPartitions() {
@@ -235,6 +234,13 @@ public class ActionManager extends AbstractVerticle {
                 return;
             }
 
+            // Check the partition.
+            final Partition partition = actorManager.getPartition(header.key);
+            if (!partition.getOwner().localMember()) {
+                message.fail(PARTITION_MOVED, partition.getOwner().getUuid());
+                return;
+            }
+
             final ActorActionProvider actionProvider = actorManager.getAction(header.actionName);
             if (actionProvider == null) {
                 // Respond with ACTION_NOT_FOUND
@@ -304,6 +310,9 @@ public class ActionManager extends AbstractVerticle {
         }
     }
 
+    /**
+     *
+     */
     private final class MembershipListenerImpl implements MembershipListener {
         @Override
         public void memberAdded(MembershipEvent membershipEvent) {
@@ -321,6 +330,9 @@ public class ActionManager extends AbstractVerticle {
         }
     }
 
+    /**
+     *
+     */
     private final class MigrationListenerImpl implements MigrationListener {
         @Override
         public void migrationStarted(MigrationEvent migrationEvent) {
@@ -337,6 +349,9 @@ public class ActionManager extends AbstractVerticle {
         }
     }
 
+    /**
+     *
+     */
     private final class PartitionLostListenerImpl implements PartitionLostListener {
         @Override
         public void partitionLost(PartitionLostEvent event) {
