@@ -5,7 +5,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 /**
  * WebSocket Remoting Envelope
  */
-public class WsEnvelope {
+public class WsHeader {
     // Method
     public static final int OUT = 0;
     public static final int IN = 1;
@@ -25,18 +25,15 @@ public class WsEnvelope {
     private int code;
     @JsonProperty("t")
     private String type;
-    @JsonProperty("b")
-    private String body;
 
-    public WsEnvelope() {
+    public WsHeader() {
     }
 
-    public WsEnvelope(int method, int id, int code, String type, String body) {
+    public WsHeader(int method, int id, int code, String type) {
         this.method = method;
         this.id = id;
         this.code = code;
         this.type = type;
-        this.body = body;
     }
 
     public int getMethod() {
@@ -69,13 +66,5 @@ public class WsEnvelope {
 
     public void setType(String type) {
         this.type = type;
-    }
-
-    public String getBody() {
-        return body;
-    }
-
-    public void setBody(String body) {
-        this.body = body;
     }
 }

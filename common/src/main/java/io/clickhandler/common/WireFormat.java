@@ -1,5 +1,6 @@
 package io.clickhandler.common;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -42,6 +43,7 @@ public class WireFormat {
         MAPPER.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
         MAPPER.configure(SerializationFeature.FAIL_ON_SELF_REFERENCES, true);
         MAPPER.configure(SerializationFeature.FAIL_ON_UNWRAPPED_TYPE_IDENTIFIERS, true);
+        MAPPER.setSerializationInclusion(JsonInclude.Include.NON_NULL);
     }
 
     public static <T> T parse(Class<T> cls, String json) {
