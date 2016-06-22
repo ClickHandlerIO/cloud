@@ -1,7 +1,8 @@
 package io.clickhandler.sql;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.*;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import org.jooq.*;
 import org.jooq.impl.DSL;
 import org.jooq.impl.DefaultRecordListenerProvider;
@@ -11,6 +12,8 @@ import org.slf4j.LoggerFactory;
 import java.sql.*;
 import java.util.*;
 import java.util.Date;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Manages the logical lifecycle of a Transaction.
@@ -416,6 +419,54 @@ public class SqlSession {
      */
     public <E extends AbstractEntity, R extends Record> List<E> getEntities(Class<E> entityClass, Collection<String> ids) {
         return db.map((List<R>) getRecords(db.getMapping(entityClass), ids));
+    }
+
+    /**
+     * @param entityClass
+     * @param ids
+     * @param <E>
+     * @param <R>
+     * @return
+     */
+    public <E extends AbstractEntity, R extends Record> Map<String, E> getMap(Class<E> entityClass, Collection<String> ids) {
+        final List<E> entities = db.map((List<R>) getRecords(db.getMapping(entityClass), ids));
+        if (entities == null || entities.isEmpty())
+            return Collections.emptyMap();
+        return entities.stream().collect(Collectors.toMap(k -> k.getId(), Function.identity()));
+    }
+
+    /**
+     * @param entityClass
+     * @param ids
+     * @param <E>
+     * @param <R>
+     * @return
+     */
+    public <E extends AbstractEntity, R extends Record> Map<String, E> getMap(Class<E> entityClass, Map<String, E> toMap, Collection<String> ids) {
+        if (toMap == null)
+            toMap = new HashMap<>();
+
+        final List<E> entities = db.map((List<R>) getRecords(db.getMapping(entityClass), ids));
+        if (entities == null || entities.isEmpty())
+            return toMap;
+
+        final Map<String, E> m = toMap;
+        entities.forEach(entity -> m.put(entity.getId(), entity));
+        return toMap;
+    }
+
+    /**
+     * @param entityClass
+     * @param condition
+     * @param <E>
+     * @param <R>
+     * @return
+     */
+    public <E extends AbstractEntity, R extends Record> Map<String, E> selectMap(Class<E> entityClass, Condition condition) {
+        final List<E> entities = select(entityClass, condition);
+        if (entities == null || entities.isEmpty())
+            return Collections.emptyMap();
+        return entities.stream().collect(Collectors.toMap(k -> k.getId(), Function.identity()));
     }
 
     /**
@@ -1174,6 +1225,22 @@ public class SqlSession {
         }
 
         return success(results);
+    }
+
+    public <T> List<T> select(final Class<T> cls, Condition condition) {
+        final TableMapping mapping = db.getMapping(cls);
+        if (mapping == null) {
+            throw new RuntimeException("No mapping for class [" + cls.getCanonicalName() + "]");
+        }
+        return create().selectFrom(mapping.tbl).where(condition).fetchInto(cls);
+    }
+
+    public <T> T selectOne(final Class<T> cls, Condition condition) {
+        final TableMapping mapping = db.getMapping(cls);
+        if (mapping == null) {
+            throw new RuntimeException("No mapping for class [" + cls.getCanonicalName() + "]");
+        }
+        return (T)create().selectFrom(mapping.tbl).where(condition).limit(1).fetchOneInto(cls);
     }
 
     /**

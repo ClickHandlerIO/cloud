@@ -138,6 +138,10 @@ public abstract class ActionLocator {
         actionMap.forEach((key, value) -> {
             if (value == null) return;
             if (value instanceof RemoteActionProvider) {
+                if (remoteActionMap.containsKey(key)) {
+                    final RemoteActionProvider actionProvider = remoteActionMap.get(key);
+                    throw new RuntimeException("Duplicate RemoteAction Entry for key [" + key + "]. " + value.getActionClass().getCanonicalName() + " and " + actionProvider.getActionClass().getCanonicalName());
+                }
                 remoteActionMap.put(key, (RemoteActionProvider<?, ?, ?>) value);
             } else if (value instanceof QueueActionProvider) {
                 queueActionMap.put(key, (QueueActionProvider<?, ?, ?>) value);

@@ -18,6 +18,35 @@ public class SqlUtils {
 
     public static final String[] ALPHABET = {"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"};
 
+    public static boolean successful(int affectedRows) {
+        return affectedRows > 0;
+    }
+
+    public static boolean successful(SqlResult<Integer> result) {
+        if (result == null || result.isRollback())
+            return false;
+
+        return result.get() != null && result.get() > 0;
+    }
+
+    public static boolean successfulBatch(SqlResult<int[]> result) {
+        if (result == null || result.isRollback())
+            return false;
+
+        return successful(result.get());
+    }
+
+    public static boolean successful(int[] affectedRows) {
+        if (affectedRows == null || affectedRows.length == 1)
+            return false;
+
+        for (int i = 0; i < affectedRows.length; i++)
+            if (affectedRows[i] < 1)
+                return false;
+
+        return true;
+    }
+
     /**
      *
      * @param name

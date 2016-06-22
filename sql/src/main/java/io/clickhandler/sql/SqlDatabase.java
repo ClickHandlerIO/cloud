@@ -673,6 +673,64 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         });
     }
 
+    public <T extends AbstractEntity> Observable<T> get(Class<T> entityClass, String id) {
+        if (id == null || id.isEmpty())
+            return Observable.just(null);
+        return read(sql -> sql.getEntity(entityClass, id));
+    }
+
+    public <T extends AbstractEntity> Observable<List<T>> get(Class<T> entityClass, String... ids) {
+        if (ids == null || ids.length == 0)
+            return Observable.just(Collections.emptyList());
+        return read(sql -> sql.getEntities(entityClass, ids));
+    }
+
+    public <T extends AbstractEntity> Observable<List<T>> get(Class<T> entityClass, Collection<String> ids) {
+        if (ids == null || ids.isEmpty())
+            return Observable.just(Collections.emptyList());
+        return read(sql -> sql.getEntities(entityClass, ids));
+    }
+
+    public <T extends AbstractEntity> Observable<SqlResult<Integer>> insert(T entity) {
+        return write(sql -> sql.insert(entity));
+    }
+
+    public <T extends AbstractEntity> Observable<SqlResult<int[]>> insert(List<T> entities) {
+        return write(sql -> sql.insert(entities));
+    }
+
+    public <T extends AbstractEntity> Observable<SqlResult<Integer>> update(T entity) {
+        return write(sql -> sql.update(entity));
+    }
+
+    public <T extends AbstractEntity> Observable<SqlResult<int[]>> update(List<T> entities) {
+        return write(sql -> sql.update(entities));
+    }
+
+    public <T> Observable<List<T>> select(final Class<T> cls, Condition condition) {
+        return read(sql -> sql.select(cls, condition));
+    }
+
+    public <T> Observable<T> selectOne(final Class<T> cls, Condition condition) {
+        return read(sql -> sql.selectOne(cls, condition));
+    }
+
+    public <E extends AbstractEntity, R extends Record> Observable<Map<String, E>> getMap(Class<E> entityClass,
+                                                                                          Collection<String> ids) {
+        return read(sql -> sql.getMap(entityClass, ids));
+    }
+
+    public <E extends AbstractEntity, R extends Record> Observable<Map<String, E>> getMap(Class<E> entityClass,
+                                                                                          Map<String, E> toMap,
+                                                                                          Collection<String> ids) {
+        return read(sql -> sql.getMap(entityClass, toMap, ids));
+    }
+
+    public <E extends AbstractEntity, R extends Record> Observable<Map<String, E>> selectMap(Class<E> entityClass,
+                                                                                             Condition condition) {
+        return read(sql -> sql.selectMap(entityClass, condition));
+    }
+
     public <T> Observable<SqlResult<T>> write(SqlCallable<T> task) {
         return writeObservable(task);
     }
@@ -887,7 +945,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                         r.set(result);
 
                         // Rollback if ActionResponse isFailure.
-                        if (result != null && !result.isSuccess()) {
+                        if (!result.isSuccess()) {
                             throw new RollbackException();
                         }
 

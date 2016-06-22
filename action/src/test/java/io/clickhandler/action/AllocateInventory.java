@@ -5,7 +5,7 @@ import javax.inject.Inject;
 /**
  *
  */
-//@InternalAction
+@InternalAction
 //@RemoteAction(path = "/some/path")
 public class AllocateInventory extends AbstractObservableAction<String, String> {
     @Inject
@@ -14,6 +14,7 @@ public class AllocateInventory extends AbstractObservableAction<String, String> 
 
     @Override
     protected void start(String request) {
-        respond("TEST");
+        String r = "T";
+        respond("TEST2");
     }
 }

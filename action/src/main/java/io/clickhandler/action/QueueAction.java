@@ -16,15 +16,4 @@ public @interface QueueAction {
      * @return
      */
     String name() default "";
-
-    /**
-     * Determines whether reliability is required.
-     * This will tell the kernel to pick the most
-     * reliable backing possible.
-     * <p>
-     * Usually this means a network Queue such as Redis or AmazonSQS
-     *
-     * @return
-     */
-    boolean reliable() default true;
 }

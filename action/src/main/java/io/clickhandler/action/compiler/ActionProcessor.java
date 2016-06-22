@@ -15,6 +15,8 @@ import javax.lang.model.type.MirroredTypeException;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
+import javax.tools.FileObject;
+import javax.tools.StandardLocation;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -157,13 +159,13 @@ public class ActionProcessor extends AbstractProcessor {
                     holder.inType = typeParamResolver.resolve(Action.class, 0);
                     holder.outType = typeParamResolver.resolve(Action.class, 1);
 
-                    messager.printMessage(Diagnostic.Kind.WARNING, element.getQualifiedName().toString());
+//                    messager.printMessage(Diagnostic.Kind.WARNING, element.getQualifiedName().toString());
 
                     if (holder.inType != null) {
-                        messager.printMessage(Diagnostic.Kind.WARNING, "IN = " + holder.inType.getResolvedElement().getQualifiedName().toString());
+//                        messager.printMessage(Diagnostic.Kind.WARNING, "IN = " + holder.inType.getResolvedElement().getQualifiedName().toString());
                     }
                     if (holder.outType != null) {
-                        messager.printMessage(Diagnostic.Kind.WARNING, "OUT = " + holder.outType.getResolvedElement().getQualifiedName().toString());
+//                        messager.printMessage(Diagnostic.Kind.WARNING, "OUT = " + holder.outType.getResolvedElement().getQualifiedName().toString());
                     }
                 }
 
@@ -197,7 +199,7 @@ public class ActionProcessor extends AbstractProcessor {
                 final String[] parts = jpkgName.split("[.]");
                 final String firstName = parts[0];
 
-                messager.printMessage(Diagnostic.Kind.WARNING, "PKG: " + jpkgName);
+//                messager.printMessage(Diagnostic.Kind.WARNING, "PKG: " + jpkgName);
 
                 // Is it a Root Action?
                 if (parts.length == 1 && firstName.isEmpty()) {
@@ -398,6 +400,70 @@ public class ActionProcessor extends AbstractProcessor {
                     .addCode(initChildrenCode.build()).build()
             );
 
+            if (!actions.isEmpty()) {
+                try {
+                    FileObject fileObject = filer.getResource(StandardLocation.SOURCE_OUTPUT, path, getClassName() + ".java");
+                    final CharSequence content = fileObject.getCharContent(true);
+                    final String contents = content.toString();
+
+                    if (!contents.isEmpty()) {
+                        for (ActionHolder action : actions.values()) {
+                            if (action.isInternal()) {
+                                if (!contents.contains("InternalActionProvider<" + action.type.getSimpleName())) {
+                                    messager.printMessage(Diagnostic.Kind.ERROR, "Action: " + action.getName() + " was created. Full Regeneration needed. \"clean\" and \"compile\"");
+                                    return;
+                                }
+                            } else if (action.isRemote()) {
+                                if (!contents.contains("RemoteActionProvider<" + action.type.getSimpleName())) {
+                                    messager.printMessage(Diagnostic.Kind.ERROR, "Action: " + action.getName() + " was created. Full Regeneration needed. \"clean\" and \"compile\"");
+                                    return;
+                                }
+                            }
+                        }
+
+                        messager.printMessage(Diagnostic.Kind.WARNING, getFullPath() + " has a change, but it appears that it may save a full re-compile. When in doubt \"clean\" and \"compile\"");
+
+                        // Generate child packages.
+                        for (Pkg childPackage : children.values()) {
+                            childPackage.generateJava();
+                        }
+
+                        return;
+                    }
+                } catch (Throwable e) {
+                    // Ignore.
+                }
+            }
+
+            if (!children.isEmpty()) {
+                try {
+                    FileObject fileObject = filer.getResource(StandardLocation.SOURCE_OUTPUT, path, getClassName() + ".java");
+                    final CharSequence content = fileObject.getCharContent(true);
+                    final String contents = content.toString();
+
+                    if (!contents.isEmpty()) {
+                        for (Pkg child : children.values()) {
+                            if (!contents.contains(child.getClassName() + " " + child.name + ";")) {
+                                messager.printMessage(Diagnostic.Kind.ERROR, "ActionLocator: " + child.path + " was created. Full Regeneration needed. \"clean\" and \"compile\"");
+                                return;
+                            }
+                        }
+
+                        messager.printMessage(Diagnostic.Kind.WARNING, getFullPath() + " has a change, but it appears that it may save a full re-compile. When in doubt \"clean\" and \"compile\"");
+
+                        // Generate child packages.
+                        for (Pkg childPackage : children.values()) {
+                            childPackage.generateJava();
+                        }
+
+                        return;
+                    }
+                } catch (Throwable e) {
+                    // Ignore.
+                }
+            }
+
+//            if (actions.isEmpty() && children.isEmpty()) {
             // Build java file.
             final JavaFile javaFile = JavaFile.builder(path, type.build()).build();
 

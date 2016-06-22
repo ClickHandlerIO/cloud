@@ -42,7 +42,26 @@ public class MyActor extends AbstractActor<MyActor.State> {
     public class State {
         Status status;
         Set<String> watchers = HashSet.empty();
-        Sync<String> load = new Sync<String>(MyActor.this) {
+
+        Guard<MyActorInternalAction.Response> loader = new Guard<MyActorInternalAction.Response>(MyActor.this) {
+            @Override
+            protected Observable<MyActorInternalAction.Response> execute() {
+//                Main.actions().actor().
+                return null;
+            }
+
+            @Override
+            protected void merge(MyActorInternalAction.Response result) {
+
+            }
+
+            @Override
+            protected void merge(Throwable e) {
+
+            }
+        };
+
+        Guard<String> load = new Guard<String>(MyActor.this) {
             @Override
             protected Observable<String> execute() {
                 return Observable.create(subscriber -> {

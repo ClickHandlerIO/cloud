@@ -23,11 +23,6 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>io.github.robwin</groupId>
-            <artifactId>javaslang-circuitbreaker</artifactId>
-            <version>0.4.0</version>
-        </dependency>
-        <dependency>
             <groupId>com.google.dagger</groupId>
             <artifactId>dagger</artifactId>
         </dependency>

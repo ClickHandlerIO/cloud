@@ -1,5 +1,6 @@
 package io.clickhandler.action.actor.api;
 
+import com.hazelcast.core.IMap;
 import io.clickhandler.action.AbstractActorAction;
 import io.clickhandler.action.ActorAction;
 import io.clickhandler.action.actor.MyActor;
@@ -25,6 +26,8 @@ public class MyActorAction extends AbstractActorAction<MyActor, MyActor.State, M
             e -> {
             }
         );
+
+        IMap map;
     }
 
     public static class Request {

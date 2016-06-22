@@ -1,5 +1,6 @@
 package io.clickhandler.action.actor;
 
+import io.clickhandler.action.Actor;
 import javaslang.collection.List;
 import javaslang.control.Try;
 import rx.Observable;
@@ -8,14 +9,19 @@ import rx.Subscriber;
 /**
  *
  */
-public abstract class Sync<T> {
+public abstract class Guard<T> {
     List<Subscriber<? super T>> subscribers;
     Subscriber<? super T> current;
-    private MyActor myActor;
+    private Actor actor;
     private T result;
+    private boolean done;
 
-    public Sync(MyActor myActor) {
-        this.myActor = myActor;
+    public Guard(Actor actor) {
+        this.actor = actor;
+    }
+
+    public boolean isDone() {
+        return done;
     }
 
     public Observable<T> observe() {
@@ -42,25 +48,33 @@ public abstract class Sync<T> {
                     execute().subscribe(
                         r -> {
                             synchronized (this) {
-                                result = r;
-                                Try.run(() -> merge(r));
-                                onNext(subscriber, r);
-                                current = null;
+                                try {
+                                    result = r;
+                                    Try.run(() -> merge(r));
+                                    Try.run(() -> onNext(subscriber, r));
+                                    current = null;
 
-                                if (subscribers != null) {
-                                    subscribers.forEach(s -> onNext(s, r));
-                                    subscribers = null;
+                                    if (subscribers != null) {
+                                        subscribers.forEach(s -> onNext(s, r));
+                                        subscribers = null;
+                                    }
+                                } finally {
+                                    done = true;
                                 }
                             }
                         },
                         e -> {
                             synchronized (this) {
-                                merge(e);
-                                onError(subscriber, e);
-                                current = null;
+                                try {
+                                    Try.run(() -> merge(e));
+                                    Try.run(() -> onError(subscriber, e));
+                                    current = null;
 
-                                if (subscribers != null)
-                                    subscribers.forEach(s -> onError(s, e));
+                                    if (subscribers != null)
+                                        subscribers.forEach(s -> onError(s, e));
+                                } finally {
+                                    done = true;
+                                }
                             }
                         }
                     );
@@ -71,7 +85,7 @@ public abstract class Sync<T> {
                     subscribers = subscribers.append(subscriber);
                 }
             }
-        }).observeOn(myActor.getScheduler()).subscribeOn(myActor.getScheduler());
+        }).observeOn(actor.getScheduler()).subscribeOn(actor.getScheduler());
     }
 
     protected void onNext(Subscriber<? super T> subscriber, T next) {

@@ -17,6 +17,7 @@ import rx.Observable;
 
 import javax.inject.Provider;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -37,8 +38,8 @@ public class ActorManager extends AbstractVerticle {
     private final DistributedMapListener entryListener = new DistributedMapListener();
     private final ConcurrentMap<String, ActorActionProvider<?, ?, ?, ?>> actionProviderMap = new ConcurrentHashMap<>();
     private final Cache<String, AbstractActor<?>> localMap = CacheBuilder.newBuilder().build();
+    private final ConcurrentLinkedDeque queue = new ConcurrentLinkedDeque();
     private IMap<String, byte[]> clusterMap;
-
     private String entryListenerId = null;
     private String actorName = "";
     private Member localMember;

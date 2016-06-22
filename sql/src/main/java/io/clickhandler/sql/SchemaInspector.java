@@ -77,8 +77,8 @@ public class SchemaInspector {
                 } else {
                     if (index.dbIndex.columns.size() != index.properties.length) {
                         // Rebuild Index.
-                        changes.add(new DropIndex(mapping, index.dbIndex));
-                        changes.add(new CreateIndex(mapping, index));
+//                        changes.add(new DropIndex(mapping, index.dbIndex));
+//                        changes.add(new CreateIndex(mapping, index));
                     } else {
                         boolean changed = false;
                         for (TableMapping.IndexProperty indexProperty : index.properties) {
@@ -89,8 +89,8 @@ public class SchemaInspector {
                         }
                         if (changed) {
                             // Rebuild Index.
-                            changes.add(new DropIndex(mapping, index.dbIndex));
-                            changes.add(new CreateIndex(mapping, index));
+//                            changes.add(new DropIndex(mapping, index.dbIndex));
+//                            changes.add(new CreateIndex(mapping, index));
                         }
                     }
                 }
@@ -144,8 +144,8 @@ public class SchemaInspector {
                     } else {
                         if (index.dbIndex.columns.size() != index.properties.length) {
                             // Rebuild Index.
-                            changes.add(new DropIndex(mapping, index.dbIndex));
-                            changes.add(new CreateIndex(mapping, index));
+//                            changes.add(new DropIndex(mapping, index.dbIndex));
+//                            changes.add(new CreateIndex(mapping, index));
                         } else {
                             boolean changed = false;
                             for (TableMapping.IndexProperty indexProperty : index.properties) {
@@ -156,8 +156,8 @@ public class SchemaInspector {
                             }
                             if (changed) {
                                 // Rebuild Index.
-                                changes.add(new DropIndex(mapping, index.dbIndex));
-                                changes.add(new CreateIndex(mapping, index));
+//                                changes.add(new DropIndex(mapping, index.dbIndex));
+//                                changes.add(new CreateIndex(mapping, index));
                             }
                         }
                     }
