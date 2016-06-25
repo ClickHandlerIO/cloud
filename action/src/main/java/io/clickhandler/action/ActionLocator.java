@@ -14,9 +14,7 @@ import java.util.Map;
 public abstract class ActionLocator {
     protected final List<ActionLocator> children = new ArrayList<>();
     private final Map<Object, RemoteActionProvider<?, ?, ?>> remoteActionMap = new HashMap<>();
-    private final Map<Object, QueueActionProvider<?, ?, ?>> queueActionMap = new HashMap<>();
     private final Map<Object, InternalActionProvider<?, ?, ?>> internalActionMap = new HashMap<>();
-    private final Map<Object, ActorActionProvider<?, ?, ?, ?>> actorActionMap = new HashMap<>();
     protected Map<Object, ActionProvider<?, ?, ?>> actionMap = new HashMap<>();
     private ActionManager actionManager;
     private boolean inited;
@@ -30,16 +28,8 @@ public abstract class ActionLocator {
         return ImmutableMap.copyOf(remoteActionMap);
     }
 
-    public Map<Object, QueueActionProvider<?, ?, ?>> getQueueActionMap() {
-        return ImmutableMap.copyOf(queueActionMap);
-    }
-
     public Map<Object, InternalActionProvider<?, ?, ?>> getInternalActionMap() {
         return ImmutableMap.copyOf(internalActionMap);
-    }
-
-    public Map<Object, ActorActionProvider<?, ?, ?, ?>> getActorActionMap() {
-        return ImmutableMap.copyOf(actorActionMap);
     }
 
     public Map<Object, ActionProvider<?, ?, ?>> getActionMap() {
@@ -143,8 +133,6 @@ public abstract class ActionLocator {
                     throw new RuntimeException("Duplicate RemoteAction Entry for key [" + key + "]. " + value.getActionClass().getCanonicalName() + " and " + actionProvider.getActionClass().getCanonicalName());
                 }
                 remoteActionMap.put(key, (RemoteActionProvider<?, ?, ?>) value);
-            } else if (value instanceof QueueActionProvider) {
-                queueActionMap.put(key, (QueueActionProvider<?, ?, ?>) value);
             } else if (value instanceof InternalActionProvider) {
                 internalActionMap.put(key, (InternalActionProvider<?, ?, ?>) value);
             }

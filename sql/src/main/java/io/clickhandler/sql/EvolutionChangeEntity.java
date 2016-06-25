@@ -5,7 +5,7 @@ import java.util.Date;
 /**
  *
  */
-@Table(journal = false)
+@Table
 public class EvolutionChangeEntity extends AbstractEntity {
     @Column
     private ChangeType type;

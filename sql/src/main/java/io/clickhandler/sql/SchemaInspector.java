@@ -43,30 +43,30 @@ public class SchemaInspector {
      * @param mapping
      */
     private void checkTable(TableMapping mapping) {
-        final Mapping.Property[] properties = mapping.getProperties();
+        final TableMapping.Property[] properties = mapping.getProperties();
 
         if (mapping.schemaTable == null) {
-            changes.add(new CreateTable(mapping, false));
-            changes.add(new CreatePrimaryKey(mapping, false));
+            changes.add(new CreateTable(mapping));
+            changes.add(new CreatePrimaryKey(mapping));
 
             for (TableMapping.Index index : mapping.getIndexes()) {
                 changes.add(new CreateIndex(mapping, index));
             }
         } else {
-            for (Mapping.Property property : properties) {
+            for (TableMapping.Property property : properties) {
                 // Add new column.
                 if (!property.isMapped()) {
-                    changes.add(new AddColumn(mapping, property, false));
+                    changes.add(new AddColumn(mapping, property));
                 } else {
-                    checkField(mapping, property, property.column, false);
+                    checkField(mapping, property, property.column);
                 }
             }
 
             for (SqlSchema.DbColumn column : mapping.schemaTable.getColumns()) {
-                Mapping.Property property = mapping.getProperty(column.name);
+                TableMapping.Property property = mapping.getProperty(column.name);
 
                 if (property == null) {
-                    changes.add(new DropColumn(mapping, column, false));
+                    changes.add(new DropColumn(mapping, column));
                 }
             }
 
@@ -103,82 +103,11 @@ public class SchemaInspector {
 //                }
 //            }
         }
-
-        if (mapping.isJournaling()) {
-            SqlSchema.DbTable journalTable = mapping.schemaJournalTable;
-
-            if (journalTable == null) {
-                changes.add(new CreateTable(mapping, true));
-                changes.add(new CreatePrimaryKey(mapping, true));
-
-                for (TableMapping.Index index : mapping.getJournalIndexes()) {
-                    changes.add(new CreateIndex(mapping, index));
-                }
-            } else {
-                for (Mapping.Property property : properties) {
-                    boolean found = false;
-                    for (SqlSchema.DbColumn column : journalTable.getColumns()) {
-                        if (property.columnName.equals(column.name)) {
-                            found = true;
-                            checkField(mapping, property, column, true);
-                            break;
-                        }
-                    }
-
-                    if (!found) {
-                        changes.add(new AddColumn(mapping, property, true));
-                    }
-                }
-
-                for (SqlSchema.DbColumn column : journalTable.getColumns()) {
-                    Mapping.Property property = mapping.getProperty(column.name);
-
-                    if (property == null) {
-                        changes.add(new DropColumn(mapping, column, true));
-                    }
-                }
-
-                for (TableMapping.Index index : mapping.getJournalIndexes()) {
-                    if (index.dbIndex == null) {
-                        changes.add(new CreateIndex(mapping, index));
-                    } else {
-                        if (index.dbIndex.columns.size() != index.properties.length) {
-                            // Rebuild Index.
-//                            changes.add(new DropIndex(mapping, index.dbIndex));
-//                            changes.add(new CreateIndex(mapping, index));
-                        } else {
-                            boolean changed = false;
-                            for (TableMapping.IndexProperty indexProperty : index.properties) {
-                                if (indexProperty.dbIndexColumn == null) {
-                                    changed = true;
-                                    break;
-                                }
-                            }
-                            if (changed) {
-                                // Rebuild Index.
-//                                changes.add(new DropIndex(mapping, index.dbIndex));
-//                                changes.add(new CreateIndex(mapping, index));
-                            }
-                        }
-                    }
-                }
-
-                // Drop Extra Indexes.
-//                for (SqlSchema.DbIndex dbIndex : mapping.schemaJournalTable.indexes.values()) {
-//                    if (mapping.getJournalIndex(dbIndex.name) == null) {
-//                        changes.add(new DropIndex(mapping, dbIndex));
-//                    }
-//                }
-            }
-        } else if (mapping.schemaJournalTable != null) {
-            changes.add(new DropTable(mapping, true));
-        }
     }
 
     private void checkField(TableMapping mapping,
-                            Mapping.Property property,
-                            SqlSchema.DbColumn column,
-                            boolean journal) {
+                            TableMapping.Property property,
+                            SqlSchema.DbColumn column) {
         final DataType columnType = property.columnDataType();
         final DataType fieldType = property.fieldDataType();
 
@@ -189,7 +118,7 @@ public class SchemaInspector {
         if (columnType.getType() != fieldType.getType()
                 || ((platform.isLengthBased(column.dataType) || platform.isLengthBased(property.dbType)) && columnType.length() != fieldType.length())
                 || columnType.nullable() != fieldType.nullable()) {
-            changes.add(new ModifyColumn(mapping, property, journal));
+            changes.add(new ModifyColumn(mapping, property));
         }
     }
 
@@ -211,11 +140,9 @@ public class SchemaInspector {
      */
     public static final class DropTable extends Change {
         public final TableMapping mapping;
-        public final boolean journal;
 
-        public DropTable(TableMapping mapping, boolean journal) {
+        public DropTable(TableMapping mapping) {
             this.mapping = mapping;
-            this.journal = journal;
         }
 
         @Override
@@ -225,7 +152,7 @@ public class SchemaInspector {
 
         @Override
         public String ddl(SqlPlatform platform) {
-            return platform.ddlDropTable(mapping, journal);
+            return platform.ddlDropTable(mapping);
         }
     }
 
@@ -234,11 +161,9 @@ public class SchemaInspector {
      */
     public static final class CreateTable extends Change {
         public final TableMapping mapping;
-        public final boolean journal;
 
-        public CreateTable(TableMapping mapping, boolean journal) {
+        public CreateTable(TableMapping mapping) {
             this.mapping = mapping;
-            this.journal = journal;
         }
 
         @Override
@@ -248,7 +173,7 @@ public class SchemaInspector {
 
         @Override
         public String ddl(SqlPlatform platform) {
-            return platform.ddlCreateTable(mapping, journal);
+            return platform.ddlCreateTable(mapping);
         }
     }
 
@@ -257,13 +182,11 @@ public class SchemaInspector {
      */
     public static final class AddColumn extends Change {
         public final TableMapping mapping;
-        public final Mapping.Property property;
-        public final boolean journal;
+        public final TableMapping.Property property;
 
-        public AddColumn(TableMapping mapping, Mapping.Property property, boolean journal) {
+        public AddColumn(TableMapping mapping, TableMapping.Property property) {
             this.mapping = mapping;
             this.property = property;
-            this.journal = journal;
         }
 
         @Override
@@ -273,7 +196,7 @@ public class SchemaInspector {
 
         @Override
         public String ddl(SqlPlatform platform) {
-            return platform.ddlAddColumn(mapping, property, journal);
+            return platform.ddlAddColumn(mapping, property);
         }
     }
 
@@ -283,12 +206,10 @@ public class SchemaInspector {
     public static final class DropColumn extends Change {
         public final TableMapping mapping;
         public final SqlSchema.DbColumn column;
-        public final boolean forJournal;
 
-        public DropColumn(TableMapping mapping, SqlSchema.DbColumn column, boolean forJournal) {
+        public DropColumn(TableMapping mapping, SqlSchema.DbColumn column) {
             this.mapping = mapping;
             this.column = column;
-            this.forJournal = forJournal;
         }
 
         @Override
@@ -298,7 +219,7 @@ public class SchemaInspector {
 
         @Override
         public String ddl(SqlPlatform platform) {
-            return platform.ddlDropColumn(mapping, column, forJournal);
+            return platform.ddlDropColumn(mapping, column);
         }
     }
 
@@ -307,13 +228,11 @@ public class SchemaInspector {
      */
     public static final class ModifyColumn extends Change {
         public final TableMapping mapping;
-        public final Mapping.Property property;
-        public final boolean journal;
+        public final TableMapping.Property property;
 
-        public ModifyColumn(TableMapping mapping, Mapping.Property property, boolean journal) {
+        public ModifyColumn(TableMapping mapping, TableMapping.Property property) {
             this.mapping = mapping;
             this.property = property;
-            this.journal = journal;
         }
 
         @Override
@@ -323,7 +242,7 @@ public class SchemaInspector {
 
         @Override
         public String ddl(SqlPlatform platform) {
-            return platform.ddlModifyColumn(mapping, property, journal);
+            return platform.ddlModifyColumn(mapping, property);
         }
     }
 
@@ -332,11 +251,9 @@ public class SchemaInspector {
      */
     public static final class CreatePrimaryKey extends Change {
         public final TableMapping mapping;
-        public final boolean journal;
 
-        public CreatePrimaryKey(TableMapping mapping, boolean journal) {
+        public CreatePrimaryKey(TableMapping mapping) {
             this.mapping = mapping;
-            this.journal = journal;
         }
 
         @Override
@@ -346,7 +263,7 @@ public class SchemaInspector {
 
         @Override
         public String ddl(SqlPlatform platform) {
-            return platform.ddlPrimaryKey(mapping, journal);
+            return platform.ddlPrimaryKey(mapping);
         }
     }
 

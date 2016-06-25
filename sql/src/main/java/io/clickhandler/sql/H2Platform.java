@@ -24,10 +24,10 @@ public class H2Platform extends SqlPlatform {
 
         if (index.unique) {
             return PersistDSL.createUniqueIndex(getConfiguration(), name)
-                    .on(mapping.getTableName(index.journal), index.columnNames).getSQL();
+                    .on(mapping.getTableName(), index.columnNames).getSQL();
         }
 
-        return create().createIndex(name).on(mapping.getTableName(index.journal), index.columnNames).getSQL();
+        return create().createIndex(name).on(mapping.getTableName(), index.columnNames).getSQL();
     }
 
     public DataType fromJdbcType(int type) {

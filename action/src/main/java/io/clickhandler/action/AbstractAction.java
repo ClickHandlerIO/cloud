@@ -62,16 +62,16 @@ public abstract class AbstractAction<IN, OUT> implements Action<IN, OUT> {
      * @param <OUT>
      * @return
      */
-    @Deprecated
-    public <A extends Action<IN, OUT>, IN, OUT> OUT execute(
-        final IN request) {
-        try {
-            // TODO: Fix
-            return null;
-        } catch (Throwable e) {
-            throw new Error(e);
-        }
-    }
+//    @Deprecated
+//    public <A extends Action<IN, OUT>, IN, OUT> OUT execute(
+//        final IN request) {
+//        try {
+//            // TODO: Fix
+//            return null;
+//        } catch (Throwable e) {
+//            throw new Error(e);
+//        }
+//    }
 
     /**
      * @return

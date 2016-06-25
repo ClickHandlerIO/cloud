@@ -8,6 +8,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Multimaps;
 import net.sf.cglib.reflect.FastClass;
+import net.sf.cglib.reflect.FastMethod;
 import org.jooq.*;
 import org.jooq.Table;
 import org.jooq.impl.DSL;
@@ -15,64 +16,85 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.*;
 
 /**
  * Holds mapping data from a given class and a table
  */
 @SuppressWarnings("unchecked")
-public class TableMapping extends Mapping {
-    public final static String JOURNAL_TABLE_SUFFIX = "_jnl";
+public class TableMapping {
+    public static final int COLUMN_LENGTH_ID = 32;
+    public static final int COLUMN_LENGTH_ENUM = 64;
+    public static final int COLUMN_LENGTH_STRING = 128;
+    
     public final static String ENTITY_SUFFIX = "Entity";
     private static final Logger LOG = LoggerFactory.getLogger(TableMapping.class);
 
+    public final Class entityClass;
+    public final FastClass fastClass;
+    public final Property[] properties;
+    public final Property[] embeddedProperties;
+    public final Map<String, Property> columnsMap = new LinkedHashMap<>();
+    public final SqlPlatform dbPlatform;
+
     public final io.clickhandler.sql.Table tableAnnotation;
     public final String tableName;
-    public final String journalTableName;
     public final SqlSchema.DbTable schemaTable;
-    public final SqlSchema.DbTable schemaJournalTable;
     public final String[] columns;
     public final Field[] fields;
     public final Table tbl;
-    public final Table journalTbl;
-    public final Field<Long> journalVersionField;
-    public final Field<Date> journalChangedField;
-    private final Map<Property, Relationship> parentMap = Maps.newHashMap();
-    private final Map<Property, Relationship> childrenMap = Maps.newHashMap();
     private final Field<String> idField;
-    private final Field<Long> versionField;
-    private final Field<Date> changedField;
     private final RecordMapper<? extends Record, ? extends AbstractEntity> recordMapper;
-    private final RecordMapper<? extends Record, ? extends Record> journalMapper;
     private final EntityMapper<? extends AbstractEntity, ? extends Record> entityMapper;
     private final Class recordClass;
-    private final Class journalRecordClass;
 
     private final List<Index> indexes = new ArrayList<>();
-    private final List<Index> journalIndexes = new ArrayList<>();
     private final Map<String, Index> indexMap = new HashMap<>();
-    private final Map<String, Index> journalIndexMap = new HashMap<>();
     private Multimap<Property, Index> propertyIndexMap = Multimaps.newMultimap(
             Maps.newHashMap(),
             () -> Lists.newArrayListWithExpectedSize(2));
 
     protected TableMapping(final SqlSchema.DbTable schemaTable,
-                           final SqlSchema.DbTable schemaJournalTable,
                            final SqlPlatform dbPlatform,
                            final Class objectClass,
                            final Map<String, Table> jooqMap) {
-        super(objectClass, dbPlatform);
+        this.entityClass = objectClass;
+        this.fastClass = FastClass.create(entityClass);
+        this.dbPlatform = dbPlatform;
+
+        final List<Property> props = Lists.newArrayList();
+        final List<Property> embeddedProperties = Lists.newArrayList();
+        final Property[] allProperties = extractFields(entityClass, null, "");
+
+        for (Property property : allProperties) {
+            if (property.isEmbedded()) {
+                embeddedProperties.add(property);
+            } else {
+                final String columnName = property.columnName;
+                if (columnsMap.containsKey(columnName)) {
+                    throw new PersistException("Duplicate column names found on '" + entityClass.getCanonicalName() + "' Column Name: " + columnName);
+                }
+
+                columnsMap.put(columnName, property);
+                props.add(property);
+            }
+        }
+
+        this.properties = props.toArray(new Property[props.size()]);
+        this.embeddedProperties = embeddedProperties.toArray(new Property[embeddedProperties.size()]);
 
         // Table annotation.
         tableAnnotation = (io.clickhandler.sql.Table) objectClass.getAnnotation(io.clickhandler.sql.Table.class);
-        Preconditions.checkNotNull(tableAnnotation, "Entity Class [" + objectClass.getCanonicalName() + "] does not have a @Table annotation.");
+        Preconditions.checkNotNull(tableAnnotation, "Entity Class [" +
+            objectClass.getCanonicalName() + "] does not have a @Table annotation.");
 
-        tableName = tableName(objectClass, tableAnnotation.name(), false).toLowerCase();
-        Preconditions.checkState(!tableName.isEmpty(), "Entity Class [" + objectClass.getCanonicalName() + "] @Table must specify a value for 'name'.");
+        tableName = SqlUtils.tableName(objectClass, tableAnnotation.name()).toLowerCase();
+        Preconditions.checkState(!tableName.isEmpty(), "Entity Class [" +
+            objectClass.getCanonicalName() + "] @Table must specify a value for 'name'.");
 
         this.schemaTable = schemaTable;
-        this.schemaJournalTable = schemaJournalTable;
-        this.journalTableName = tableAnnotation.journal() ? tableName(objectClass, tableName, true) : "";
 
         // Ensure columnsMap is empty.
         columnsMap.clear();
@@ -96,24 +118,17 @@ public class TableMapping extends Mapping {
             columnsMap.put(columnName, property);
         }
 
-        columns = extractColumnNames(properties);
+        columns = extractColumnNames(this.properties);
 
         {
             this.tbl = jooqMap.get(tableName);
 
             if (this.tbl == null) {
-                this.journalTbl = null;
                 this.fields = null;
                 this.idField = null;
-                this.versionField = null;
-                this.changedField = null;
-                this.journalVersionField = null;
-                this.journalChangedField = null;
                 this.recordMapper = null;
                 this.entityMapper = null;
-                this.journalMapper = null;
                 this.recordClass = null;
-                this.journalRecordClass = null;
                 return;
             }
 
@@ -125,7 +140,9 @@ public class TableMapping extends Mapping {
                 final String columnName = Strings.nullToEmpty(jooqField.getName()).trim().toLowerCase();
                 final Property property = columnsMap.get(columnName);
                 if (property == null) {
-                    throw new PersistException("jOOQ Table [" + this.tbl.getClass().getCanonicalName() + "] specified field [" + columnName + "] that does not correspond to any fields on Entity [" + objectClass.getCanonicalName() + "]. Run Schema Generation to synchronize jOOQ.");
+                    throw new PersistException("jOOQ Table [" + this.tbl.getClass().getCanonicalName() +
+                        "] specified field [" + columnName + "] that does not correspond to any fields on Entity [" +
+                        objectClass.getCanonicalName() + "]. Run Schema Generation to synchronize jOOQ.");
                 }
                 property.jooqField = jooqField;
             }
@@ -135,11 +152,12 @@ public class TableMapping extends Mapping {
                 try {
                     entity = (AbstractEntity) fastClass.newInstance();
                 } catch (InvocationTargetException e) {
-                    throw new PersistException("Failed to create an instance of class [" + entityClass.getCanonicalName() + "]", e);
+                    throw new PersistException("Failed to create an instance of class [" +
+                        entityClass.getCanonicalName() + "]", e);
                 }
 
-                for (int i = 0; i < properties.length; i++) {
-                    final Property property = properties[i];
+                for (int i = 0; i < this.properties.length; i++) {
+                    final Property property = this.properties[i];
                     try {
                         // Get value from record.
                         Object value = record.getValue(property.jooqField);
@@ -150,7 +168,8 @@ public class TableMapping extends Mapping {
                             property.set(entity, value);
                         }
                     } catch (Exception e) {
-                        throw new PersistException("Failed to set field [" + property.columnName + "] on an instance of class [" + entityClass.getCanonicalName() + "]", e);
+                        throw new PersistException("Failed to set field [" + property.columnName +
+                            "] on an instance of class [" + entityClass.getCanonicalName() + "]", e);
                     }
                 }
                 return entity;
@@ -161,8 +180,8 @@ public class TableMapping extends Mapping {
                 public UpdatableRecord map(AbstractEntity entity) {
                     final UpdatableRecord<?> record = (UpdatableRecord<?>) tbl.newRecord();
 
-                    for (int i = 0; i < properties.length; i++) {
-                        final Property property = properties[i];
+                    for (int i = 0; i < TableMapping.this.properties.length; i++) {
+                        final Property property = TableMapping.this.properties[i];
                         try {
                             final Object value = property.get(entity);
                             // Handle enum types.
@@ -172,7 +191,8 @@ public class TableMapping extends Mapping {
                                 record.setValue(property.jooqField, value);
                             }
                         } catch (Exception e) {
-                            throw new PersistException("Failed to set field [" + property.columnName + "] on an instance of class [" + entityClass.getCanonicalName() + "]", e);
+                            throw new PersistException("Failed to set field [" + property.columnName +
+                                "] on an instance of class [" + entityClass.getCanonicalName() + "]", e);
                         }
                     }
                     return record;
@@ -180,72 +200,20 @@ public class TableMapping extends Mapping {
 
                 @Override
                 public void merge(Record record, AbstractEntity intoEntity) {
-                    for (int i = 0; i < properties.length; i++) {
-                        final Property property = properties[i];
+                    for (int i = 0; i < TableMapping.this.properties.length; i++) {
+                        final Property property = TableMapping.this.properties[i];
                         try {
                             property.set(intoEntity, record.getValue(property.jooqField));
                         } catch (Exception e) {
-                            throw new PersistException("Failed to set field [" + property.columnName + "] on an instance of class [" + entityClass.getCanonicalName() + "]", e);
+                            throw new PersistException("Failed to set field [" + property.columnName +
+                                "] on an instance of class [" + entityClass.getCanonicalName() + "]", e);
                         }
                     }
                 }
             };
 
             this.fields = jooqFields;
-
             this.idField = field(String.class, AbstractEntity.ID);
-            this.versionField = field(Long.class, AbstractEntity.VERSION);
-            this.changedField = field(Date.class, AbstractEntity.CHANGED);
-
-
-            if (schemaJournalTable != null) {
-                this.journalTbl = jooqMap.get(journalTableName);
-
-                if (this.journalTbl != null) {
-                    this.journalRecordClass = journalTbl.getRecordType();
-
-                    Field<Long> jnlVersionField = null;
-                    Field<Date> jnlChangedField = null;
-
-                    // Map jOOQ fields to properties.
-                    for (Field<?> field : this.journalTbl.fields()) {
-                        final String columnName = Strings.nullToEmpty(field.getName()).trim().toLowerCase();
-                        final Property property = columnsMap.get(columnName);
-                        if (property == null) {
-                            throw new PersistException("jOOQ Table [" + journalTbl.getClass().getCanonicalName() + "] specified field [" + columnName + "] that does not correspond to any fields on Entity [" + objectClass.getCanonicalName() + "]. Run Schema Generation to synchronize jOOQ.");
-                        }
-                        property.jooqJournalField = field;
-
-                        if (columnName.equals(AbstractEntity.VERSION)) {
-                            jnlVersionField = (Field<Long>) field;
-                        } else if (columnName.equals(AbstractEntity.CHANGED)) {
-                            jnlChangedField = (Field<Date>) field;
-                        }
-                    }
-
-                    this.journalChangedField = jnlChangedField;
-                    this.journalVersionField = jnlVersionField;
-
-                    this.journalMapper = record -> {
-                        final UpdatableRecord journalRecord = (UpdatableRecord) journalTbl.newRecord();
-                        for (Property property : properties) {
-                            journalRecord.setValue(property.jooqJournalField, record.getValue(property.jooqField));
-                        }
-                        return journalRecord;
-                    };
-                } else {
-                    this.journalRecordClass = null;
-                    this.journalMapper = null;
-                    this.journalChangedField = null;
-                    this.journalVersionField = null;
-                }
-            } else {
-                this.journalTbl = null;
-                this.journalRecordClass = null;
-                this.journalMapper = null;
-                this.journalChangedField = null;
-                this.journalVersionField = null;
-            }
         }
 
         Indexes indexes = (Indexes) entityClass.getAnnotation(Indexes.class);
@@ -253,7 +221,8 @@ public class TableMapping extends Mapping {
             for (final io.clickhandler.sql.Index indexAnnotation : indexes.value()) {
                 final IndexColumn[] columns = indexAnnotation.columns();
                 if (columns.length == 0) {
-                    throw new PersistException("@Index on [" + entityClass.getCanonicalName() + "] does not specify any columns");
+                    throw new PersistException("@Index on [" + entityClass.getCanonicalName() +
+                        "] does not specify any columns");
                 }
 
                 String name = Strings.nullToEmpty(indexAnnotation.name()).trim();
@@ -270,15 +239,10 @@ public class TableMapping extends Mapping {
                         name = "ix_";
                     }
 
-                    name = name + getTableName(indexAnnotation.journal()) + "_" + Joiner.on("_").join(columnNames);
+                    name = name + getTableName() + "_" + Joiner.on("_").join(columnNames);
                 }
 
-                final SqlSchema.DbIndex dbIndex;
-                if (indexAnnotation.journal()) {
-                    dbIndex = schemaJournalTable != null ? schemaJournalTable.indexes.get(name) : null;
-                } else {
-                    dbIndex = schemaTable != null ? schemaTable.indexes.get(name) : null;
-                }
+                final SqlSchema.DbIndex dbIndex = schemaTable != null ? schemaTable.indexes.get(name) : null;
 
                 final IndexProperty[] indexProperties = new IndexProperty[columns.length];
                 for (int i = 0; i < columns.length; i++) {
@@ -306,7 +270,6 @@ public class TableMapping extends Mapping {
                 final Index index = new Index(
                         this,
                         name,
-                        indexAnnotation.journal(),
                         indexAnnotation.unique(),
                         indexAnnotation.clustered(),
                         columnNames,
@@ -314,13 +277,8 @@ public class TableMapping extends Mapping {
                         indexProperties
                 );
 
-                if (indexAnnotation.journal()) {
-                    this.journalIndexMap.put(index.name, index);
-                    this.journalIndexes.add(index);
-                } else {
-                    this.indexMap.put(index.name, index);
-                    this.indexes.add(index);
-                }
+                this.indexMap.put(index.name, index);
+                this.indexes.add(index);
 
                 for (IndexProperty indexProperty : indexProperties) {
                     indexProperty.index = index;
@@ -330,55 +288,15 @@ public class TableMapping extends Mapping {
         }
     }
 
-    public static String tableName(Class entityClass, String name, boolean journal) {
-        name = Strings.nullToEmpty(name).trim().toLowerCase();
-
-        // Implicitly create TABLE NAME using this convention (SomeSpecialEntity = some_special)
-        if (name.isEmpty()) {
-            String entityClassName = entityClass.getSimpleName();
-            if (entityClassName.endsWith(ENTITY_SUFFIX)) {
-                entityClassName = entityClassName.substring(0, entityClassName.length() - ENTITY_SUFFIX.length());
-            }
-            name = SqlUtils.sqlName(entityClassName);
-        }
-
-        if (journal) {
-            return name + JOURNAL_TABLE_SUFFIX;
-        }
-
-        return name;
-    }
-
     public static TableMapping create(final SqlSchema.DbTable schemaTable,
-                                      final SqlSchema.DbTable schemaJournalTable,
                                       final SqlPlatform dbPlatform,
                                       final Class entityClass,
                                       final Map<String, Table> jooqMap) {
-        return new TableMapping(schemaTable, schemaJournalTable, dbPlatform, entityClass, jooqMap);
-    }
-
-    public String getTableName(boolean journal) {
-        return journal ? journalTableName : tableName;
+        return new TableMapping(schemaTable, dbPlatform, entityClass, jooqMap);
     }
 
     public Field<String> ID() {
         return idField;
-    }
-
-    public Field<Long> VERSION() {
-        return versionField;
-    }
-
-    public Field<Long> JOURNAL_VERSION() {
-        return journalVersionField;
-    }
-
-    public Field<Date> JOURNAL_CHANGED() {
-        return journalChangedField;
-    }
-
-    public Field<Date> CHANGED() {
-        return changedField;
     }
 
     public boolean hasColumnName(String columnName) {
@@ -389,17 +307,12 @@ public class TableMapping extends Mapping {
         return tbl;
     }
 
-    public boolean isJournalRecord(Record record) {
-        return record.getClass() == journalRecordClass;
-    }
-
     @SuppressWarnings("unchecked")
     public <T> Field<T> field(Class<T> cls, String name) {
         final Property property = columnsMap.get(name);
         if (property == null) {
             return null;
         }
-
         return (Field<T>) property.jooqField;
     }
 
@@ -408,7 +321,6 @@ public class TableMapping extends Mapping {
         if (property == null) {
             return null;
         }
-
         return property.jooqField;
     }
 
@@ -417,19 +329,12 @@ public class TableMapping extends Mapping {
             throw new PersistException("Type [" + entityClass.getCanonicalName() + "] does not have a generated jOOQ table. Run jOOQ Generator to sync jOOQ with Entities!");
         }
 
-        if (tableAnnotation.journal() && journalTbl == null) {
-            throw new PersistException("Type [" + entityClass.getCanonicalName() + "] does not have a generated jOOQ table for the Journal. Run jOOQ Generator to sync jOOQ with Entities!");
-        }
-
         for (Property property : properties) {
             if (!property.isMapped()) {
                 throw new PersistException("Class [" + entityClass.getCanonicalName() + "] field [" + property.name + "] mapped to column [" + property.columnName + "] which does not exist. Run jOOQ Generator to sync jOOQ with Entities!");
             }
             if (property.jooqField == null) {
                 throw new PersistException("Class [" + entityClass.getCanonicalName() + "] field [" + property.name + "] mapped to column [" + property.columnName + "] does not map to a JOOQ Field. Run jOOQ Generator to sync jOOQ with Entities!");
-            }
-            if (isJournalingWorking() && property.jooqJournalField == null) {
-                throw new PersistException("Class [" + entityClass.getCanonicalName() + "] field [" + property.name + "] mapped to column [" + property.columnName + "] does not map to a JOOQ Journal Field. Run jOOQ Generator to sync jOOQ with Entities!");
             }
         }
     }
@@ -442,107 +347,267 @@ public class TableMapping extends Mapping {
         return columnNames;
     }
 
-    public FastClass getFastClass() {
-        return fastClass;
-    }
-
     public String getTableName() {
         return tableName;
-    }
-
-    public Property[] getProperties() {
-        return properties;
     }
 
     public DSLContext create(Configuration configuration) {
         return DSL.using(configuration);
     }
 
-    public SelectSelectStep selectAll(Configuration configuration) {
-        return create(configuration).select(fields);
-    }
-
-    void addChildRelationship(Relationship relationship) {
-        childrenMap.put(relationship.foreignKey, relationship);
-    }
-
-    void wireRelationships(Map<Class, TableMapping> mappings) {
-        for (Property property : properties) {
-            final Class parentType = property.parentType;
-            if (parentType == null || parentType == Object.class) {
-                continue;
-            }
-
-            final TableMapping mapping = mappings.get(parentType);
-
-            if (mapping == null) {
-                throw new PersistException(getEntityClass().getCanonicalName() + "." + property.getName() +
-                        " specified parentType=" + parentType.getCanonicalName() +
-                        " which was not found in the mappings map. Make sure it is in the correct package so that it can be properly located.");
-            }
-
-            parentMap.put(property, new Relationship(property, mapping));
-            mapping.addChildRelationship(new Relationship(property, mapping));
-        }
-    }
-
     public <R extends Record, E extends AbstractEntity> RecordMapper<R, E> getRecordMapper() {
         return (RecordMapper<R, E>) recordMapper;
-    }
-
-    public RecordMapper<Record, Record> getJournalMapper() {
-        return (RecordMapper<Record, Record>) journalMapper;
     }
 
     public <E extends AbstractEntity, R extends Record> EntityMapper<E, R> getEntityMapper() {
         return (EntityMapper<E, R>) entityMapper;
     }
 
-    public List<Property> getPrimaryKeyProperties(boolean journal) {
-        if (journal) {
-            return Lists.newArrayList(getProperty(AbstractEntity.ID), getProperty(AbstractEntity.VERSION));
-        }
+    public List<Property> getPrimaryKeyProperties() {
         return Lists.newArrayList(getProperty(AbstractEntity.ID));
-    }
-
-    public boolean isJournaling() {
-        return tableAnnotation.journal();
-    }
-
-    public boolean isJournalingWorking() {
-        return journalTbl != null;
     }
 
     public List<Index> getIndexes() {
         return Collections.unmodifiableList(indexes);
     }
 
-    public List<Index> getJournalIndexes() {
-        return Collections.unmodifiableList(journalIndexes);
-    }
-
     public Index getIndex(String name) {
         return indexMap.get(name);
     }
 
-    public Index getJournalIndex(String name) {
-        return journalIndexMap.get(name);
+    public Class<? extends AbstractEntity> getEntityClass() {
+        return entityClass;
     }
 
-    public static class Relationship {
-        final Property foreignKey;
-        final TableMapping mapping;
+    public FastClass getFastClass() {
+        return fastClass;
+    }
 
-        public Relationship(Property foreignKey, TableMapping mapping) {
-            this.foreignKey = foreignKey;
-            this.mapping = mapping;
+    public Property[] getProperties() {
+        return properties;
+    }
+
+    public Property getProperty(String columnName) {
+        return columnsMap.get(Strings.nullToEmpty(columnName).trim().toLowerCase());
+    }
+
+    public <T> T copy(T obj) {
+        T toObj;
+        try {
+            toObj = (T) fastClass.newInstance();
+        } catch (InvocationTargetException e) {
+            return null;
+        }
+
+        merge(obj, toObj);
+
+        return toObj;
+    }
+
+    public <T> void merge(T from, T to) {
+        for (Property property : getProperties()) {
+            try {
+                property.set(to, property.get(from));
+            } catch (Exception e) {
+                // Ignore.
+            }
         }
     }
 
+    protected String getterName(String fieldName, Class type) {
+        fieldName = Strings.nullToEmpty(fieldName).trim();
+        if (fieldName.isEmpty()) {
+            throw new PersistException("Invalid FieldName");
+        }
+        // Capitalize first letter.
+        fieldName = Character.toUpperCase(fieldName.charAt(0)) + fieldName.substring(1);
+
+        return type == boolean.class || type == Boolean.class
+            ? "is" + fieldName
+            : "get" + fieldName;
+    }
+
+    protected String setterName(String fieldName) {
+        fieldName = Strings.nullToEmpty(fieldName).trim();
+        if (fieldName.isEmpty()) {
+            throw new PersistException("Invalid FieldName");
+        }
+
+        return "set" + Character.toUpperCase(fieldName.charAt(0)) + fieldName.substring(1);
+    }
+
+    protected void collectMethods(Map<String, Method> map, Class cls) {
+        if (cls == null || cls == Object.class) {
+            return;
+        }
+        final Method[] methods = cls.getDeclaredMethods();
+        if (methods != null) {
+            for (Method method : methods) {
+                map.put(method.getName(), method);
+            }
+        }
+        collectMethods(map, cls.getSuperclass());
+    }
+
+    protected Property[] extractFields(Class objectClass, Property parent, String prefix) {
+        final List<Property> properties = new ArrayList<>();
+
+        final Class superClass = objectClass.getSuperclass();
+        if (superClass != null && superClass != Object.class) {
+            final Property[] parentProperties = extractFields(superClass, null, prefix);
+            if (parentProperties != null && parentProperties.length != 0) {
+                properties.addAll(Lists.newArrayList(parentProperties));
+            }
+        }
+
+        final java.lang.reflect.Field[] declaredFields = objectClass.getDeclaredFields();
+        if (declaredFields == null || declaredFields.length == 0) {
+            return properties.toArray(new Property[properties.size()]);
+        }
+
+        final String columnNamePrefix = Strings.nullToEmpty(prefix).trim();
+        final FastClass objectFastClass = FastClass.create(objectClass);
+
+        final Map<String, Method> methodMap = new HashMap<>();
+        collectMethods(methodMap, objectClass);
+
+        for (java.lang.reflect.Field field : declaredFields) {
+            if (Modifier.isStatic(field.getModifiers())) {
+                continue;
+            }
+
+            if (Modifier.isPublic(field.getModifiers())) {
+                throw new PersistException("Entity Class [" + objectClass.getCanonicalName() + "] field [" + field.getName() + "] cannot be 'public'.");
+            }
+
+            // Ignore no column.
+            if (field.getDeclaredAnnotation(NoColumn.class) != null) {
+                continue;
+            }
+
+            final Column columnAnnotation = field.getDeclaredAnnotation(Column.class);
+            // Ensure @Column annotation.
+            if (columnAnnotation == null) {
+                throw new PersistException("Entity Class [" + objectClass.getCanonicalName() + "] field [" + field.getName() + "] does not have a @Column annotation.");
+            }
+
+            final String getterName = getterName(field.getName(), field.getType());
+            final Method getter = methodMap.get(getterName);
+            if (getter == null) {
+                throw new PersistException("Entity Class [" + objectClass.getCanonicalName() + "] field [" + field.getName() + "] does not have a getter [" + getterName + "].");
+            }
+            if (!Modifier.isPublic(getter.getModifiers())) {
+                throw new PersistException("Entity Class [" + objectClass.getCanonicalName() + "] field [" + field.getName() + "] getter [" + getterName + "] must be public.");
+            }
+            if (Modifier.isStatic(getter.getModifiers())) {
+                throw new PersistException("Entity Class [" + objectClass.getCanonicalName() + "] field [" + field.getName() + "] getter [" + getterName + "] cannot be static.");
+            }
+            if (getter.getParameterCount() != 0) {
+                throw new PersistException("Entity Class [" + objectClass.getCanonicalName() + "] field [" + field.getName() + "] getter [" + getterName + "] cannot have any parameters.");
+            }
+            if (getter.getReturnType() != field.getType()) {
+                throw new PersistException("Entity Class [" + objectClass.getCanonicalName() + "] field [" + field.getName() + "] getter [" + getterName + "] have type mismatch [" + field.getType().getCanonicalName() + "] != [" + getter.getReturnType().getCanonicalName() + "].");
+            }
+
+            final String setterName = setterName(field.getName());
+            final Method setter = methodMap.get(setterName);
+            if (setter == null) {
+                throw new PersistException("Entity Class [" + objectClass.getCanonicalName() + "] field [" + field.getName() + "] does not have a setter [" + setterName + "]");
+            }
+            if (!Modifier.isPublic(setter.getModifiers())) {
+                throw new PersistException("Entity Class [" + objectClass.getCanonicalName() + "] field [" + field.getName() + "] getter [" + setterName + "] must be public.");
+            }
+            if (Modifier.isStatic(setter.getModifiers())) {
+                throw new PersistException("Entity Class [" + objectClass.getCanonicalName() + "] field [" + field.getName() + "] getter [" + setterName + "] cannot be static.");
+            }
+            if (setter.getParameterCount() != 1) {
+                throw new PersistException("Entity Class [" + objectClass.getCanonicalName() + "] field [" + field.getName() + "] setter [" + setterName + "] must have exactly 1 parameter.");
+            }
+            if (setter.getParameterTypes()[0] != field.getType()) {
+                throw new PersistException("Entity Class [" + objectClass.getCanonicalName() + "] field [" + field.getName() + "] setter [" + setterName + "] have type mismatch [" + field.getType().getCanonicalName() + "] != [" + setter.getParameterTypes()[0].getCanonicalName() + "].");
+            }
+            if (setter.getReturnType() != void.class) {
+                throw new PersistException("Entity Class [" + objectClass.getCanonicalName() + "] field [" + field.getName() + "] setter [" + setterName + "] cannot return anything.");
+            }
+
+            final Property property = new Property();
+            field.setAccessible(true);
+            property.reflectField = field;
+            property.name = field.getName();
+            property.type = field.getType();
+            property.nullable = columnAnnotation.nullable();
+            if (property.nullable && property.type.isPrimitive()) {
+                property.nullable = false;
+            }
+            property.getter = FastClass.create(getter.getDeclaringClass()).getMethod(getter);
+            property.setter = FastClass.create(setter.getDeclaringClass()).getMethod(setter);
+            property.dbType = columnAnnotation.dbType();
+            property.parentType = columnAnnotation.parentType();
+            property.autoGenerated = columnAnnotation.autoGenerated();
+            property.enumType = property.type.isEnum();
+            if (property.enumType) {
+                property.enumConstants = property.type.getEnumConstants();
+                property.enumConstantMap = new HashMap<>();
+                if (property.enumConstants != null) {
+                    for (Object value : property.enumConstants) {
+                        property.enumConstantMap.put(value.toString(), value);
+                    }
+                }
+            }
+            property.embedded = !SqlUtils.isNativeType(property.type) && !property.type.isEnum();
+            property.columnName = SqlUtils.columnName(columnNamePrefix, columnAnnotation, property.name, property.embedded);
+            property.prefix = columnNamePrefix;
+
+            if (!property.type.isPrimitive())
+                property.fastClass = FastClass.create(property.type);
+
+            property.parent = parent;
+
+            // Set Column Length.
+            property.columnLength = columnAnnotation.length();
+            if (property.columnLength == 0
+                && (property.type == String.class || property.enumType)) {
+                if (property.enumType) {
+                    int largest = 0;
+                    if (property.enumConstants != null) {
+                        for (Object obj : property.enumConstants) {
+                            int l = obj.toString().length();
+                            largest = largest < l ? l : largest;
+                        }
+                    }
+                    property.columnLength = largest + 10;
+                } else if (property.columnName.toLowerCase().endsWith("_id") || property.columnName.toLowerCase().equals("id")) {
+                    property.columnLength = COLUMN_LENGTH_ID;
+                } else {
+                    property.columnLength = COLUMN_LENGTH_STRING;
+                }
+            }
+
+            property.dbType = property.toDBType();
+
+            // Handle embedded types.
+            // Embedded types are essentially unwrapped and flattened out.
+            // This supports nested embedding.
+            if (property.embedded) {
+                final Property[] children = extractFields(property.type, property, property.columnName);
+                if (children == null || children.length == 0) {
+                    throw new PersistException("Class [" + objectClass.getCanonicalName() + "] specified an embedded field of type [" + property.type.getCanonicalName() + "] which has no fields specified.");
+                }
+                properties.addAll(Lists.newArrayList(children));
+            } else {
+                properties.add(property);
+            }
+        }
+
+        return properties.toArray(new Property[properties.size()]);
+    }
+
+    /**
+     *
+     */
     public static class Index {
-        public final Mapping mapping;
+        public final TableMapping mapping;
         public final String name;
-        public final boolean journal;
         public final boolean unique;
         public final boolean clustered;
         public final String[] columnNames;
@@ -551,7 +616,6 @@ public class TableMapping extends Mapping {
 
         public Index(TableMapping mapping,
                      String name,
-                     boolean journal,
                      boolean unique,
                      boolean clustered,
                      String[] columnNames,
@@ -559,7 +623,6 @@ public class TableMapping extends Mapping {
                      IndexProperty[] properties) {
             this.mapping = mapping;
             this.name = name;
-            this.journal = journal;
             this.unique = unique;
             this.clustered = clustered;
             this.columnNames = columnNames;
@@ -568,6 +631,9 @@ public class TableMapping extends Mapping {
         }
     }
 
+    /**
+     *
+     */
     public static class IndexProperty {
         public final Property property;
         public final boolean asc;
@@ -590,6 +656,220 @@ public class TableMapping extends Mapping {
 
         public Index getIndex() {
             return index;
+        }
+    }
+
+    /**
+     *
+     */
+    public class Property {
+        public boolean enumType;
+        public Class parentType;
+        public FastMethod getter;
+        public FastMethod setter;
+        protected java.lang.reflect.Field reflectField;
+        protected Property parent;
+        protected String prefix;
+        protected Class type;
+        protected String name;
+        protected String columnName;
+        protected FastClass fastClass;
+        protected boolean embedded;
+        protected boolean autoGenerated;
+        protected int dbType;
+        protected SqlSchema.DbColumn column;
+        protected Object defaultValue;
+        protected Field jooqField;
+        protected Object[] enumConstants;
+        protected Map<String, Object> enumConstantMap;
+        private int columnLength;
+        private boolean nullable;
+
+        public Property getParent() {
+            return parent;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public Class getType() {
+            return type;
+        }
+
+        public String getColumnName() {
+            return columnName;
+        }
+
+        public boolean isMapped() {
+            return column != null;
+        }
+
+        public boolean isAutoGenerated() {
+            return autoGenerated;
+        }
+
+        public boolean isEmbedded() {
+            return embedded;
+        }
+
+        public int getDbType() {
+            return dbType;
+        }
+
+        public SqlSchema.DbColumn getColumn() {
+            return column;
+        }
+
+        public Object getDefaultValue() {
+            return defaultValue;
+        }
+
+        public void setDefaultValue(Object defaultValue) {
+            this.defaultValue = defaultValue;
+        }
+
+        public Object get(Object obj) throws InvocationTargetException, IllegalAccessException {
+            Object value = getter.invoke(getParentInstance(obj), null);
+
+            if (value != null && value instanceof String && columnLength > 0) {
+                final String val = (String) value;
+                if (val.length() > columnLength) {
+                    return val.substring(0, columnLength - 1);
+                }
+            }
+
+            return value;
+        }
+
+        public void set(Object obj, Object value) throws InvocationTargetException, IllegalAccessException {
+            if (enumType && value != null && value instanceof String) {
+                final Object enumConstant = enumConstantMap.get(value);
+                setter.invoke(getParentInstance(obj), new Object[]{enumConstant});
+            } else {
+                setter.invoke(getParentInstance(obj), new Object[]{value});
+            }
+        }
+
+        public Object getParentInstance(Object root) throws InvocationTargetException, IllegalAccessException {
+            if (parent == null) {
+                return root;
+            }
+
+            return parent.getInstance(root);
+        }
+
+        public Object getOrCreate(Object parent) throws InvocationTargetException, IllegalAccessException {
+            Object current = reflectField.get(parent);
+            if (current == null) {
+                current = fastClass.newInstance();
+                reflectField.set(parent, current);
+            }
+            return current;
+        }
+
+        public Object getInstance(Object root) throws InvocationTargetException, IllegalAccessException {
+            if (parent == null) {
+                return getOrCreate(root);
+            }
+
+            final Object parentInstance = parent.getInstance(root);
+            return getOrCreate(parentInstance);
+        }
+
+        public int getColumnLength() {
+            return columnLength;
+        }
+
+        public boolean isNullable() {
+            return nullable;
+        }
+
+        public void setNullable(boolean nullable) {
+            this.nullable = nullable;
+        }
+
+        public DataType columnDataType() {
+            if (column == null) {
+                return null;
+            }
+
+            DataType dataType = dbPlatform.fromJdbcType(column.dataType);
+            if (dataType == null) {
+                return null;
+            }
+
+            dataType = dataType.nullable(column.nullable);
+            dataType = dataType.length(column.columnSize);
+
+            return dataType;
+        }
+
+        public DataType fieldDataType() {
+            DataType dataType = dbPlatform.fromJdbcType(dbType);
+            if (dataType == null) {
+                return null;
+            }
+
+            dataType = dataType.nullable(nullable);
+            dataType = dataType.length(columnLength);
+
+            return dataType;
+        }
+
+        public int toDBType() {
+            final int dbType = getDbType();
+            if (dbType != 0) {
+                return dbType;
+            }
+
+            final Class type = getType();
+
+            if (type == byte.class || type == Byte.class) {
+                return DBTypes.TINYINT;
+            }
+
+            if (type == boolean.class || type == Boolean.class) {
+                return DBTypes.BOOLEAN;
+            }
+
+            if (type == short.class || type == Short.class) {
+                return DBTypes.SMALLINT;
+            }
+
+            if (type == int.class || type == Integer.class) {
+                return DBTypes.INTEGER;
+            }
+
+            if (type == long.class || type == Long.class) {
+                return DBTypes.BIGINT;
+            }
+
+            if (type == float.class || type == Float.class) {
+                return DBTypes.FLOAT;
+            }
+
+            if (type == double.class || type == Double.class) {
+                return DBTypes.DOUBLE;
+            }
+
+            if (type == String.class) {
+                return DBTypes.VARCHAR;
+            }
+
+            if (type == byte[].class) {
+                return DBTypes.VARBINARY;
+            }
+
+            if (type == Date.class) {
+                return DBTypes.TIMESTAMP;
+            }
+
+            if (type.isEnum()) {
+                return DBTypes.VARCHAR;
+            }
+
+            return dbType;
         }
     }
 }

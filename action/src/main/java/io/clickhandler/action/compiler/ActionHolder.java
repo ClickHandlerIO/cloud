@@ -11,9 +11,7 @@ import javax.lang.model.type.TypeMirror;
  */
 public class ActionHolder {
     RemoteAction remoteAction;
-    QueueAction queueAction;
     InternalAction internalAction;
-    ActorAction actorAction;
     ActionConfig config;
     TypeElement type;
     TypeMirror actorTypeClass;
@@ -27,16 +25,8 @@ public class ActionHolder {
         return remoteAction != null;
     }
 
-    public boolean isQueue() {
-        return queueAction != null;
-    }
-
     public boolean isInternal() {
         return internalAction != null;
-    }
-
-    public boolean isActor() {
-        return actorAction != null;
     }
 
     public ClassName getProviderTypeName() {
@@ -53,10 +43,6 @@ public class ActionHolder {
             return ClassName.get(RemoteActionProvider.class);
         } else if (isInternal()) {
             return ClassName.get(InternalActionProvider.class);
-        } else if (isQueue()) {
-            return ClassName.get(QueueActionProvider.class);
-        } else if (isActor()) {
-            return ClassName.get(ActorActionProvider.class);
         } else {
             return ClassName.get(ActionProvider.class);
         }

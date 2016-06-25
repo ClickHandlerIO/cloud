@@ -32,9 +32,9 @@ public class SqlPlatform {
      * @param properties
      * @return
      */
-    public static String[] columnNames(List<Mapping.Property> properties) {
+    public static String[] columnNames(List<TableMapping.Property> properties) {
         final List<String> names = new ArrayList<>(properties.size());
-        for (Mapping.Property property : properties) {
+        for (TableMapping.Property property : properties) {
             names.add(property.getColumnName());
         }
         return names.toArray(new String[names.size()]);
@@ -118,22 +118,20 @@ public class SqlPlatform {
 
     /**
      * @param mapping
-     * @param journal
      * @return
      */
-    public String ddlDropTable(TableMapping mapping, boolean journal) {
-        return create().dropTable(mapping.getTableName(journal)).getSQL();
+    public String ddlDropTable(TableMapping mapping) {
+        return create().dropTable(mapping.getTableName()).getSQL();
     }
 
     /**
      * @param mapping
-     * @param journal
      * @return
      */
-    public String ddlCreateTable(TableMapping mapping, boolean journal) {
-        final CreateTableAsStep step = create().createTable(mapping.getTableName(journal));
+    public String ddlCreateTable(TableMapping mapping) {
+        final CreateTableAsStep step = create().createTable(mapping.getTableName());
         CreateTableColumnStep createColumnStep = null;
-        for (Mapping.Property property : mapping.getProperties()) {
+        for (TableMapping.Property property : mapping.getProperties()) {
             createColumnStep = step.column(property.getColumnName(), property.fieldDataType());
         }
         return createColumnStep.getSQL();
@@ -141,49 +139,45 @@ public class SqlPlatform {
 
     /**
      * @param mapping
-     * @param journal
      * @return
      */
-    public String ddlPrimaryKey(TableMapping mapping, boolean journal) {
+    public String ddlPrimaryKey(TableMapping mapping) {
         return create()
-            .alterTable(mapping.getTableName(journal))
-            .add(DSL.constraint("pk_" + mapping.getTableName(journal))
-                .primaryKey(columnNames(mapping.getPrimaryKeyProperties(journal)))).getSQL();
+            .alterTable(mapping.getTableName())
+            .add(DSL.constraint("pk_" + mapping.getTableName())
+                .primaryKey(columnNames(mapping.getPrimaryKeyProperties()))).getSQL();
     }
 
     /**
      * @param mapping
      * @param column
-     * @param journal
      * @return
      */
-    public String ddlDropColumn(TableMapping mapping, SqlSchema.DbColumn column, boolean journal) {
+    public String ddlDropColumn(TableMapping mapping, SqlSchema.DbColumn column) {
         return create()
-            .alterTable(mapping.getTableName(journal))
+            .alterTable(mapping.getTableName())
             .dropColumn(column.name).getSQL();
     }
 
     /**
      * @param mapping
      * @param property
-     * @param journal
      * @return
      */
-    public String ddlAddColumn(TableMapping mapping, Mapping.Property property, boolean journal) {
+    public String ddlAddColumn(TableMapping mapping, TableMapping.Property property) {
         return create()
-            .alterTable(mapping.getTableName(journal))
+            .alterTable(mapping.getTableName())
             .addColumn(property.getColumnName(), property.fieldDataType()).getSQL();
     }
 
     /**
      * @param mapping
      * @param property
-     * @param journal
      * @return
      */
-    public String ddlModifyColumn(TableMapping mapping, Mapping.Property property, boolean journal) {
+    public String ddlModifyColumn(TableMapping mapping, TableMapping.Property property) {
         return create()
-            .alterTable(mapping.getTableName(journal))
+            .alterTable(mapping.getTableName())
             .alterColumn(property.getColumnName()).set(property.fieldDataType()).getSQL();
     }
 
@@ -197,13 +191,13 @@ public class SqlPlatform {
 
         if (index.unique) {
             return create()
-                .alterTable(mapping.getTableName(index.journal))
+                .alterTable(mapping.getTableName())
                 .add(DSL.constraint(name).unique(index.columnNames)).getSQL();
         }
 
         return create()
             .createIndex(name)
-            .on(mapping.getTableName(index.journal), index.columnNames).getSQL();
+            .on(mapping.getTableName(), index.columnNames).getSQL();
     }
 
     /**

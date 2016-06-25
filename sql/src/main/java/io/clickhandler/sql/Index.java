@@ -19,7 +19,5 @@ public @interface Index {
 
     boolean clustered() default false;
 
-    boolean journal() default false;
-
     String type() default "";
 }

@@ -25,12 +25,11 @@ public class MySqlPlatform extends SqlPlatform {
 
     /**
      * @param mapping
-     * @param journal
      * @return
      */
     @Override
-    public String ddlCreateTable(TableMapping mapping, boolean journal) {
-        String sql = super.ddlCreateTable(mapping, journal);
+    public String ddlCreateTable(TableMapping mapping) {
+        String sql = super.ddlCreateTable(mapping);
 
         sql = sql.trim();
 

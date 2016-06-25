@@ -2,6 +2,7 @@ package io.clickhandler.sql;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.util.concurrent.AbstractIdleService;
@@ -30,10 +31,12 @@ import java.lang.reflect.InvocationTargetException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.util.*;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.*;
 
 /**
  * @author Clay Molocznik
@@ -58,7 +61,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     protected final Set<Class<?>> entityClasses = new HashSet<>();
     protected final Vertx vertx;
     private final ThreadLocal<SqlSession> sessionLocal = new ThreadLocal<>();
-    private final Map<Class, Mapping> mappings = new HashMap<>();
+    private final Map<Class, TableMapping> mappings = new HashMap<>();
     private final Map<String, TableMapping> tableMappingsByName = Maps.newHashMap();
     private final Map<Class, TableMapping> tableMappings = Maps.newHashMap();
     private final Map<Class, TableMapping> tableMappingsByEntity = Maps.newHashMap();
@@ -198,7 +201,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         configuration.set(settings);
         configuration.set(dialect);
 
-        configuration.set(PrettyPrinter::new, DeleteOrUpdateWithoutWhereListener::new);
+        configuration.set(PrettyPrinter::new);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////
         // SqlDatabase Vendor Specific Configuration
@@ -308,13 +311,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     // Property Accessors
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    /**
-     * @return
-     */
-    public List<Mapping> getMappings() {
-        return Lists.newArrayList(mappings.values());
-    }
-
     public List<TableMapping> getTableMappings() {
         return Collections.unmodifiableList(tableMappingList);
     }
@@ -347,61 +343,65 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
 
     @Override
     protected void startUp() throws Exception {
-        writeExecutor = Executors.newFixedThreadPool(config.getMaxPoolSize());
-        readExecutor = Executors.newFixedThreadPool(config.getMaxReadPoolSize());
+        try {
+            writeExecutor = Executors.newFixedThreadPool(config.getMaxPoolSize());
+            readExecutor = Executors.newFixedThreadPool(config.getMaxReadPoolSize());
 
-        ////////////////////////////////////////////////////////////////////////////////////////////////////
-        // H2 TCP Server to allow remote connections
-        ////////////////////////////////////////////////////////////////////////////////////////////////////
+            ////////////////////////////////////////////////////////////////////////////////////////////////////
+            // H2 TCP Server to allow remote connections
+            ////////////////////////////////////////////////////////////////////////////////////////////////////
 //        if (configuration.dialect() == SQLDialect.H2 && AppConfig.get().getDb().getH2Port() > 0) {
 //            h2Server = new H2Server(AppConfig.getH2Port());
 //            h2Server.startAsync().awaitRunning();
 //        }
 
-        try {
-            dataSource = buildWriteDataSource();
-        } catch (Throwable e) {
-            LOG.error("Could not create a Hikari connection pool.", e);
-            throw new PersistException(e);
-        }
+            try {
+                dataSource = buildWriteDataSource();
+            } catch (Throwable e) {
+                LOG.error("Could not create a Hikari connection pool.", e);
+                throw new PersistException(e);
+            }
 
-        try {
-            readDataSource = buildReadDataSource();
-        } catch (Throwable e) {
-            LOG.error("Could not create a Hikari read connection pool.", e);
-            throw new PersistException(e);
-        }
+            try {
+                readDataSource = buildReadDataSource();
+            } catch (Throwable e) {
+                LOG.error("Could not create a Hikari read connection pool.", e);
+                throw new PersistException(e);
+            }
 
-        // Set Connection Provider.
-        configuration.set(new DataSourceConnectionProvider(dataSource));
+            // Set Connection Provider.
+            configuration.set(new DataSourceConnectionProvider(dataSource));
 
-        // Create Read Configuration.
-        readConfiguration = configuration.derive(new DataSourceConnectionProvider(readDataSource));
-
-        // Detect changes.
-        List<SchemaInspector.Change> changes = buildEvolution();
-
-        // Are there schema changes that need to be applied?
-        if (changes == null || !changes.isEmpty()) {
-            applyEvolution(changes);
-
-            changes = buildEvolution();
+            // Create Read Configuration.
+            readConfiguration = configuration.derive(new DataSourceConnectionProvider(readDataSource));
 
             // Detect changes.
-            if (changes != null && !changes.isEmpty()) {
-                throw new PersistException("Schema Evolution was applied incompletely.");
+            List<SchemaInspector.Change> changes = buildEvolution();
+
+            // Are there schema changes that need to be applied?
+            if (changes == null || !changes.isEmpty()) {
+                applyEvolution(changes);
+
+                changes = buildEvolution();
+
+                // Detect changes.
+                if (changes != null && !changes.isEmpty()) {
+                    throw new PersistException("Schema Evolution was applied incompletely.");
+                }
             }
-        }
 
-        if (config.isGenerateSchema()) {
-            return;
-        }
+            if (config.isGenerateSchema()) {
+                return;
+            }
 
-        // Finish initializing Table Mappings and ensure Validity.
-        // Wire Relationships.
-        tableMappingList.forEach(mapping -> mapping.wireRelationships(tableMappings));
-        // Validate Table Mapping.
-        tableMappingList.forEach(TableMapping::checkValidity);
+            // Finish initializing Table Mappings and ensure Validity.
+            // Validate Table Mapping.
+            tableMappingList.forEach(TableMapping::checkValidity);
+        } catch (Throwable e) {
+            LOG.error("Failed to start", e);
+            Try.run(() -> stopAsync());
+            Throwables.propagate(e);
+        }
     }
 
 
@@ -450,8 +450,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 continue;
             }
             final TableMapping mapping = TableMapping.create(
-                sqlSchema.getTable(TableMapping.tableName(cls, tableAnnotation.name(), false)),
-                sqlSchema.getTable(TableMapping.tableName(cls, tableAnnotation.name(), true)),
+                sqlSchema.getTable(SqlUtils.tableName(cls, tableAnnotation.name())),
                 dbPlatform,
                 cls,
                 jooqMap
@@ -567,11 +566,11 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      */
     private void applyEvolution(final List<SchemaInspector.Change> changes) {
         final EvolutionEntity evolution = new EvolutionEntity();
+        evolution.setId(UUID.randomUUID().toString().replace("-", ""));
         final List<EvolutionChangeEntity> changeEntities = new ArrayList<>();
 
         try {
             executeWrite(session -> {
-                evolution.setC(new Date());
                 evolution.setStarted(new Date());
 
                 boolean failed = false;
@@ -585,12 +584,13 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                             continue;
                         }
                         final EvolutionChangeEntity changeEntity = new EvolutionChangeEntity();
+                        changeEntity.setId(UUID.randomUUID().toString().replace("-", ""));
                         changeEntities.add(changeEntity);
                         changeEntity.setStarted(new Date());
                         changeEntity.setType(change.type());
                         changeEntity.setSql(sqlPart);
                         try {
-                            changeEntity.setAffected((long) session.sqlUpdate(sqlPart));
+                            changeEntity.setAffected(session.create().execute(sqlPart));
                             changeEntity.setSuccess(true);
                         } catch (Exception e) {
                             failed = true;
@@ -606,7 +606,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 evolution.setEnd(new Date());
 
                 if (failed) {
-                    throw new PersistException("Failed to update schema.");
+                    throw new PersistException("Failed to create schema.");
                 }
 
                 evolution.setSuccess(true);
@@ -691,44 +691,92 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         return read(sql -> sql.getEntities(entityClass, ids));
     }
 
-    public <T extends AbstractEntity> Observable<SqlResult<Integer>> insert(T entity) {
-        return write(sql -> sql.insert(entity));
+    public <T extends AbstractEntity> Observable<List<T>> select(final Class<T> cls, Condition condition, int limit) {
+        return read(sql -> sql.select(cls, condition, limit));
     }
 
-    public <T extends AbstractEntity> Observable<SqlResult<int[]>> insert(List<T> entities) {
-        return write(sql -> sql.insert(entities));
+    public <T extends AbstractEntity> Observable<Map<String, T>> selectMap(final Class<T> cls, Condition condition, int limit) {
+        return read(sql -> sql.selectMap(cls, condition, limit));
     }
 
-    public <T extends AbstractEntity> Observable<SqlResult<Integer>> update(T entity) {
-        return write(sql -> sql.update(entity));
-    }
-
-    public <T extends AbstractEntity> Observable<SqlResult<int[]>> update(List<T> entities) {
-        return write(sql -> sql.update(entities));
-    }
-
-    public <T> Observable<List<T>> select(final Class<T> cls, Condition condition) {
-        return read(sql -> sql.select(cls, condition));
-    }
-
+    /**
+     * @param cls
+     * @param condition
+     * @param <T>
+     * @return
+     */
     public <T> Observable<T> selectOne(final Class<T> cls, Condition condition) {
         return read(sql -> sql.selectOne(cls, condition));
     }
 
-    public <E extends AbstractEntity, R extends Record> Observable<Map<String, E>> getMap(Class<E> entityClass,
-                                                                                          Collection<String> ids) {
+    /**
+     * @param entityClass
+     * @param ids
+     * @param <E>
+     * @param <R>
+     * @return
+     */
+    public <E extends AbstractEntity> Observable<Map<String, E>> getMap(Class<E> entityClass,
+                                                                        Collection<String> ids) {
         return read(sql -> sql.getMap(entityClass, ids));
     }
 
-    public <E extends AbstractEntity, R extends Record> Observable<Map<String, E>> getMap(Class<E> entityClass,
-                                                                                          Map<String, E> toMap,
-                                                                                          Collection<String> ids) {
+    /**
+     * @param entityClass
+     * @param toMap
+     * @param ids
+     * @param <E>
+     * @param <R>
+     * @return
+     */
+    public <E extends AbstractEntity> Observable<Map<String, E>> getMap(Class<E> entityClass,
+                                                                        Map<String, E> toMap,
+                                                                        Collection<String> ids) {
         return read(sql -> sql.getMap(entityClass, toMap, ids));
     }
 
-    public <E extends AbstractEntity, R extends Record> Observable<Map<String, E>> selectMap(Class<E> entityClass,
-                                                                                             Condition condition) {
-        return read(sql -> sql.selectMap(entityClass, condition));
+    public <T extends AbstractEntity> Observable<SqlResult<int[]>> batch(Function<SqlBatch, SqlBatch> batch) {
+        return write(sql -> batch.apply(sql.batch()).execute());
+    }
+
+    public <T extends AbstractEntity> Observable<SqlResult<int[]>> batch(Function<SqlBatch, SqlBatch> batch, Logger logger) {
+        return write(sql -> batch.apply(sql.batch()).execute(logger));
+    }
+
+    /**
+     * @param entity
+     * @param <T>
+     * @return
+     */
+    public <T extends AbstractEntity> Observable<SqlResult<Integer>> insert(T entity) {
+        return write(sql -> sql.insert(entity));
+    }
+
+    /**
+     * @param entities
+     * @param <T>
+     * @return
+     */
+    public <T extends AbstractEntity> Observable<SqlResult<int[]>> insert(List<T> entities) {
+        return write(sql -> sql.insert(entities));
+    }
+
+    /**
+     * @param entity
+     * @param <T>
+     * @return
+     */
+    public <T extends AbstractEntity> Observable<SqlResult<Integer>> update(T entity) {
+        return write(sql -> sql.update(entity));
+    }
+
+    /**
+     * @param entities
+     * @param <T>
+     * @return
+     */
+    public <T extends AbstractEntity> Observable<SqlResult<int[]>> update(List<T> entities) {
+        return write(sql -> sql.update(entities));
     }
 
     public <T> Observable<SqlResult<T>> write(SqlCallable<T> task) {
@@ -945,7 +993,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                         r.set(result);
 
                         // Rollback if ActionResponse isFailure.
-                        if (!result.isSuccess()) {
+                        if (!result.isSuccess() || result.getReason() != null) {
                             throw new RollbackException();
                         }
 
@@ -960,9 +1008,18 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 }
             }
         } catch (RollbackException e) {
-            return r.get();
+            if (r.get().getReason() != null) {
+                Throwables.propagate(r.get().getReason());
+            } else {
+                return r.get();
+            }
         } catch (Throwable e) {
             LOG.info("write() threw an exception", e);
+            Throwables.propagate(e);
+        }
+
+        if (r.get().getReason() != null) {
+            Throwables.propagate(r.get().getReason());
         }
 
         return r.get();
@@ -977,26 +1034,8 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @param cls
      * @return
      */
-    Mapping findMapping(Class cls) {
-        Mapping mapping = mappings.get(cls);
-
-        if (mapping == null) {
-            synchronized (SqlDatabase.class) {
-                mapping = mappings.get(cls);
-
-                if (mapping == null) {
-                    try {
-                        mapping = new Mapping(cls, dbPlatform);
-                        mappings.put(cls, mapping);
-                    } catch (Throwable e) {
-                        LOG.error("Failed to create Mapping for [" + cls.getCanonicalName() + "]", e);
-                        return null;
-                    }
-                }
-            }
-        }
-
-        return mapping;
+    TableMapping findMapping(Class cls) {
+        return mappings.get(cls);
     }
 
     public TableMapping getMapping(Class cls) {
@@ -1072,14 +1111,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      */
     <R extends Record, E extends AbstractEntity> RecordMapper<R, E> recordMapper(TableMapping mapping) {
         return (RecordMapper<R, E>) mapping.getRecordMapper();
-    }
-
-    /**
-     * @param mapping
-     * @return
-     */
-    RecordMapper<Record, Record> journalMapper(TableMapping mapping) {
-        return mapping.getJournalMapper();
     }
 
     /**
@@ -1264,18 +1295,27 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         }
     }
 
-    public class DeleteOrUpdateWithoutWhereListener extends DefaultExecuteListener {
-
-        @Override
-        public void renderEnd(ExecuteContext ctx) {
-            if (ctx.sql().matches("^(?i:(UPDATE|DELETE)(?!.* WHERE ).*)$")) {
-                throw new DeleteOrUpdateWithoutWhereException();
-            }
-        }
-    }
-
-    public class DeleteOrUpdateWithoutWhereException extends RuntimeException {
-    }
+//    public class DeleteOrUpdateWithoutWhereListener extends DefaultExecuteListener {
+//
+//        @Override
+//        public void renderEnd(ExecuteContext ctx) {
+//            try {
+//                if (ctx.batchQueries() != null) {
+//                    for (Query query : ctx.batchQueries()) {
+//                        if (query.getSQL().matches("^(?i:(UPDATE|DELETE)(?!.* WHERE ).*)$")) {
+//                            throw new DeleteOrUpdateWithoutWhereException();
+//                        }
+//                    }
+//                }
+//            } catch (Throwable e) {
+//                LOG.error("DeleteOrUpdateWithoutWhereListener Error", e);
+//                Throwables.propagate(e);
+//            }
+//        }
+//    }
+//
+//    public class DeleteOrUpdateWithoutWhereException extends RuntimeException {
+//    }
 
     /**
      *

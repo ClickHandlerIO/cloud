@@ -50,6 +50,29 @@ public class SqlResult<T> {
         return result;
     }
 
+    public static SqlResult<Integer> create(int result) {
+        if (result != 1) {
+            return rollback(result);
+        } else {
+            return success(result);
+        }
+    }
+
+    public static SqlResult<int[]> create(int[] results) {
+        if (results == null || results.length == 0)
+            return rollback(results);
+
+        for (int i = 0; i < results.length; i++) {
+            final int result = results[i];
+
+            if (result != 1) {
+                return rollback(results);
+            }
+        }
+
+        return success(results);
+    }
+
     public Throwable getReason() {
         return reason;
     }

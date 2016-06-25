@@ -6,7 +6,7 @@ import java.util.Date;
 /**
  *
  */
-@Table(journal = false)
+@Table
 public class EvolutionEntity extends AbstractEntity {
     @Column
     private boolean success;
