@@ -2,10 +2,7 @@ package io.clickhandler.action.compiler;
 
 import com.google.auto.service.AutoService;
 import com.squareup.javapoet.*;
-import io.clickhandler.action.Action;
-import io.clickhandler.action.ActionLocator;
-import io.clickhandler.action.InternalAction;
-import io.clickhandler.action.RemoteAction;
+import io.clickhandler.action.*;
 
 import javax.annotation.processing.*;
 import javax.inject.Inject;
@@ -19,10 +16,7 @@ import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
 import javax.tools.FileObject;
 import javax.tools.StandardLocation;
-import java.util.HashSet;
-import java.util.LinkedHashSet;
-import java.util.Set;
-import java.util.TreeMap;
+import java.util.*;
 
 /**
  * Action annotation processor.
@@ -35,6 +29,7 @@ public class ActionProcessor extends AbstractProcessor {
     public static final String LOCATOR_ROOT = "_LocatorRoot";
     private final TreeMap<String, ActionHolder> actionMap = new TreeMap<>();
     private final Pkg rootPackage = new Pkg("Action", "");
+    private final HashMap<String, ActionHolder> remoteActionMap = new HashMap<>();
 
     private Types typeUtils;
     private Elements elementUtils;
@@ -114,6 +109,11 @@ public class ActionProcessor extends AbstractProcessor {
 
                 if (holder.remoteAction == null) {
                     holder.remoteAction = remoteAction;
+//                    if (remoteActionMap.containsKey(remoteAction.path())) {
+//                        final ActionHolder actionProvider = remoteActionMap.get(remoteAction.path());
+//                        messager.printMessage(Diagnostic.Kind.ERROR, "Duplicate RemoteAction Entry for key [" + remoteAction.path() + "]. " + actionProvider.type.getQualifiedName() + " and " + holder.type.getQualifiedName());
+//                    }
+//                    remoteActionMap.put(remoteAction.path(), holder);
                 }
                 if (holder.internalAction == null) {
                     holder.internalAction = internalAction;

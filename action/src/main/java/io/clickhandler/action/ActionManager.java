@@ -52,6 +52,12 @@ public class ActionManager extends AbstractVerticle {
                 return;
             }
             if (value instanceof RemoteActionProvider) {
+                if (key instanceof String) {
+                    if (remoteActionMap.containsKey(key)) {
+                        final RemoteActionProvider actionProvider = remoteActionMap.get(key);
+                        throw new RuntimeException("Duplicate RemoteAction Entry for key [" + key + "]. " + value.getActionClass().getCanonicalName() + " and " + actionProvider.getActionClass().getCanonicalName());
+                    }
+                }
                 remoteActionMap.put(key, (RemoteActionProvider<?, ?, ?>) value);
             } else if (value instanceof InternalActionProvider) {
                 internalActionMap.put(key, (InternalActionProvider<?, ?, ?>) value);

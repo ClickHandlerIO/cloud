@@ -31,12 +31,13 @@ import java.lang.reflect.InvocationTargetException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.util.*;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * @author Clay Molocznik
@@ -685,6 +686,13 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         return read(sql -> sql.getEntities(entityClass, ids));
     }
 
+    public <T extends AbstractEntity> Observable<List<T>> get(Class<T> entityClass, Stream<String> ids) {
+        if (ids == null)
+            return Observable.just(Collections.emptyList());
+
+        return get(entityClass, ids.collect(Collectors.toList()));
+    }
+
     public <T extends AbstractEntity> Observable<List<T>> get(Class<T> entityClass, Collection<String> ids) {
         if (ids == null || ids.isEmpty())
             return Observable.just(Collections.emptyList());
@@ -713,12 +721,22 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @param entityClass
      * @param ids
      * @param <E>
-     * @param <R>
      * @return
      */
     public <E extends AbstractEntity> Observable<Map<String, E>> getMap(Class<E> entityClass,
                                                                         Collection<String> ids) {
         return read(sql -> sql.getMap(entityClass, ids));
+    }
+
+    /**
+     * @param entityClass
+     * @param ids
+     * @param <E>
+     * @return
+     */
+    public <E extends AbstractEntity> Observable<Map<String, E>> getMap(Class<E> entityClass,
+                                                                        Stream<String> ids) {
+        return read(sql -> sql.getMap(entityClass, ids.collect(Collectors.toList())));
     }
 
     /**

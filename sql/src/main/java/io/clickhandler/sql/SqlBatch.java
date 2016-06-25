@@ -51,6 +51,14 @@ public class SqlBatch {
         return this;
     }
 
+    public SqlBatch update(Update query) {
+        if (query == null)
+            return this;
+
+        queryList.add(query);
+        return this;
+    }
+
     public <E extends AbstractEntity> SqlBatch update(E entity) {
         if (entity == null)
             return this;

@@ -476,10 +476,6 @@ public class TableMapping {
                 continue;
             }
 
-            if (Modifier.isPublic(field.getModifiers())) {
-                throw new PersistException("Entity Class [" + objectClass.getCanonicalName() + "] field [" + field.getName() + "] cannot be 'public'.");
-            }
-
             // Ignore no column.
             if (field.getDeclaredAnnotation(NoColumn.class) != null) {
                 continue;
