@@ -16,9 +16,10 @@ public class SqlConfig {
     private int maxPoolSize = 2;
     private int maxReadPoolSize = 4;
     private boolean cachePrepStmts = true;
-    private int prepStmtCacheSize = 250;
+    private int prepStmtCacheSize = 500;
     private int prepStmtCacheSqlLimit = 2048;
     private boolean useServerPrepStmts = true;
+    private int defaultQueryTimeoutInSeconds = 4;
     private String storageEngine = "InnoDB";
 
     private boolean dev;
@@ -144,6 +145,14 @@ public class SqlConfig {
 
     public void setUseServerPrepStmts(boolean useServerPrepStmts) {
         this.useServerPrepStmts = useServerPrepStmts;
+    }
+
+    public int getDefaultQueryTimeoutInSeconds() {
+        return defaultQueryTimeoutInSeconds;
+    }
+
+    public void setDefaultQueryTimeoutInSeconds(int defaultQueryTimeoutInSeconds) {
+        this.defaultQueryTimeoutInSeconds = defaultQueryTimeoutInSeconds;
     }
 
     public String getStorageEngine() {

@@ -534,6 +534,17 @@ public class SqlSession {
     }
 
     /**
+     *
+     * @param cls
+     * @param condition
+     * @param <T>
+     * @return
+     */
+    public <T> List<T> select(final Class<T> cls, Condition condition) {
+        return select(cls, condition, 1000);
+    }
+
+    /**
      * @param cls
      * @param condition
      * @param limit
@@ -549,6 +560,47 @@ public class SqlSession {
     }
 
     /**
+     *
+     * @param cls
+     * @param conditions
+     * @param <T>
+     * @return
+     */
+    public <T> List<T> select(final Class<T> cls, Collection<? extends Condition> conditions) {
+        return select(cls, conditions, 1000);
+    }
+
+    /**
+     * @param cls
+     * @param condition
+     * @param limit
+     * @param <T>
+     * @return
+     */
+    public <T> List<T> select(final Class<T> cls, Collection<? extends Condition> conditions, int limit) {
+        final TableMapping mapping = db.getMapping(cls);
+        if (mapping == null) {
+            throw new RuntimeException("No mapping for class [" + cls.getCanonicalName() + "]");
+        }
+        return create().selectFrom(mapping.tbl).where(conditions).limit(limit).fetchInto(cls);
+    }
+
+    /**
+     * @param cls
+     * @param condition
+     * @param limit
+     * @param <T>
+     * @return
+     */
+    public <T> List<T> select(final Class<T> cls, Collection<? extends Condition> conditions, int limit, int timeoutInSeconds) {
+        final TableMapping mapping = db.getMapping(cls);
+        if (mapping == null) {
+            throw new RuntimeException("No mapping for class [" + cls.getCanonicalName() + "]");
+        }
+        return create().selectFrom(mapping.tbl).where(conditions).limit(limit).queryTimeout(timeoutInSeconds).fetchInto(cls);
+    }
+
+    /**
      * @param cls
      * @param condition
      * @param <T>
@@ -560,6 +612,21 @@ public class SqlSession {
             throw new RuntimeException("No mapping for class [" + cls.getCanonicalName() + "]");
         }
         return (T) create().selectFrom(mapping.tbl).where(condition).limit(1).fetchOneInto(cls);
+    }
+
+    /**
+     *
+     * @param cls
+     * @param conditions
+     * @param <T>
+     * @return
+     */
+    public <T> T selectOne(final Class<T> cls, Collection<? extends Condition> conditions) {
+        final TableMapping mapping = db.getMapping(cls);
+        if (mapping == null) {
+            throw new RuntimeException("No mapping for class [" + cls.getCanonicalName() + "]");
+        }
+        return (T) create().selectFrom(mapping.tbl).where(conditions).limit(1).fetchOneInto(cls);
     }
 
     /**

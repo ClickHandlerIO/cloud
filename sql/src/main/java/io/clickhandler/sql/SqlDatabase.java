@@ -25,7 +25,6 @@ import org.reflections.Reflections;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import rx.Observable;
-import rx.Scheduler;
 
 import java.lang.reflect.InvocationTargetException;
 import java.sql.Connection;
@@ -57,8 +56,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
 
     protected final SqlConfig config;
     protected final String name;
-    protected final HikariConfig hikariConfig;
-    protected final HikariConfig hikariReadConfig;
     protected final Set<Class<?>> entityClasses = new HashSet<>();
     protected final Vertx vertx;
     private final ThreadLocal<SqlSession> sessionLocal = new ThreadLocal<>();
@@ -72,6 +69,8 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     private final Map<String, Table> jooqMap = Maps.newHashMap();
     private final Reflections[] entityReflections;
     private final Reflections[] jooqReflections;
+    protected HikariConfig hikariConfig;
+    protected HikariConfig hikariReadConfig;
     protected Configuration configuration;
     protected Configuration readConfiguration;
     protected HikariDataSource dataSource;
@@ -82,7 +81,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     protected H2Server h2Server;
     protected ExecutorService writeExecutor;
     protected ExecutorService readExecutor;
-    protected Scheduler observableScheduler;
 
     public SqlDatabase(
         Vertx vertx,
@@ -96,8 +94,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         this.name = Strings.nullToEmpty(config.getName()).trim();
         this.entityPackageNames = entityPackageNames;
         this.jooqPackageNames = jooqPackageNames;
-
-        observableScheduler = io.vertx.rxjava.core.RxHelper.scheduler(vertx);
 
         final List<Reflections> entityReflections = new ArrayList<>();
         final List<Reflections> jooqReflections = new ArrayList<>();
@@ -128,189 +124,54 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         this.entityReflections = entityReflections.toArray(new Reflections[entityReflections.size()]);
         this.jooqReflections = jooqReflections.toArray(new Reflections[jooqReflections.size()]);
 
-        final String jdbcUrl = Strings.nullToEmpty((config.getUrl())).trim();
-        final String jdbcUser = Strings.nullToEmpty((config.getUser()));
-        final String jdbcPassword = Strings.nullToEmpty((config.getPassword()));
 
-        final String jdbcReadUrl = Strings.nullToEmpty((config.getReadUrl()));
-        final String jdbcReadUser = Strings.nullToEmpty((config.getReadUser()));
-        final String jdbcReadPassword = Strings.nullToEmpty((config.getReadPassword()));
-        final SQLDialect dialect = JDBCUtils.dialect(jdbcUrl);
-
-        // Configure connection pool.
-        hikariConfig = new HikariConfig();
-        hikariReadConfig = new HikariConfig();
-
-        // Always set auto commit to off.
-        hikariConfig.setAutoCommit(false);
-        hikariConfig.setRegisterMbeans(true);
-
-        hikariReadConfig.setReadOnly(true);
-        hikariReadConfig.setAutoCommit(false);
-        hikariReadConfig.setRegisterMbeans(true);
-
-        // Set the default maximum pool size.
-        if (config.isDev()) {
-            hikariConfig.setMaximumPoolSize(DEV_POOL_SIZE);
-            hikariReadConfig.setMaximumPoolSize(DEV_POOL_SIZE);
-        } else if (config.isTest()) {
-            hikariConfig.setMaximumPoolSize(TEST_POOL_SIZE);
-            hikariReadConfig.setMaximumPoolSize(TEST_POOL_SIZE);
-        } else {
-            hikariConfig.setMaximumPoolSize(PROD_POOL_SIZE);
-            hikariReadConfig.setMaximumPoolSize(PROD_READ_POOL_SIZE);
-        }
-
-        // Sanitize Max Pool size.
-        if (config.getMaxPoolSize() > 0 && config.getMaxPoolSize() <= SANE_MAX) {
-            hikariConfig.setMaximumPoolSize(config.getMaxPoolSize());
-        } else {
-            LOG.warn("An Invalid MaxPoolSize value was found. Found '" + config.getMaxPoolSize() + "' but set to a more reasonable '" + SANE_MAX + "'");
-            hikariConfig.setMaximumPoolSize(SANE_MAX);
-        }
-        if (config.getMaxReadPoolSize() > 0 && config.getMaxReadPoolSize() < SANE_MAX) {
-            hikariReadConfig.setMaximumPoolSize(config.getMaxReadPoolSize());
-        } else {
-            LOG.warn("An Invalid MaxReadPoolSize value was found. Found '" + config.getMaxPoolSize() + "' but set to a more reasonable '" + SANE_MAX + "'");
-            hikariReadConfig.setMaximumPoolSize(SANE_MAX);
-        }
-
-        // Always use READ_COMMITTED.
-        // Persist depends on this isolation level.
-        hikariConfig.setTransactionIsolation("TRANSACTION_READ_COMMITTED");
-        hikariReadConfig.setTransactionIsolation("TRANSACTION_READ_COMMITTED");
-        // Set Connection Test Query.
-        // This is valid SQL and is supported by any "ACTUAL" SQL database engine.
-        hikariConfig.setConnectionTestQuery("SELECT 1");
-        hikariReadConfig.setConnectionTestQuery("SELECT 1");
-
-        // Configure jOOQ settings.
-        settings = new Settings();
-        settings.setRenderSchema(false);
-        settings.setExecuteWithOptimisticLocking(false);
-        settings.setRenderNameStyle(RenderNameStyle.QUOTED);
-        settings.setRenderKeywordStyle(RenderKeywordStyle.UPPER);
-        settings.setReflectionCaching(true);
-        settings.setParamType(ParamType.INDEXED);
-        settings.setAttachRecords(true);
-        settings.setBackslashEscaping(BackslashEscaping.DEFAULT);
-        settings.setStatementType(StatementType.PREPARED_STATEMENT);
-
-        // Init jOOQ Configuration.
-        configuration = new DefaultConfiguration();
-        configuration.set(new RecordMapperProviderImpl());
-        configuration.set(settings);
-        configuration.set(dialect);
-
-        configuration.set(PrettyPrinter::new);
-
-        ////////////////////////////////////////////////////////////////////////////////////////////////////
-        // SqlDatabase Vendor Specific Configuration
-        ////////////////////////////////////////////////////////////////////////////////////////////////////
-        switch (dialect) {
-            case DEFAULT:
-                break;
-            case CUBRID:
-                break;
-            case DERBY:
-                break;
-            case FIREBIRD:
-                break;
-            case H2:
-                dbPlatform = new H2Platform(configuration, config);
-                hikariConfig.setDataSourceClassName("org.h2.jdbcx.JdbcDataSource");
-                hikariConfig.addDataSourceProperty("URL", jdbcUrl);
-                hikariConfig.addDataSourceProperty("user", jdbcUser);
-                hikariConfig.addDataSourceProperty("password", jdbcPassword);
-                hikariReadConfig.setDataSourceClassName("org.h2.jdbcx.JdbcDataSource");
-                hikariReadConfig.addDataSourceProperty("URL", jdbcReadUrl);
-                hikariReadConfig.addDataSourceProperty("user", jdbcReadUser);
-                hikariReadConfig.addDataSourceProperty("password", jdbcReadPassword);
-                break;
-            case HSQLDB:
-                break;
-            case MARIADB:
-            case MYSQL:
-                dbPlatform = new MySqlPlatform(configuration, config);
-                hikariConfig.setUsername(jdbcUser);
-                hikariConfig.setPassword(jdbcPassword);
-                hikariConfig.setDataSourceClassName("com.mysql.jdbc.jdbc2.optional.MysqlDataSource");
-                hikariConfig.addDataSourceProperty("URL", jdbcUrl);
-                hikariConfig.addDataSourceProperty("user", jdbcUser);
-                hikariConfig.addDataSourceProperty("password", jdbcPassword);
-
-                hikariReadConfig.setUsername(jdbcReadUser);
-                hikariReadConfig.setPassword(jdbcReadPassword);
-                hikariReadConfig.setDataSourceClassName("com.mysql.jdbc.jdbc2.optional.MysqlDataSource");
-                hikariReadConfig.addDataSourceProperty("URL", jdbcReadUrl);
-                hikariReadConfig.addDataSourceProperty("user", jdbcReadUser);
-                hikariReadConfig.addDataSourceProperty("password", jdbcReadPassword);
-
-                ////////////////////////////////////////////////////////////////////////////////////////////////////
-                // MySQL Performance Configuration
-                ////////////////////////////////////////////////////////////////////////////////////////////////////
-                hikariConfig.addDataSourceProperty("cachePrepStmts", config.isCachePrepStmts());
-                hikariReadConfig.addDataSourceProperty("cachePrepStmts", config.isCachePrepStmts());
-                int prepStmtCacheSize = config.getPrepStmtCacheSize();
-                if (prepStmtCacheSize < 1) {
-                    prepStmtCacheSize = config.isProd()
-                        ? PROD_MYSQL_PREPARE_STMT_CACHE_SIZE
-                        : DEV_MYSQL_PREPARE_STMT_CACHE_SIZE;
-                }
-                hikariConfig.addDataSourceProperty("prepStmtCacheSize", prepStmtCacheSize);
-                hikariReadConfig.addDataSourceProperty("prepStmtCacheSize", prepStmtCacheSize);
-                int prepStmtCacheSqlLimit = config.getPrepStmtCacheSqlLimit();
-                if (prepStmtCacheSqlLimit < 1) {
-                    prepStmtCacheSqlLimit = config.isProd()
-                        ? PROD_MYSQL_PREPARE_STMT_CACHE_SQL_LIMIT
-                        : DEV_MYSQL_PREPARE_STMT_CACHE_SQL_LIMIT;
-                }
-                hikariConfig.addDataSourceProperty("prepStmtCacheSqlLimit", prepStmtCacheSqlLimit);
-                hikariReadConfig.addDataSourceProperty("prepStmtCacheSqlLimit", prepStmtCacheSqlLimit);
-                hikariConfig.addDataSourceProperty("useServerPrepStmts", config.isUseServerPrepStmts());
-                hikariReadConfig.addDataSourceProperty("useServerPrepStmts", config.isUseServerPrepStmts());
-                break;
-            case POSTGRES:
-            case POSTGRES_9_3:
-            case POSTGRES_9_4:
-//                dbPlatform = new PGPlatform(configuration, config);
-//                settings.setRenderSchema(true);
-//
-//                // Manually create PG DataSource.
-//                org.postgresql.ds.PGSimpleDataSource d = new PGSimpleDataSource();
-//
-//                // Manually parse URL.
-//                Properties props = org.postgresql.Driver.parseURL(jdbcUrl, new Properties());
-//                if (props != null && !props.isEmpty()) {
-//                    // Set parsed Properties.
-//                    d.setProperty(PGProperty.PG_HOST, PGProperty.PG_HOST.get(props));
-//                    d.setProperty(PGProperty.PG_DBNAME, PGProperty.PG_DBNAME.get(props));
-//                    d.setProperty(PGProperty.PG_PORT, PGProperty.PG_PORT.get(props));
-//                }
-//
-//                // Set username and password.
-//                d.setUser(jdbcUser);
-//                d.setPassword(jdbcPassword);
-//                d.setCurrentSchema("public");
-//                hikariConfig.setDataSource(d);
-                break;
-            case SQLITE:
-                break;
-        }
-
-        // Find all Entity classes.
-        findEntityClasses();
-        // Build jOOQ Schema.
-        findJooqSchema();
     }
 
-    public SqlConfig getConfig() {
-        return config;
+    public static void main(String[] args) {
+        Vertx vertx = Vertx.vertx();
+
+        final ExecutorService executorService = Executors.newFixedThreadPool(4);
+
+        for (int i = 0; i < 100; i++) {
+            vertx.runOnContext(action -> {
+                final io.vertx.rxjava.core.Context context = vertx.getOrCreateContext();
+
+                Observable.<List<String>>create(subscriber -> {
+                    final String name1 = Thread.currentThread().getName();
+                    vertx.setTimer(1, a2 -> {
+                        final String name2 = Thread.currentThread().getName();
+
+                        vertx.setTimer(1, a -> {
+                            executorService.submit(() -> {
+                                context.runOnContext($ -> {
+                                    subscriber.onNext(Lists.newArrayList(name1, name2, Thread.currentThread().getName()));
+                                });
+                            });
+                        });
+                    });
+                }).subscribe(
+                    r -> {
+                        synchronized (SqlDatabase.class) {
+                            r.forEach(System.out::println);
+                            System.out.println(Thread.currentThread().getName());
+                            System.out.println();
+                        }
+                    }
+                );
+            });
+        }
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////
     // Property Accessors
     ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    /**
+     * @return
+     */
+    public SqlConfig getConfig() {
+        return config;
+    }
 
     public List<TableMapping> getTableMappings() {
         return Collections.unmodifiableList(tableMappingList);
@@ -334,17 +195,200 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         return new HikariDataSource(hikariConfig);
     }
 
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Start Up
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+
     protected HikariDataSource buildReadDataSource() {
         return new HikariDataSource(hikariReadConfig);
     }
 
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Start Up
+    // Shutdown
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
     @Override
     protected void startUp() throws Exception {
         try {
+            final long started = System.currentTimeMillis();
+            LOG.info("Starting SqlDatabase...");
+
+            final String jdbcUrl = Strings.nullToEmpty((config.getUrl())).trim();
+            final String jdbcUser = Strings.nullToEmpty((config.getUser()));
+            final String jdbcPassword = Strings.nullToEmpty((config.getPassword()));
+
+            final String jdbcReadUrl = Strings.nullToEmpty((config.getReadUrl()));
+            final String jdbcReadUser = Strings.nullToEmpty((config.getReadUser()));
+            final String jdbcReadPassword = Strings.nullToEmpty((config.getReadPassword()));
+            final SQLDialect dialect = JDBCUtils.dialect(jdbcUrl);
+
+            // Configure connection pool.
+            hikariConfig = new HikariConfig();
+            hikariReadConfig = new HikariConfig();
+
+            // Always set auto commit to off.
+            hikariConfig.setAutoCommit(false);
+            hikariConfig.setRegisterMbeans(true);
+
+            hikariReadConfig.setReadOnly(true);
+            hikariReadConfig.setAutoCommit(false);
+            hikariReadConfig.setRegisterMbeans(true);
+
+            // Set the default maximum pool size.
+            if (config.isDev()) {
+                hikariConfig.setMaximumPoolSize(Runtime.getRuntime().availableProcessors());
+                hikariReadConfig.setMaximumPoolSize(Runtime.getRuntime().availableProcessors());
+            } else if (config.isTest()) {
+                hikariConfig.setMaximumPoolSize(Runtime.getRuntime().availableProcessors());
+                hikariReadConfig.setMaximumPoolSize(Runtime.getRuntime().availableProcessors());
+            } else {
+                hikariConfig.setMaximumPoolSize(Runtime.getRuntime().availableProcessors() * 3);
+                hikariReadConfig.setMaximumPoolSize(Runtime.getRuntime().availableProcessors() * 3);
+            }
+
+            // Sanitize Max Pool size.
+            if (config.getMaxPoolSize() > 0 && config.getMaxPoolSize() <= SANE_MAX) {
+                hikariConfig.setMaximumPoolSize(config.getMaxPoolSize());
+            } else {
+                LOG.warn("An Invalid MaxPoolSize value was found. Found '" + config.getMaxPoolSize() + "' but set to a more reasonable '" + SANE_MAX + "'");
+                hikariConfig.setMaximumPoolSize(SANE_MAX);
+            }
+            if (config.getMaxReadPoolSize() > 0 && config.getMaxReadPoolSize() < SANE_MAX) {
+                hikariReadConfig.setMaximumPoolSize(config.getMaxReadPoolSize());
+            } else {
+                LOG.warn("An Invalid MaxReadPoolSize value was found. Found '" + config.getMaxPoolSize() + "' but set to a more reasonable '" + SANE_MAX + "'");
+                hikariReadConfig.setMaximumPoolSize(SANE_MAX);
+            }
+
+            // Always use READ_COMMITTED.
+            // Persist depends on this isolation level.
+            hikariConfig.setTransactionIsolation("TRANSACTION_READ_COMMITTED");
+            hikariReadConfig.setTransactionIsolation("TRANSACTION_READ_COMMITTED");
+            // Set Connection Test Query.
+            // This is valid SQL and is supported by any "ACTUAL" SQL database engine.
+            hikariConfig.setConnectionTestQuery("SELECT 1");
+            hikariReadConfig.setConnectionTestQuery("SELECT 1");
+
+            // Configure jOOQ settings.
+            settings = new Settings();
+            settings.setRenderSchema(false);
+            settings.setExecuteWithOptimisticLocking(false);
+            settings.setRenderNameStyle(RenderNameStyle.QUOTED);
+            settings.setRenderKeywordStyle(RenderKeywordStyle.UPPER);
+            settings.setReflectionCaching(true);
+            settings.setParamType(ParamType.INDEXED);
+            settings.setAttachRecords(true);
+            settings.setBackslashEscaping(BackslashEscaping.DEFAULT);
+            settings.setStatementType(StatementType.PREPARED_STATEMENT);
+
+            // Init jOOQ Configuration.
+            configuration = new DefaultConfiguration();
+            configuration.set(new RecordMapperProviderImpl());
+            configuration.set(settings);
+            configuration.set(dialect);
+
+            configuration.set(PrettyPrinter::new, TimeoutListener::new);
+
+            ////////////////////////////////////////////////////////////////////////////////////////////////////
+            // SqlDatabase Vendor Specific Configuration
+            ////////////////////////////////////////////////////////////////////////////////////////////////////
+            switch (dialect) {
+                case DEFAULT:
+                    break;
+                case CUBRID:
+                    break;
+                case DERBY:
+                    break;
+                case FIREBIRD:
+                    break;
+                case H2:
+                    dbPlatform = new H2Platform(configuration, config);
+                    hikariConfig.setDataSourceClassName("org.h2.jdbcx.JdbcDataSource");
+                    hikariConfig.addDataSourceProperty("URL", jdbcUrl);
+                    hikariConfig.addDataSourceProperty("user", jdbcUser);
+                    hikariConfig.addDataSourceProperty("password", jdbcPassword);
+                    hikariReadConfig.setDataSourceClassName("org.h2.jdbcx.JdbcDataSource");
+                    hikariReadConfig.addDataSourceProperty("URL", jdbcReadUrl);
+                    hikariReadConfig.addDataSourceProperty("user", jdbcReadUser);
+                    hikariReadConfig.addDataSourceProperty("password", jdbcReadPassword);
+                    break;
+                case HSQLDB:
+                    break;
+                case MARIADB:
+                case MYSQL:
+                    dbPlatform = new MySqlPlatform(configuration, config);
+                    hikariConfig.setUsername(jdbcUser);
+                    hikariConfig.setPassword(jdbcPassword);
+                    hikariConfig.setDataSourceClassName("com.mysql.jdbc.jdbc2.optional.MysqlDataSource");
+                    hikariConfig.addDataSourceProperty("URL", jdbcUrl);
+                    hikariConfig.addDataSourceProperty("user", jdbcUser);
+                    hikariConfig.addDataSourceProperty("password", jdbcPassword);
+
+                    hikariReadConfig.setUsername(jdbcReadUser);
+                    hikariReadConfig.setPassword(jdbcReadPassword);
+                    hikariReadConfig.setDataSourceClassName("com.mysql.jdbc.jdbc2.optional.MysqlDataSource");
+                    hikariReadConfig.addDataSourceProperty("URL", jdbcReadUrl);
+                    hikariReadConfig.addDataSourceProperty("user", jdbcReadUser);
+                    hikariReadConfig.addDataSourceProperty("password", jdbcReadPassword);
+
+                    ////////////////////////////////////////////////////////////////////////////////////////////////////
+                    // MySQL Performance Configuration
+                    ////////////////////////////////////////////////////////////////////////////////////////////////////
+                    hikariConfig.addDataSourceProperty("cachePrepStmts", config.isCachePrepStmts());
+                    hikariReadConfig.addDataSourceProperty("cachePrepStmts", config.isCachePrepStmts());
+                    int prepStmtCacheSize = config.getPrepStmtCacheSize();
+                    if (prepStmtCacheSize < 1) {
+                        prepStmtCacheSize = config.isProd()
+                            ? PROD_MYSQL_PREPARE_STMT_CACHE_SIZE
+                            : DEV_MYSQL_PREPARE_STMT_CACHE_SIZE;
+                    }
+                    hikariConfig.addDataSourceProperty("prepStmtCacheSize", prepStmtCacheSize);
+                    hikariReadConfig.addDataSourceProperty("prepStmtCacheSize", prepStmtCacheSize);
+                    int prepStmtCacheSqlLimit = config.getPrepStmtCacheSqlLimit();
+                    if (prepStmtCacheSqlLimit < 1) {
+                        prepStmtCacheSqlLimit = config.isProd()
+                            ? PROD_MYSQL_PREPARE_STMT_CACHE_SQL_LIMIT
+                            : DEV_MYSQL_PREPARE_STMT_CACHE_SQL_LIMIT;
+                    }
+                    hikariConfig.addDataSourceProperty("prepStmtCacheSqlLimit", prepStmtCacheSqlLimit);
+                    hikariReadConfig.addDataSourceProperty("prepStmtCacheSqlLimit", prepStmtCacheSqlLimit);
+                    hikariConfig.addDataSourceProperty("useServerPrepStmts", config.isUseServerPrepStmts());
+                    hikariReadConfig.addDataSourceProperty("useServerPrepStmts", config.isUseServerPrepStmts());
+                    break;
+                case POSTGRES:
+                case POSTGRES_9_3:
+                case POSTGRES_9_4:
+//                dbPlatform = new PGPlatform(configuration, config);
+//                settings.setRenderSchema(true);
+//
+//                // Manually create PG DataSource.
+//                org.postgresql.ds.PGSimpleDataSource d = new PGSimpleDataSource();
+//
+//                // Manually parse URL.
+//                Properties props = org.postgresql.Driver.parseURL(jdbcUrl, new Properties());
+//                if (props != null && !props.isEmpty()) {
+//                    // Set parsed Properties.
+//                    d.setProperty(PGProperty.PG_HOST, PGProperty.PG_HOST.get(props));
+//                    d.setProperty(PGProperty.PG_DBNAME, PGProperty.PG_DBNAME.get(props));
+//                    d.setProperty(PGProperty.PG_PORT, PGProperty.PG_PORT.get(props));
+//                }
+//
+//                // Set username and password.
+//                d.setUser(jdbcUser);
+//                d.setPassword(jdbcPassword);
+//                d.setCurrentSchema("public");
+//                hikariConfig.setDataSource(d);
+                    break;
+                case SQLITE:
+                    break;
+            }
+
+            // Find all Entity classes.
+            findEntityClasses();
+            // Build jOOQ Schema.
+            findJooqSchema();
+
             writeExecutor = Executors.newFixedThreadPool(config.getMaxPoolSize());
             readExecutor = Executors.newFixedThreadPool(config.getMaxReadPoolSize());
 
@@ -398,6 +442,8 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             // Finish initializing Table Mappings and ensure Validity.
             // Validate Table Mapping.
             tableMappingList.forEach(TableMapping::checkValidity);
+
+            LOG.info("Finished starting SqlDatabase in " + (System.currentTimeMillis() - started) + "ms");
         } catch (Throwable e) {
             LOG.error("Failed to start", e);
             Try.run(() -> stopAsync());
@@ -407,7 +453,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
 
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Shutdown
+    // Initialize
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
     @Override
@@ -437,11 +483,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 .onFailure((e) -> LOG.error("Failed to stop H2 Server", e));
         }
     }
-
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Initialize
-    ////////////////////////////////////////////////////////////////////////////////////////////////////
 
     private void buildTableMappings() {
         final Map<Class, TableMapping> mappingMap = Maps.newHashMap();
@@ -515,6 +556,11 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         }
     }
 
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Evolution
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+
     /**
      *
      */
@@ -538,11 +584,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         }
     }
 
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Evolution
-    ////////////////////////////////////////////////////////////////////////////////////////////////////
-
     /**
      * Build Evolution Plan.
      *
@@ -559,6 +600,10 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             throw new PersistException(e);
         }
     }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Execution
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
 
     /**
      * Apply the Evolution.
@@ -641,10 +686,10 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         }
     }
 
-    ////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Execution
-    ////////////////////////////////////////////////////////////////////////////////////////////////////
-
+    /**
+     * @param master
+     * @return
+     */
     protected SqlSession createSession(boolean master) {
         final Configuration configuration = master ? this.configuration.derive() : this.readConfiguration.derive();
 
@@ -654,8 +699,14 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         );
     }
 
+    /**
+     * @param task
+     * @param handler
+     */
     @Override
     public void writeRunnable(SqlRunnable task, Handler<AsyncResult<Void>> handler) {
+        final io.vertx.core.Context ctx = io.vertx.core.Vertx.currentContext();
+
         writeExecutor.submit(() -> {
             try {
                 executeWrite(sql -> {
@@ -664,28 +715,49 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 });
 
                 if (handler != null) {
-                    vertx.runOnContext(event -> handler.handle(Future.succeededFuture()));
+                    ctx.runOnContext(event -> handler.handle(Future.succeededFuture()));
                 }
             } catch (Exception e) {
                 if (handler != null) {
-                    vertx.runOnContext(event -> handler.handle(Future.failedFuture(e)));
+                    ctx.runOnContext(event -> handler.handle(Future.failedFuture(e)));
                 }
             }
         });
     }
 
+    /**
+     * @param entityClass
+     * @param id
+     * @param <T>
+     * @return
+     */
+    @Override
     public <T extends AbstractEntity> Observable<T> get(Class<T> entityClass, String id) {
         if (id == null || id.isEmpty())
             return Observable.just(null);
         return read(sql -> sql.getEntity(entityClass, id));
     }
 
+    /**
+     * @param entityClass
+     * @param ids
+     * @param <T>
+     * @return
+     */
+    @Override
     public <T extends AbstractEntity> Observable<List<T>> get(Class<T> entityClass, String... ids) {
         if (ids == null || ids.length == 0)
             return Observable.just(Collections.emptyList());
         return read(sql -> sql.getEntities(entityClass, ids));
     }
 
+    /**
+     * @param entityClass
+     * @param ids
+     * @param <T>
+     * @return
+     */
+    @Override
     public <T extends AbstractEntity> Observable<List<T>> get(Class<T> entityClass, Stream<String> ids) {
         if (ids == null)
             return Observable.just(Collections.emptyList());
@@ -693,16 +765,73 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         return get(entityClass, ids.collect(Collectors.toList()));
     }
 
+    /**
+     * @param entityClass
+     * @param ids
+     * @param <T>
+     * @return
+     */
+    @Override
     public <T extends AbstractEntity> Observable<List<T>> get(Class<T> entityClass, Collection<String> ids) {
         if (ids == null || ids.isEmpty())
             return Observable.just(Collections.emptyList());
         return read(sql -> sql.getEntities(entityClass, ids));
     }
 
+    /**
+     * @param cls
+     * @param condition
+     * @param <T>
+     * @return
+     */
+    @Override
+    public <T extends AbstractEntity> Observable<List<T>> select(final Class<T> cls, Condition condition) {
+        return select(cls, condition, 1000);
+    }
+
+    /**
+     * @param cls
+     * @param condition
+     * @param limit
+     * @param <T>
+     * @return
+     */
+    @Override
     public <T extends AbstractEntity> Observable<List<T>> select(final Class<T> cls, Condition condition, int limit) {
         return read(sql -> sql.select(cls, condition, limit));
     }
 
+    /**
+     * @param cls
+     * @param conditions
+     * @param <T>
+     * @return
+     */
+    @Override
+    public <T extends AbstractEntity> Observable<List<T>> select(final Class<T> cls, Collection<? extends Condition> conditions) {
+        return select(cls, conditions, 1000);
+    }
+
+    /**
+     * @param cls
+     * @param conditions
+     * @param limit
+     * @param <T>
+     * @return
+     */
+    @Override
+    public <T extends AbstractEntity> Observable<List<T>> select(final Class<T> cls, Collection<? extends Condition> conditions, int limit) {
+        return read(sql -> sql.select(cls, conditions, limit));
+    }
+
+    /**
+     * @param cls
+     * @param condition
+     * @param limit
+     * @param <T>
+     * @return
+     */
+    @Override
     public <T extends AbstractEntity> Observable<Map<String, T>> selectMap(final Class<T> cls, Condition condition, int limit) {
         return read(sql -> sql.selectMap(cls, condition, limit));
     }
@@ -713,8 +842,31 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @param <T>
      * @return
      */
+    @Override
     public <T> Observable<T> selectOne(final Class<T> cls, Condition condition) {
         return read(sql -> sql.selectOne(cls, condition));
+    }
+
+    /**
+     * @param cls
+     * @param conditions
+     * @param <T>
+     * @return
+     */
+    @Override
+    public <T> Observable<T> selectOne(final Class<T> cls, Collection<? extends Condition> conditions) {
+        return read(sql -> sql.selectOne(cls, conditions));
+    }
+
+    /**
+     * @param cls
+     * @param conditions
+     * @param <T>
+     * @return
+     */
+    @Override
+    public <T> Observable<T> selectOne(final Class<T> cls, Condition... conditions) {
+        return selectOne(cls, Arrays.asList(conditions));
     }
 
     /**
@@ -723,6 +875,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @param <E>
      * @return
      */
+    @Override
     public <E extends AbstractEntity> Observable<Map<String, E>> getMap(Class<E> entityClass,
                                                                         Collection<String> ids) {
         return read(sql -> sql.getMap(entityClass, ids));
@@ -734,6 +887,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @param <E>
      * @return
      */
+    @Override
     public <E extends AbstractEntity> Observable<Map<String, E>> getMap(Class<E> entityClass,
                                                                         Stream<String> ids) {
         return read(sql -> sql.getMap(entityClass, ids.collect(Collectors.toList())));
@@ -744,19 +898,32 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @param toMap
      * @param ids
      * @param <E>
-     * @param <R>
      * @return
      */
+    @Override
     public <E extends AbstractEntity> Observable<Map<String, E>> getMap(Class<E> entityClass,
                                                                         Map<String, E> toMap,
                                                                         Collection<String> ids) {
         return read(sql -> sql.getMap(entityClass, toMap, ids));
     }
 
+    /**
+     * @param batch
+     * @param <T>
+     * @return
+     */
+    @Override
     public <T extends AbstractEntity> Observable<SqlResult<int[]>> batch(Function<SqlBatch, SqlBatch> batch) {
         return write(sql -> batch.apply(sql.batch()).execute());
     }
 
+    /**
+     * @param batch
+     * @param logger
+     * @param <T>
+     * @return
+     */
+    @Override
     public <T extends AbstractEntity> Observable<SqlResult<int[]>> batch(Function<SqlBatch, SqlBatch> batch, Logger logger) {
         return write(sql -> batch.apply(sql.batch()).execute(logger));
     }
@@ -766,6 +933,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @param <T>
      * @return
      */
+    @Override
     public <T extends AbstractEntity> Observable<SqlResult<Integer>> insert(T entity) {
         return write(sql -> sql.insert(entity));
     }
@@ -775,6 +943,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @param <T>
      * @return
      */
+    @Override
     public <T extends AbstractEntity> Observable<SqlResult<int[]>> insert(List<T> entities) {
         return write(sql -> sql.insert(entities));
     }
@@ -784,6 +953,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @param <T>
      * @return
      */
+    @Override
     public <T extends AbstractEntity> Observable<SqlResult<Integer>> update(T entity) {
         return write(sql -> sql.update(entity));
     }
@@ -793,6 +963,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @param <T>
      * @return
      */
+    @Override
     public <T extends AbstractEntity> Observable<SqlResult<int[]>> update(List<T> entities) {
         return write(sql -> sql.update(entities));
     }
@@ -802,16 +973,33 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     }
 
     public <T> Observable<SqlResult<T>> writeObservable(SqlCallable<T> task) {
+        final io.vertx.rxjava.core.Context context = vertx.getOrCreateContext();
+
         return Observable.create(
-            (Observable.OnSubscribe<SqlResult<T>>) subscriber ->
-                write(task, result -> {
-                    if (!subscriber.isUnsubscribed()) {
-                        subscriber.onNext(result.result());
-                        subscriber.onCompleted();
+            subscriber ->
+                writeExecutor.submit(() -> {
+                    try {
+                        final SqlResult<T> result = executeWrite(task);
+
+                        if (!subscriber.isUnsubscribed()) {
+                            context.runOnContext(a -> {
+                                if (!subscriber.isUnsubscribed()) {
+                                    subscriber.onNext(result);
+                                    subscriber.onCompleted();
+                                }
+                            });
+                        }
+                    } catch (Exception e) {
+                        if (!subscriber.isUnsubscribed()) {
+                            context.runOnContext(event -> {
+                                if (!subscriber.isUnsubscribed()) {
+                                    subscriber.onError(e);
+                                }
+                            });
+                        }
                     }
-                }))
-            .subscribeOn(observableScheduler)
-            .observeOn(observableScheduler);
+                })
+        );
     }
 
     /**
@@ -820,16 +1008,18 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @param <T>
      */
     public <T> void write(SqlCallable<T> task, Handler<AsyncResult<SqlResult<T>>> handler) {
+        final io.vertx.rxjava.core.Context context = vertx.getOrCreateContext();
+
         writeExecutor.submit(() -> {
             try {
                 final SqlResult<T> result = executeWrite(task);
 
                 if (handler != null) {
-                    vertx.runOnContext(event -> handler.handle(Future.succeededFuture(result)));
+                    context.runOnContext(event -> handler.handle(Future.succeededFuture(result)));
                 }
             } catch (Exception e) {
                 if (handler != null) {
-                    vertx.runOnContext(event -> handler.handle(Future.failedFuture(e)));
+                    context.runOnContext(event -> handler.handle(Future.failedFuture(e)));
                 }
             }
         });
@@ -840,16 +1030,33 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     }
 
     public <T> Observable<T> readObservable(SqlReadCallable<T> task) {
+        final io.vertx.rxjava.core.Context context = vertx.getOrCreateContext();
+
         return Observable.create(
-            (Observable.OnSubscribe<T>) subscriber ->
-                read(task, result -> {
-                    if (!subscriber.isUnsubscribed()) {
-                        subscriber.onNext(result.result());
-                        subscriber.onCompleted();
+            subscriber ->
+                readExecutor.submit(() -> {
+                    try {
+                        final T result = executeRead(task);
+
+                        if (!subscriber.isUnsubscribed()) {
+                            context.runOnContext(a -> {
+                                if (!subscriber.isUnsubscribed()) {
+                                    subscriber.onNext(result);
+                                    subscriber.onCompleted();
+                                }
+                            });
+                        }
+                    } catch (Exception e) {
+                        if (!subscriber.isUnsubscribed()) {
+                            context.runOnContext(event -> {
+                                if (!subscriber.isUnsubscribed()) {
+                                    subscriber.onError(e);
+                                }
+                            });
+                        }
                     }
-                }))
-            .subscribeOn(observableScheduler)
-            .observeOn(observableScheduler);
+                })
+        );
     }
 
     /**
@@ -858,15 +1065,17 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @param <T>
      */
     public <T> void read(final SqlReadCallable<T> task, final Handler<AsyncResult<T>> handler) {
+        final io.vertx.rxjava.core.Context context = vertx.getOrCreateContext();
+
         readExecutor.submit(() -> {
             try {
                 final T result = executeRead(task);
                 if (handler != null) {
-                    vertx.runOnContext(event -> handler.handle(Future.succeededFuture(result)));
+                    context.runOnContext(event -> handler.handle(Future.succeededFuture(result)));
                 }
             } catch (Exception e) {
                 if (handler != null) {
-                    vertx.runOnContext(event -> handler.handle(Future.failedFuture(e)));
+                    context.runOnContext(event -> handler.handle(Future.failedFuture(e)));
                 }
             }
         });
@@ -1309,6 +1518,23 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             // If we're executing anything else (e.g. plain SQL)
             else if (!StringUtils.isBlank(ctx.sql())) {
                 LOG.debug(ctx.sql());
+            }
+        }
+    }
+
+    public class TimeoutListener extends DefaultExecuteListener {
+        @Override
+        public void executeStart(ExecuteContext ctx) {
+            super.executeStart(ctx);
+            try {
+                if (ctx.statement() != null) {
+                    int queryTimeout = ctx.statement().getQueryTimeout();
+                    if (queryTimeout < 1) {
+                        ctx.statement().setQueryTimeout(4);
+                    }
+                }
+            } catch (Throwable e) {
+                // Ignore.
             }
         }
     }
