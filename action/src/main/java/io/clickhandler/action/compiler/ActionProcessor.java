@@ -245,7 +245,7 @@ public class ActionProcessor extends AbstractProcessor {
                 if (children.isEmpty()) return;
 
                 path = children.values().iterator().next().path;
-                messager.printMessage(Diagnostic.Kind.WARNING, "Found ActionRoot Path: " + path);
+//                messager.printMessage(Diagnostic.Kind.WARNING, "Found ActionRoot Path: " + path);
             }
 
             processed = true;

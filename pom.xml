@@ -78,7 +78,7 @@ http://www.w3.org/2001/XMLSchema-instance ">
         <!--<netty.version>4.1.1.Final</netty.version>-->
         <reflections.version>0.9.10</reflections.version>
         <slf4j.version>1.7.18</slf4j.version>
-        <vertx.version>3.2.1</vertx.version>
+        <vertx.version>3.3.0</vertx.version>
         <rxjava.version>1.1.6</rxjava.version>
         <javax-validation-api.version>1.1.0.Final</javax-validation-api.version>
         <selenium.version>2.52.0</selenium.version>

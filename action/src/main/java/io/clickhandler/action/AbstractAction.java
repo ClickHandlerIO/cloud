@@ -3,14 +3,12 @@ package io.clickhandler.action;
 import com.netflix.hystrix.HystrixObservable;
 import rx.Observable;
 
-import java.util.concurrent.atomic.AtomicReference;
-
 /**
  * @author Clay Molocznik
  */
 public abstract class AbstractAction<IN, OUT> implements Action<IN, OUT> {
     private Object context;
-    private AtomicReference<IN> request = new AtomicReference<>();
+    private IN request;
 
     public Object getContext() {
         return context;
@@ -24,7 +22,7 @@ public abstract class AbstractAction<IN, OUT> implements Action<IN, OUT> {
      * @return
      */
     public IN getRequest() {
-        return request.get();
+        return request;
     }
 
     /**
@@ -32,14 +30,16 @@ public abstract class AbstractAction<IN, OUT> implements Action<IN, OUT> {
      * @return
      */
     public AbstractAction<IN, OUT> setRequest(IN request) {
-        if (!this.request.compareAndSet(null, request)) {
-            throw new IllegalStateException("setRequest has already been called");
-        }
+        this.request = request;
         return this;
     }
 
+    /**
+     *
+     * @return
+     */
     public IN request() {
-        return request.get();
+        return request;
     }
 
     /**
@@ -55,23 +55,6 @@ public abstract class AbstractAction<IN, OUT> implements Action<IN, OUT> {
     public Observable<OUT> toObservable() {
         return getCommand().toObservable();
     }
-
-    /**
-     * @param request
-     * @param <IN>
-     * @param <OUT>
-     * @return
-     */
-//    @Deprecated
-//    public <A extends Action<IN, OUT>, IN, OUT> OUT execute(
-//        final IN request) {
-//        try {
-//            // TODO: Fix
-//            return null;
-//        } catch (Throwable e) {
-//            throw new Error(e);
-//        }
-//    }
 
     /**
      * @return

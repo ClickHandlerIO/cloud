@@ -1,10 +1,10 @@
 package io.clickhandler.action;
 
 import com.netflix.hystrix.HystrixObservableCommand;
+import io.vertx.core.Context;
+import io.vertx.core.Vertx;
 import rx.Observable;
 import rx.Subscriber;
-
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * @author Clay Molocznik
@@ -13,10 +13,11 @@ public abstract class AbstractObservableAction<IN, OUT>
     extends AbstractAction<IN, OUT>
     implements ObservableAction<IN, OUT> {
 
-    private final AtomicReference<HystrixObservableCommand<OUT>> command = new AtomicReference<>();
+    private HystrixObservableCommand<OUT> command;
     private HystrixObservableCommand.Setter setter;
 
     private Subscriber<? super OUT> subscriber;
+    private Context ctx;
 
     protected HystrixObservableCommand.Setter getCommandSetter() {
         return setter;
@@ -46,6 +47,7 @@ public abstract class AbstractObservableAction<IN, OUT>
             @Override
             public void call(Subscriber<? super OUT> subscriber) {
                 try {
+                    ctx = Vertx.currentContext();
                     if (!subscriber.isUnsubscribed()) {
                         start(subscriber);
                     }
@@ -60,17 +62,11 @@ public abstract class AbstractObservableAction<IN, OUT>
      * @return
      */
     protected final HystrixObservableCommand<OUT> getCommand() {
-        final HystrixObservableCommand<OUT> existing = command.get();
-        if (existing != null) {
-            return existing;
+        if (command != null) {
+            return command;
         }
-
-        final HystrixObservableCommand<OUT> newCommand = build();
-        if (!command.compareAndSet(null, newCommand)) {
-            return command.get();
-        } else {
-            return newCommand;
-        }
+        command = build();
+        return command;
     }
 
     /**
