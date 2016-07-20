@@ -1,11 +1,10 @@
 package io.clickhandler.action;
 
 import com.netflix.hystrix.*;
-import io.vertx.rxjava.core.RxHelper;
+import io.vertx.core.Context;
 import io.vertx.rxjava.core.Vertx;
 import javaslang.control.Try;
 import rx.Observable;
-import rx.Scheduler;
 
 import javax.inject.Inject;
 import javax.inject.Provider;
@@ -20,7 +19,8 @@ public class ActionProvider<A, IN, OUT> {
     private final HystrixCommandProperties.Setter commandPropertiesDefaults = HystrixCommandProperties.Setter();
     @Inject
     Vertx vertx;
-    Scheduler scheduler;
+
+    private io.vertx.core.Vertx vertxCore;
     private ActionConfig actionConfig;
     private HystrixCommand.Setter defaultSetter;
     private HystrixObservableCommand.Setter defaultObservableSetter;
@@ -119,7 +119,8 @@ public class ActionProvider<A, IN, OUT> {
     protected void init() {
         inited = true;
 
-        scheduler = initScheduler();
+        vertxCore = (io.vertx.core.Vertx) vertx.getDelegate();
+
         // Get default config.
         actionConfig = actionClass.getAnnotation(ActionConfig.class);
 
@@ -174,7 +175,7 @@ public class ActionProvider<A, IN, OUT> {
                     // Set default command props
                     .andCommandPropertiesDefaults(commandPropertiesDefaults)
                     // Set command key
-                    .andCommandKey(HystrixCommandKey.Factory.asKey(actionClass.getName()));
+                    .andCommandKey(HystrixCommandKey.Factory.asKey(commandKey(actionConfig, actionClass)));
         }
 
         // Is it a blocking action.
@@ -199,10 +200,21 @@ public class ActionProvider<A, IN, OUT> {
             defaultSetter =
                 HystrixCommand.Setter
                     .withGroupKey(HystrixCommandGroupKey.Factory.asKey(groupKey))
-                    .andCommandKey(HystrixCommandKey.Factory.asKey(actionClass.getName()))
+                    .andCommandKey(HystrixCommandKey.Factory.asKey(commandKey(actionConfig, actionClass)))
                     .andCommandPropertiesDefaults(commandPropertiesDefaults);
 
         }
+    }
+
+    protected String commandKey(ActionConfig config, Class actionClass) {
+        if (config != null) {
+            if (config.commandKey().isEmpty())
+                return actionClass.getName();
+            else
+                return config.commandKey();
+        }
+
+        return actionClass.getName();
     }
 
     protected A create() {
@@ -251,6 +263,11 @@ public class ActionProvider<A, IN, OUT> {
         ).toBlocking().toFuture().get()).get();
     }
 
+    /**
+     * @param context
+     * @param callback
+     * @return
+     */
     protected Observable<OUT> observe(final Object context, final Func.Run1<IN> callback) {
         final IN in = inProvider.get();
         if (callback != null) {
@@ -259,6 +276,10 @@ public class ActionProvider<A, IN, OUT> {
         return observe(context, in);
     }
 
+    /**
+     * @param callback
+     * @return
+     */
     protected Observable<OUT> observe(final Func.Run1<IN> callback) {
         final IN in = inProvider.get();
         if (callback != null) {
@@ -280,6 +301,11 @@ public class ActionProvider<A, IN, OUT> {
         );
     }
 
+    /**
+     * @param context
+     * @param request
+     * @return
+     */
     protected Observable<OUT> observe(
         final Object context,
         final IN request) {
@@ -308,52 +334,36 @@ public class ActionProvider<A, IN, OUT> {
         }
 
         // Build observable.
-        final Observable observable = abstractAction.toObservable();
-        // Set the observe on scheduler.
-        observable.observeOn(observeOnScheduler());
-        // Set the subscribe on scheduler.
-        observable.subscribeOn(subscribeOnScheduler());
-        return observable;
-    }
+        final Observable<OUT> observable = abstractAction.toObservable();
 
-    /**
-     * @param request\
-     */
-    protected Observable<OUT> send(
-        final String address,
-        final IN request) {
+        final Context ctx = vertxCore.getOrCreateContext();
 
-        // Find address.
+        return Observable.create(subscriber -> {
+            observable.subscribe(
+                r -> {
+                    if (subscriber.isUnsubscribed())
+                        return;
 
-//        final AbstractAction<IN, OUT> abstractAction;
-//        try {
-//            abstractAction = (AbstractAction<IN, OUT>) action;
-//            abstractAction.setContext(context);
-//            abstractAction.setRequest(request);
-//        } catch (Exception e) {
-//            // Ignore.
-//            return Observable.error(e);
-//        }
-//
-//        // Build observable.
-//        final Observable observable = abstractAction.toObservable();
-//        // Set the observe on scheduler.
-//        observable.observeOn(observeOnScheduler());
-//        // Set the subscribe on scheduler.
-//        observable.subscribeOn(subscribeOnScheduler());
-//        return observable;
-        return Observable.just(null);
-    }
+                    ctx.runOnContext(a -> {
+                        if (subscriber.isUnsubscribed())
+                            return;
 
-    protected Scheduler observeOnScheduler() {
-        return scheduler;
-    }
+                        subscriber.onNext(r);
+                        subscriber.onCompleted();
+                    });
+                },
+                e -> {
+                    if (subscriber.isUnsubscribed())
+                        return;
 
-    protected Scheduler subscribeOnScheduler() {
-        return scheduler;
-    }
+                    ctx.runOnContext(a -> {
+                        if (subscriber.isUnsubscribed())
+                            return;
 
-    protected Scheduler initScheduler() {
-        return RxHelper.scheduler(vertx);
+                        subscriber.onError(e);
+                    });
+                }
+            );
+        });
     }
 }

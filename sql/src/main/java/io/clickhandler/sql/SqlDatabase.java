@@ -1,5 +1,7 @@
 package io.clickhandler.sql;
 
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.SharedMetricRegistries;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.base.Throwables;
@@ -269,6 +271,14 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             // This is valid SQL and is supported by any "ACTUAL" SQL database engine.
             hikariConfig.setConnectionTestQuery("SELECT 1");
             hikariReadConfig.setConnectionTestQuery("SELECT 1");
+
+            final MetricRegistry registry = SharedMetricRegistries.getOrCreate("app");
+
+            hikariConfig.setPoolName(("sql-" + config.getName() + "-write").toLowerCase());
+            hikariReadConfig.setPoolName(("sql-" + config.getName() + "-read").toLowerCase());
+
+            hikariConfig.setMetricRegistry(registry);
+            hikariReadConfig.setMetricRegistry(registry);
 
             // Configure jOOQ settings.
             settings = new Settings();
