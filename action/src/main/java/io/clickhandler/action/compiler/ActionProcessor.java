@@ -61,6 +61,8 @@ public class ActionProcessor extends AbstractProcessor {
         Set<String> annotataions = new LinkedHashSet<>();
         annotataions.add(RemoteAction.class.getCanonicalName());
         annotataions.add(InternalAction.class.getCanonicalName());
+        annotataions.add(WorkerAction.class.getCanonicalName());
+        annotataions.add(ScheduledAction.class.getCanonicalName());
         return annotataions;
     }
 
@@ -74,6 +76,8 @@ public class ActionProcessor extends AbstractProcessor {
         try {
             final Set<? extends Element> remoteElements = roundEnv.getElementsAnnotatedWith(RemoteAction.class);
             final Set<? extends Element> internalElements = roundEnv.getElementsAnnotatedWith(InternalAction.class);
+            final Set<? extends Element> workerElements = roundEnv.getElementsAnnotatedWith(WorkerAction.class);
+            final Set<? extends Element> scheduledElements = roundEnv.getElementsAnnotatedWith(ScheduledAction.class);
 
             final HashSet<Element> elements = new HashSet<>();
 
@@ -88,6 +92,8 @@ public class ActionProcessor extends AbstractProcessor {
             for (Element annotatedElement : elements) {
                 final RemoteAction remoteAction = annotatedElement.getAnnotation(RemoteAction.class);
                 final InternalAction internalAction = annotatedElement.getAnnotation(InternalAction.class);
+                final WorkerAction workerAction = annotatedElement.getAnnotation(WorkerAction.class);
+                final ScheduledAction scheduledAction = annotatedElement.getAnnotation(ScheduledAction.class);
 
                 final TypeElement element = elementUtils.getTypeElement(annotatedElement.toString());
 
@@ -118,11 +124,19 @@ public class ActionProcessor extends AbstractProcessor {
                 if (holder.internalAction == null) {
                     holder.internalAction = internalAction;
                 }
+                if (holder.workerAction == null) {
+                    holder.workerAction = workerAction;
+                }
+                if (holder.scheduledAction == null) {
+                    holder.scheduledAction = scheduledAction;
+                }
 
                 // Ensure only 1 action annotation was used.
                 int actionAnnotationCount = 0;
                 if (holder.remoteAction != null) actionAnnotationCount++;
                 if (holder.internalAction != null) actionAnnotationCount++;
+                if (holder.workerAction != null) actionAnnotationCount++;
+                if (holder.scheduledAction != null) actionAnnotationCount++;
                 if (actionAnnotationCount > 1) {
                     messager.printMessage(Diagnostic.Kind.ERROR, element.getQualifiedName() + "  has multiple Action annotations. Only one of the following may be used... @RemoteAction or @QueueAction or @InternalAction or @ActorAction");
                     continue;
@@ -303,12 +317,25 @@ public class ActionProcessor extends AbstractProcessor {
 
                 TypeName actionProviderBuilder;
 
-                actionProviderBuilder = ParameterizedTypeName.get(
-                    action.getProviderTypeName(),
-                    actionName,
-                    inName,
-                    outName
-                );
+                if (action.isWorker()) {
+                    actionProviderBuilder = ParameterizedTypeName.get(
+                        action.getProviderTypeName(),
+                        actionName,
+                        inName
+                    );
+                } else if (action.isScheduled()) {
+                    actionProviderBuilder = ParameterizedTypeName.get(
+                        action.getProviderTypeName(),
+                        actionName
+                    );
+                } else {
+                    actionProviderBuilder = ParameterizedTypeName.get(
+                        action.getProviderTypeName(),
+                        actionName,
+                        inName,
+                        outName
+                    );
+                }
 
                 type.addField(
                     FieldSpec.builder(actionProviderBuilder, action.getFieldName())
@@ -360,6 +387,16 @@ public class ActionProcessor extends AbstractProcessor {
                                 }
                             } else if (action.isRemote()) {
                                 if (!contents.contains("RemoteActionProvider<" + action.type.getSimpleName())) {
+                                    messager.printMessage(Diagnostic.Kind.ERROR, "Action: " + action.getName() + " was created. Full Regeneration needed. \"clean\" and \"compile\"");
+                                    return;
+                                }
+                            } else if (action.isWorker()) {
+                                if (!contents.contains("WorkerActionProvider<" + action.type.getSimpleName())) {
+                                    messager.printMessage(Diagnostic.Kind.ERROR, "Action: " + action.getName() + " was created. Full Regeneration needed. \"clean\" and \"compile\"");
+                                    return;
+                                }
+                            } else if (action.isScheduled()) {
+                                if (!contents.contains("ScheduledActionProvider<" + action.type.getSimpleName())) {
                                     messager.printMessage(Diagnostic.Kind.ERROR, "Action: " + action.getName() + " was created. Full Regeneration needed. \"clean\" and \"compile\"");
                                     return;
                                 }

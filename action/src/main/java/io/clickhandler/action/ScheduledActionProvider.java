@@ -5,18 +5,22 @@ import javax.inject.Inject;
 /**
  *
  */
-public class ScheduledActionProvider<A extends Action<IN, Boolean>, IN> extends ActionProvider<A, IN, Boolean> {
+public class ScheduledActionProvider<A extends Action<Void, Void>> extends ActionProvider<A, Void, Void> {
     private static final Object DEFAULT_CONTEXT = new Object();
 
-    private WorkerAction workerAction;
+    private ScheduledAction scheduledAction;
 
     @Inject
     public ScheduledActionProvider() {
     }
 
+    public ScheduledAction getScheduledAction() {
+        return scheduledAction;
+    }
+
     @Override
     protected void init() {
-        workerAction = getActionClass().getAnnotation(WorkerAction.class);
+        scheduledAction = getActionClass().getAnnotation(ScheduledAction.class);
         super.init();
     }
 }

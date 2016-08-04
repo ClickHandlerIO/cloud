@@ -53,6 +53,10 @@ public class ActionHolder {
             return ClassName.get(RemoteActionProvider.class);
         } else if (isInternal()) {
             return ClassName.get(InternalActionProvider.class);
+        } else if (isWorker()) {
+            return ClassName.get(WorkerActionProvider.class);
+        } else if (isScheduled()) {
+            return ClassName.get(ScheduledActionProvider.class);
         } else {
             return ClassName.get(ActionProvider.class);
         }

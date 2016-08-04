@@ -211,7 +211,7 @@ public class SQSWorkerReceiver extends AbstractIdleService {
 
             run(request);
 
-            if (executionMillis > 30000) {
+            if (executionMillis > 15000) {
 
             }
         }
