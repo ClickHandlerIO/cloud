@@ -33,6 +33,7 @@ public class ActionProvider<A, IN, OUT> {
     private boolean inited;
     private boolean executionTimeoutEnabled;
     private long timeoutMillis;
+    private int maxConcurrentRequests;
 
     @Inject
     public ActionProvider() {
@@ -116,6 +117,10 @@ public class ActionProvider<A, IN, OUT> {
         return outClass;
     }
 
+    public int getMaxConcurrentRequests() {
+        return maxConcurrentRequests;
+    }
+
     protected void init() {
         inited = true;
 
@@ -141,6 +146,11 @@ public class ActionProvider<A, IN, OUT> {
             commandPropertiesDefaults.withExecutionTimeoutEnabled(true);
             commandPropertiesDefaults.withExecutionTimeoutInMilliseconds((int) timeoutMillis);
             this.executionTimeoutEnabled = true;
+        }
+
+        if (actionConfig != null && actionConfig.maxConcurrentRequests() > 0) {
+            maxConcurrentRequests = actionConfig.maxConcurrentRequests();
+            commandPropertiesDefaults.withExecutionIsolationSemaphoreMaxConcurrentRequests(actionConfig.maxConcurrentRequests());
         }
 
         // Default isolation strategy.

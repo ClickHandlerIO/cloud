@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -22,6 +23,7 @@ public class ActionManager extends AbstractVerticle {
     private final static Map<Object, ActionProvider<?, ?, ?>> actionProviderMap = new HashMap<>();
     private final static Map<Object, RemoteActionProvider<?, ?, ?>> remoteActionMap = new HashMap<>();
     private final static Map<Object, InternalActionProvider<?, ?, ?>> internalActionMap = new HashMap<>();
+    private final static Map<Object, WorkerActionProvider<?, ?>> workerActionMap = new HashMap<>();
 
     @Inject
     Vertx vertx;
@@ -38,6 +40,26 @@ public class ActionManager extends AbstractVerticle {
     @Override
     public void stop(Future<Void> stopFuture) throws Exception {
         stopFuture.complete();
+    }
+
+    public static Map<Object, ActionProvider<?, ?, ?>> getActionProviderMap() {
+        return Collections.unmodifiableMap(actionProviderMap);
+    }
+
+    public static Map<Object, RemoteActionProvider<?, ?, ?>> getRemoteActionMap() {
+        return Collections.unmodifiableMap(remoteActionMap);
+    }
+
+    public static Map<Object, InternalActionProvider<?, ?, ?>> getInternalActionMap() {
+        return Collections.unmodifiableMap(internalActionMap);
+    }
+
+    public static Map<Object, WorkerActionProvider<?, ?>> getWorkerActionMap() {
+        return Collections.unmodifiableMap(workerActionMap);
+    }
+
+    public static WorkerActionProvider<? , ?> getWorkerAction(String name) {
+        return workerActionMap.get(name);
     }
 
     synchronized void register(Map<Object, ActionProvider<?, ?, ?>> map) {
@@ -61,6 +83,9 @@ public class ActionManager extends AbstractVerticle {
                 remoteActionMap.put(key, (RemoteActionProvider<?, ?, ?>) value);
             } else if (value instanceof InternalActionProvider) {
                 internalActionMap.put(key, (InternalActionProvider<?, ?, ?>) value);
+            } else if (value instanceof WorkerActionProvider) {
+                workerActionMap.put(key, (WorkerActionProvider<?, ?>)value);
+                workerActionMap.put(value.getActionClass().getCanonicalName(), (WorkerActionProvider<?, ?>)value);
             }
         });
     }

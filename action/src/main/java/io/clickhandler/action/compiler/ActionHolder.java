@@ -12,6 +12,8 @@ import javax.lang.model.type.TypeMirror;
 public class ActionHolder {
     RemoteAction remoteAction;
     InternalAction internalAction;
+    WorkerAction workerAction;
+    ScheduledAction scheduledAction;
     ActionConfig config;
     TypeElement type;
     TypeMirror actorTypeClass;
@@ -27,6 +29,14 @@ public class ActionHolder {
 
     public boolean isInternal() {
         return internalAction != null;
+    }
+
+    public boolean isWorker() {
+        return workerAction != null;
+    }
+
+    public boolean isScheduled() {
+        return scheduledAction != null;
     }
 
     public ClassName getProviderTypeName() {
