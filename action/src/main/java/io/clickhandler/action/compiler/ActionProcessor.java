@@ -87,6 +87,12 @@ public class ActionProcessor extends AbstractProcessor {
             if (internalElements != null) {
                 elements.addAll(internalElements);
             }
+            if (workerElements != null) {
+                elements.addAll(workerElements);
+            }
+            if (scheduledElements != null) {
+                elements.addAll(scheduledElements);
+            }
 
             boolean allGood = true;
             for (Element annotatedElement : elements) {
@@ -310,14 +316,14 @@ public class ActionProcessor extends AbstractProcessor {
             actions.forEach((classPath, action) -> {
                 // Get Action classname.
                 ClassName actionName = ClassName.get(action.type);
-                // Get Action IN resolved name.
-                ClassName inName = ClassName.get(action.inType.getResolvedElement());
-                // Get Action OUT resolved name.
-                ClassName outName = ClassName.get(action.outType.getResolvedElement());
+
 
                 TypeName actionProviderBuilder;
 
                 if (action.isWorker()) {
+                    // Get Action IN resolved name.
+                    ClassName inName = ClassName.get(action.inType.getResolvedElement());
+
                     actionProviderBuilder = ParameterizedTypeName.get(
                         action.getProviderTypeName(),
                         actionName,
@@ -329,6 +335,11 @@ public class ActionProcessor extends AbstractProcessor {
                         actionName
                     );
                 } else {
+                    // Get Action IN resolved name.
+                    ClassName inName = ClassName.get(action.inType.getResolvedElement());
+                    // Get Action OUT resolved name.
+                    ClassName outName = ClassName.get(action.outType.getResolvedElement());
+
                     actionProviderBuilder = ParameterizedTypeName.get(
                         action.getProviderTypeName(),
                         actionName,

@@ -6,8 +6,6 @@ import javax.inject.Inject;
  *
  */
 public class ScheduledActionProvider<A extends Action<Void, Void>> extends ActionProvider<A, Void, Void> {
-    private static final Object DEFAULT_CONTEXT = new Object();
-
     private ScheduledAction scheduledAction;
 
     @Inject

@@ -1,0 +1,381 @@
+package io.clickhandler.action;
+
+import com.amazonaws.services.sqs.AmazonSQSClient;
+import com.amazonaws.services.sqs.model.*;
+import com.google.common.base.Charsets;
+import com.google.common.base.Strings;
+import com.google.common.base.Throwables;
+import com.google.common.hash.Hashing;
+import com.google.common.util.concurrent.AbstractExecutionThreadService;
+import com.google.common.util.concurrent.AbstractIdleService;
+import io.clickhandler.common.WireFormat;
+import javaslang.control.Try;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import javax.inject.Inject;
+import java.util.ArrayList;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+
+/**
+ * Processes Worker requests from a single AmazonSQS Queue.
+ * Supports parallel receive and delete threads to increase message throughput.
+ */
+public class SQSReceiver extends AbstractIdleService {
+    public static final int VISIBILITY_BUFFER_MILLIS = 5000;
+    private static final Logger LOG = LoggerFactory.getLogger(SQSReceiver.class);
+    @Inject
+    ActionManager actionManager;
+    private SQSWorkerConfig config;
+    private AmazonSQSClient sqsClient;
+    private Semaphore buffered;
+    private ReceiveThread[] receiveThreads;
+    private DeleteThread[] deleteThreads;
+    private int batchSize = 10;
+    private int minimumVisibility = 30;
+    private String queueUrl;
+
+    private Map<String, ActionContext> actionMap;
+
+    @Inject
+    public SQSReceiver() {
+    }
+
+    public void setConfig(SQSWorkerConfig config) {
+        this.config = config;
+        batchSize = config.batchSize;
+        minimumVisibility = config.minimumVisibility;
+    }
+
+    public void setQueueUrl(String queueUrl) {
+        this.queueUrl = queueUrl;
+    }
+
+    public void setSqsClient(AmazonSQSClient sqsClient) {
+        this.sqsClient = sqsClient;
+    }
+
+    @Override
+    protected void startUp() throws Exception {
+        // Create buffer semaphore.
+        buffered = new Semaphore(config.bufferSize);
+
+        // Init ActionQueues.
+        actionMap = ActionManager.getWorkerActionMap().values().stream()
+            .map(ActionContext::new)
+            .collect(Collectors.toMap(k -> k.actionProvider.getActionClass().getCanonicalName(), v -> v));
+
+        // Start Delete threads.
+        deleteThreads = new DeleteThread[config.threads];
+        for (int i = 0; i < config.threads; i++) {
+            deleteThreads[i] = new DeleteThread();
+            deleteThreads[i].startAsync().awaitRunning();
+        }
+
+        // Start Receive threads.
+        receiveThreads = new ReceiveThread[config.threads];
+        for (int i = 0; i < config.threads; i++) {
+            receiveThreads[i] = new ReceiveThread();
+            receiveThreads[i].startAsync().awaitRunning();
+        }
+    }
+
+    @Override
+    protected void shutDown() throws Exception {
+        // Stop receiving messages.
+        for (ReceiveThread thread : receiveThreads) {
+            Try.run(() -> thread.stopAsync().awaitTerminated());
+        }
+
+        // Wait for all actions to stop.
+        buffered.acquire(config.bufferSize);
+
+        // Delete any remaining messages.
+        // Stop delete threads.
+        for (DeleteThread thread : deleteThreads) {
+            Try.run(() -> thread.stopAsync().awaitTerminated());
+        }
+
+        receiveThreads = null;
+        deleteThreads = null;
+    }
+
+    private DeleteMessageBatchResult delete(ArrayList<DeleteMessageBatchRequestEntry> batch) {
+        return sqsClient.deleteMessageBatch(new DeleteMessageBatchRequest()
+            .withQueueUrl(queueUrl)
+            .withEntries(batch));
+    }
+
+    /**
+     * @param take
+     * @return
+     */
+    private boolean deleteRun(LinkedBlockingDeque<String> queue, boolean take) {
+        try {
+            ArrayList<DeleteMessageBatchRequestEntry> batch = new ArrayList<>(10);
+            String receiptHandle;
+            while (true) {
+                receiptHandle = take ? queue.take() : queue.poll();
+                if (receiptHandle == null)
+                    break;
+
+                batch.add(new DeleteMessageBatchRequestEntry(Integer.toString(batch.size()), receiptHandle));
+
+                if (batch.size() == batchSize) {
+                    delete(batch);
+                    batch.clear();
+                }
+            }
+
+            if (!batch.isEmpty()) {
+                delete(batch);
+                return true;
+            } else {
+                return false;
+            }
+        } catch (Throwable e) {
+            // Ignore.
+        }
+
+        return false;
+    }
+
+    private void scheduleToDelete(String receiptHandle) {
+        final int index = Hashing.consistentHash(
+            Hashing.adler32().hashString(receiptHandle, Charsets.UTF_8),
+            deleteThreads.length
+        );
+        deleteThreads[index].queue.add(receiptHandle);
+    }
+
+    private class DeleteThread extends AbstractExecutionThreadService {
+        private final LinkedBlockingDeque<String> queue = new LinkedBlockingDeque<>();
+
+        @Override
+        protected void shutDown() throws Exception {
+            while (deleteRun(queue, false)) ;
+        }
+
+        @Override
+        protected void run() throws Exception {
+            while (isRunning()) {
+                try {
+                    deleteRun(queue, true);
+                } catch (Throwable e) {
+                    // Ignore.
+                }
+            }
+        }
+    }
+
+    private class ReceiveThread extends AbstractExecutionThreadService {
+        @Override
+        protected void run() throws Exception {
+            while (isRunning()) {
+                try {
+                    ReceiveMessageResult result = null;
+                    buffered.acquire(batchSize);
+                    try {
+                        if (!isRunning()) {
+                            buffered.release(batchSize);
+                            return;
+                        }
+
+                        result = sqsClient.receiveMessage(new ReceiveMessageRequest()
+                            .withQueueUrl(queueUrl)
+                            .withWaitTimeSeconds(10)
+                            .withVisibilityTimeout(minimumVisibility)
+                            .withMaxNumberOfMessages(batchSize));
+                    } catch (Throwable e) {
+                        buffered.release(batchSize);
+                        Throwables.propagate(e);
+                    }
+
+                    if (result == null || result.getMessages() == null || result.getMessages().isEmpty()) {
+                        buffered.release(batchSize);
+                        continue;
+                    }
+
+                    // Release extra permits.
+                    if (result.getMessages().size() < batchSize) {
+                        buffered.release(batchSize - result.getMessages().size());
+                    }
+
+                    List<ChangeMessageVisibilityBatchRequestEntry> changes = null;
+                    for (Message message : result.getMessages()) {
+                        final MessageAttributeValue type = message.getMessageAttributes() != null
+                            ? message.getMessageAttributes().get(SQSService.ATTRIBUTE_TYPE)
+                            : null;
+
+                        if (type == null) {
+                            buffered.release();
+                            scheduleToDelete(message.getReceiptHandle());
+                            continue;
+                        }
+
+                        final String actionType = Try.of(type::getStringValue).getOrElse("");
+
+                        if (actionType == null || actionType.isEmpty()) {
+                            buffered.release();
+                            scheduleToDelete(message.getReceiptHandle());
+                            continue;
+                        }
+
+                        final ActionContext actionContext = actionMap.get(actionType);
+                        if (actionContext == null) {
+                            buffered.release();
+                            scheduleToDelete(message.getReceiptHandle());
+                            continue;
+                        }
+
+                        final String body = Strings.nullToEmpty(message.getBody());
+                        final Object in = body.isEmpty() ? null : WireFormat.parse(
+                            actionContext.actionProvider.getInClass(),
+                            body
+                        );
+
+                        final ActionRequest request = new ActionRequest(message.getReceiptHandle(), in);
+                        int extendBySeconds = actionContext.schedule(request);
+
+                        if (extendBySeconds > 0) {
+                            if (changes == null) {
+                                changes = new ArrayList<>(10);
+                            }
+                            changes.add(new ChangeMessageVisibilityBatchRequestEntry(
+                                Integer.toString(changes.size()),
+                                message.getReceiptHandle()
+                            ));
+                        }
+                    }
+
+                    if (changes != null) {
+                        final ChangeMessageVisibilityBatchResult visibilityBatchResult =
+                            sqsClient.changeMessageVisibilityBatch(new ChangeMessageVisibilityBatchRequest()
+                                .withQueueUrl(queueUrl)
+                                .withEntries(changes)
+                            );
+                    }
+                } catch (InterruptedException e) {
+
+                } catch (Throwable e) {
+
+                }
+            }
+        }
+    }
+
+    /**
+     *
+     */
+    private final class ActionContext {
+        private final AtomicInteger running = new AtomicInteger(0);
+        private final WorkerActionProvider actionProvider;
+        private final int maxConcurrentRequests;
+        private final long executionMillis;
+        private final int changeVisibilityBy;
+        private final int changeVisibilityByQueue;
+        private final LinkedList<ActionRequest> backlog;
+
+        private ActionContext(WorkerActionProvider actionProvider) {
+            this.actionProvider = actionProvider;
+            this.maxConcurrentRequests = actionProvider.getMaxConcurrentRequests();
+            this.executionMillis = actionProvider.getTimeoutMillis();
+
+            // Should we accept a backlog?
+            if (maxConcurrentRequests > 0) {
+                this.backlog = new LinkedList<>();
+            } else {
+                this.backlog = null;
+            }
+
+            if (executionMillis >= TimeUnit.SECONDS.toMillis(minimumVisibility) - VISIBILITY_BUFFER_MILLIS) {
+                changeVisibilityBy = (int) TimeUnit.MILLISECONDS.toSeconds(
+                    executionMillis + VISIBILITY_BUFFER_MILLIS - TimeUnit.SECONDS.toMillis(minimumVisibility)
+                );
+            } else {
+                changeVisibilityBy = 0;
+            }
+
+            if (executionMillis > (TimeUnit.SECONDS.toMillis(minimumVisibility) / 2)) {
+                changeVisibilityByQueue = (int) TimeUnit.MILLISECONDS.toSeconds(
+                    executionMillis * 2 - TimeUnit.SECONDS.toMillis(minimumVisibility)
+                );
+            } else {
+                changeVisibilityByQueue = 0;
+            }
+        }
+
+        private int schedule(final ActionRequest request) {
+            if (backlog != null) {
+                synchronized (this) {
+                    if (maxConcurrentRequests > 0 && running.get() >= maxConcurrentRequests) {
+                        backlog.add(request);
+                        return changeVisibilityByQueue;
+                    }
+                    running.incrementAndGet();
+                }
+            } else {
+                running.incrementAndGet();
+            }
+
+            run(request);
+            return changeVisibilityBy;
+        }
+
+        private void run(ActionRequest request) {
+            actionProvider.observe(request.in).subscribe(
+                r -> {
+                    try {
+                        // Do we need to remove from the Queue?
+                        if (r == Boolean.TRUE) {
+                            scheduleToDelete(request.receiptHandle);
+                        }
+                    } finally {
+                        buffered.release();
+
+                        if (backlog != null) {
+                            synchronized (this) {
+                                final ActionRequest next = backlog.poll();
+                                if (next != null) {
+                                    run(next);
+                                } else {
+                                    running.decrementAndGet();
+                                }
+                            }
+                        } else {
+                            running.decrementAndGet();
+                        }
+                    }
+                },
+                e -> {
+                    try {
+                        // Do not
+                        buffered.release();
+                    } finally {
+                        running.decrementAndGet();
+                    }
+                }
+            );
+        }
+    }
+
+    /**
+     *
+     */
+    private final class ActionRequest {
+        final String receiptHandle;
+        final Object in;
+
+        public ActionRequest(String receiptHandle, Object in) {
+            this.receiptHandle = receiptHandle;
+            this.in = in;
+        }
+    }
+}

@@ -1,38 +1,41 @@
 package io.clickhandler.action;
 
 import com.amazonaws.services.sqs.AmazonSQSClient;
-import com.amazonaws.services.sqs.model.SendMessageBatchRequest;
-import com.amazonaws.services.sqs.model.SendMessageBatchRequestEntry;
-import com.amazonaws.services.sqs.model.SendMessageBatchResult;
-import com.amazonaws.services.sqs.model.SendMessageBatchResultEntry;
+import com.amazonaws.services.sqs.model.*;
 import com.google.common.util.concurrent.AbstractExecutionThreadService;
 import com.google.common.util.concurrent.AbstractIdleService;
+import io.clickhandler.common.WireFormat;
 import javaslang.control.Try;
 import rx.Observable;
 
 import javax.inject.Inject;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.stream.Collectors;
-
-import static io.clickhandler.action.SQSWorkerReceiver.MAX_MESSAGES_PER_LOOP;
 
 /**
  *
  */
-public class SQSWorkerSender extends AbstractIdleService implements WorkerSender {
+public class SQSSender extends AbstractIdleService implements WorkerSender {
     private final LinkedBlockingDeque<WorkerRequest> queue = new LinkedBlockingDeque<>();
 
     private AmazonSQSClient sqsClient;
     private SendThread[] sendThreads;
+    private int batchSize = 10;
+    private String queueUrl;
 
     @Inject
-    public SQSWorkerSender() {
+    public SQSSender() {
     }
 
     public void setSqsClient(AmazonSQSClient sqsClient) {
         this.sqsClient = sqsClient;
+    }
+
+    public void setQueueUrl(String queueUrl) {
+        this.queueUrl = queueUrl;
     }
 
     @Override
@@ -56,6 +59,7 @@ public class SQSWorkerSender extends AbstractIdleService implements WorkerSender
             .map($ -> $.entry).collect(Collectors.toList());
 
         final SendMessageBatchRequest request = new SendMessageBatchRequest()
+            .withQueueUrl(queueUrl)
             .withEntries(entries);
 
         try {
@@ -115,16 +119,23 @@ public class SQSWorkerSender extends AbstractIdleService implements WorkerSender
                         if (workerRequest == null)
                             break;
 
+                        final Map<String, MessageAttributeValue> attributes = new HashMap<>(1);
+                        attributes.put(
+                            SQSService.ATTRIBUTE_TYPE,
+                            new MessageAttributeValue().withStringValue(workerRequest.actionProvider.getType())
+                        );
+
                         final String id = Integer.toString(batch.size());
                         batch.put(id, new Entry(
                             workerRequest,
                             new SendMessageBatchRequestEntry()
                                 .withId(id)
-                                .withDelaySeconds(workerRequest.delaySeconds)
-                                .withMessageBody(workerRequest.payload)
+                                .withMessageAttributes(attributes)
+                                .withDelaySeconds(workerRequest.delaySeconds > 0 ? workerRequest.delaySeconds : null)
+                                .withMessageBody(WireFormat.stringify(workerRequest.payload))
                         ));
 
-                        if (batch.size() == MAX_MESSAGES_PER_LOOP) {
+                        if (batch.size() == batchSize) {
                             send(batch);
                             batch.clear();
                         }

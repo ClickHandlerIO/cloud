@@ -9,13 +9,15 @@ import io.Io_Locator;
 import io.clickhandler.cloud.cluster.HazelcastProvider;
 import io.vertx.rxjava.core.Vertx;
 
+import javax.annotation.Nullable;
 import javax.inject.Singleton;
 
 /**
  *
  */
 public class Main {
-    public static void main(String[] args) {
+    static final Vertx vertx = Vertx.vertx();
+    public static void main(String[] args) throws Throwable {
 
 //        Observable<String> observable = actions().myAsyncAction().execute("HI");
 //        observable.subscribe(result -> {
@@ -23,6 +25,10 @@ public class Main {
 //        });
 
         actions().register();
+
+        WireUp.instance.actionManager().startAsync().awaitRunning();
+
+        Thread.sleep(5000000);
 
 //        actions().myAsyncAction()
 //            .execute("Bye")
@@ -41,6 +47,8 @@ public class Main {
         Io_Locator locator();
 
         Action_LocatorRoot actions();
+
+        ActionManager actionManager();
     }
 
     @Module
@@ -51,9 +59,15 @@ public class Main {
         }
 
         @Provides
+        @Nullable
+        Void provideVoid() {
+            return null;
+        }
+
+        @Provides
         @Singleton
         Vertx vertx() {
-            return Vertx.vertx();
+            return vertx;
         }
 
         @Provides
@@ -66,6 +80,19 @@ public class Main {
         @Singleton
         HazelcastInstance hazelcast() {
             return hazelcastProvider().get();
+        }
+
+//        @Provides
+//        @Singleton
+//        WorkerService workerService(SQSService sqsService) {
+//            sqsService.setSqsClient(new AmazonSQSClient());
+//            return sqsService;
+//        }
+
+        @Provides
+        @Singleton
+        WorkerService workerService(LocalWorkerService workerService) {
+            return workerService;
         }
     }
 }

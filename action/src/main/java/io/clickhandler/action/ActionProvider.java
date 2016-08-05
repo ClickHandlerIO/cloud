@@ -6,6 +6,7 @@ import io.vertx.rxjava.core.Vertx;
 import javaslang.control.Try;
 import rx.Observable;
 
+import javax.annotation.Nullable;
 import javax.inject.Inject;
 import javax.inject.Provider;
 
@@ -34,6 +35,9 @@ public class ActionProvider<A, IN, OUT> {
     private boolean executionTimeoutEnabled;
     private long timeoutMillis;
     private int maxConcurrentRequests;
+
+    private boolean inSet;
+    private boolean outSet;
 
     @Inject
     public ActionProvider() {
@@ -82,11 +86,13 @@ public class ActionProvider<A, IN, OUT> {
     }
 
     @Inject
-    void setInProvider(Provider<IN> inProvider) {
+    void setInProvider(@Nullable Provider<IN> inProvider) {
         this.inProvider = inProvider;
-        this.inClass = (Class<IN>) inProvider.get().getClass();
+        this.inSet = true;
+        final IN in = inProvider != null ? inProvider.get() : null;
+        this.inClass = in != null ? (Class<IN>) in.getClass() : null;
 
-        if (actionProvider != null && outProvider != null) {
+        if (actionProvider != null && outSet) {
             init();
         }
     }
@@ -96,11 +102,13 @@ public class ActionProvider<A, IN, OUT> {
     }
 
     @Inject
-    void setOutProvider(Provider<OUT> outProvider) {
+    void setOutProvider(@Nullable Provider<OUT> outProvider) {
         this.outProvider = outProvider;
-        this.outClass = (Class<OUT>) outProvider.get().getClass();
+        this.outSet = true;
+        final OUT out = outProvider != null ? outProvider.get() : null;
+        this.outClass = out != null ? (Class<OUT>) out.getClass() : null;
 
-        if (actionProvider != null && inProvider != null) {
+        if (actionProvider != null && inSet) {
             init();
         }
     }

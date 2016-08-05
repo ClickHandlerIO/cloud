@@ -19,30 +19,30 @@ import java.util.Map;
  */
 @Singleton
 public class ActionManager extends AbstractIdleService {
-    private final static Logger log = LoggerFactory.getLogger(ActionManager.class);
+    private final static Logger LOG = LoggerFactory.getLogger(ActionManager.class);
     private final static Map<Object, ActionProvider<?, ?, ?>> actionProviderMap = new HashMap<>();
     private final static Map<Object, RemoteActionProvider<?, ?, ?>> remoteActionMap = new HashMap<>();
     private final static Map<Object, InternalActionProvider<?, ?, ?>> internalActionMap = new HashMap<>();
     private final static Map<Object, WorkerActionProvider<?, ?>> workerActionMap = new HashMap<>();
     private final static Map<Object, ScheduledActionProvider<?>> scheduledActionMap = new HashMap<>();
 
+    private static ActionManagerConfig config = new ActionManagerConfig();
+
     @Inject
     Vertx vertx;
     @Inject
     HazelcastProvider hazelcastProvider;
+    @Inject
+    WorkerService workerService;
+    @Inject
+    ScheduledActionManager scheduledActionManager;
 
     @Inject
-    public ActionManager() {
+    ActionManager() {
     }
 
-    @Override
-    protected void startUp() throws Exception {
-
-    }
-
-    @Override
-    protected void shutDown() throws Exception {
-
+    public static ActionManagerConfig getConfig() {
+        return config;
     }
 
     public static Map<Object, ActionProvider<?, ?, ?>> getActionProviderMap() {
@@ -61,12 +61,24 @@ public class ActionManager extends AbstractIdleService {
         return Collections.unmodifiableMap(workerActionMap);
     }
 
-    public static WorkerActionProvider<? , ?> getWorkerAction(String name) {
-        return workerActionMap.get(name);
-    }
-
     public static Map<Object, ScheduledActionProvider<?>> getScheduledActionMap() {
         return Collections.unmodifiableMap(scheduledActionMap);
+    }
+
+    public static void setExecutionTimeoutEnabled(boolean enabled) {
+        actionProviderMap.forEach((k, v) -> v.setExecutionTimeoutEnabled(enabled));
+    }
+
+    @Override
+    protected void startUp() throws Exception {
+        workerService.startAsync().awaitRunning();
+        scheduledActionManager.startAsync().awaitRunning();
+    }
+
+    @Override
+    protected void shutDown() throws Exception {
+        scheduledActionManager.stopAsync().awaitTerminated();
+        workerService.stopAsync().awaitTerminated();
     }
 
     synchronized void register(Map<Object, ActionProvider<?, ?, ?>> map) {
@@ -91,13 +103,11 @@ public class ActionManager extends AbstractIdleService {
             } else if (value instanceof InternalActionProvider) {
                 internalActionMap.put(key, (InternalActionProvider<?, ?, ?>) value);
             } else if (value instanceof WorkerActionProvider) {
-                workerActionMap.put(key, (WorkerActionProvider<?, ?>)value);
-                workerActionMap.put(value.getActionClass().getCanonicalName(), (WorkerActionProvider<?, ?>)value);
+                workerActionMap.put(key, (WorkerActionProvider<?, ?>) value);
+                workerActionMap.put(value.getActionClass().getCanonicalName(), (WorkerActionProvider<?, ?>) value);
+            } else if (value instanceof ScheduledActionProvider) {
+                scheduledActionMap.put(key, (ScheduledActionProvider<?>)value);
             }
         });
-    }
-
-    public void setExecutionTimeoutEnabled(boolean enabled) {
-        actionProviderMap.forEach((k, v) -> v.setExecutionTimeoutEnabled(enabled));
     }
 }

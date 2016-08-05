@@ -5,9 +5,12 @@ import com.google.common.util.concurrent.AbstractIdleService;
 import com.google.common.util.concurrent.AbstractScheduledService;
 import io.vertx.rxjava.core.Vertx;
 import io.vertx.rxjava.core.shareddata.Lock;
+import javaslang.control.Try;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -17,8 +20,9 @@ import java.util.concurrent.TimeUnit;
 public class ScheduledActionManager extends AbstractIdleService {
     @Inject
     Vertx vertx;
-    @Inject
-    ActionManager actionManager;
+
+    private List<ClusterSingleton> clusterSingletons = new ArrayList<>();
+    private List<NodeSingleton> nodeSingletons = new ArrayList<>();
 
     @Inject
     ScheduledActionManager() {
@@ -26,17 +30,30 @@ public class ScheduledActionManager extends AbstractIdleService {
 
     @Override
     protected void startUp() throws Exception {
+        ActionManager.getScheduledActionMap().values().forEach(scheduledActionProvider -> {
+            scheduledActionProvider.init();
+            switch (scheduledActionProvider.getScheduledAction().type()) {
+                case CLUSTER_SINGLETON:
+                    clusterSingletons.add(new ClusterSingleton(scheduledActionProvider));
+                    break;
+                case NODE_SINGLETON:
+                    nodeSingletons.add(new NodeSingleton(scheduledActionProvider));
+                    break;
+            }
+        });
 
+        nodeSingletons.forEach(value -> value.startAsync().awaitRunning());
+        clusterSingletons.forEach(value -> value.startAsync().awaitRunning());
     }
 
     @Override
     protected void shutDown() throws Exception {
-
+        clusterSingletons.forEach(value -> value.stopAsync().awaitTerminated());
+        nodeSingletons.forEach(value -> value.stopAsync().awaitTerminated());
     }
 
     private class ClusterSingleton extends AbstractExecutionThreadService {
         private final ScheduledActionProvider provider;
-        private Lock lock;
 
         public ClusterSingleton(ScheduledActionProvider provider) {
             this.provider = provider;
@@ -44,7 +61,7 @@ public class ScheduledActionManager extends AbstractIdleService {
 
         @Override
         protected void startUp() throws Exception {
-
+            System.err.println("starting...");
         }
 
         @Override
@@ -58,14 +75,18 @@ public class ScheduledActionManager extends AbstractIdleService {
 
                     try {
                         while (true) {
-                            provider.observe(new Object()).subscribe(
-                                r -> {
-                                },
-                                e -> {
-                                }
-                            );
+                            final long start = System.currentTimeMillis();
 
-                            Thread.sleep(provider.getScheduledAction().delaySeconds() * 1000);
+                            try {
+                                provider.observe(null).toBlocking().single();
+                            } catch (Throwable e) {
+                                // Ignore.
+                                e.printStackTrace();
+                            }
+
+                            final long elapsed = System.currentTimeMillis() - start;
+                            Try.run(() -> Thread.sleep(TimeUnit.SECONDS
+                                .toMillis(provider.getScheduledAction().intervalSeconds()) - elapsed));
                         }
                     } finally {
                         lock.release();
@@ -87,12 +108,7 @@ public class ScheduledActionManager extends AbstractIdleService {
         @Override
         protected void runOneIteration() throws Exception {
             try {
-                provider.observe(new Object()).subscribe(
-                    r -> {
-                    },
-                    e -> {
-                    }
-                );
+                provider.observe(new Object()).toBlocking().single();
             } catch (Throwable e) {
                 // Ignore.
             }
@@ -100,7 +116,7 @@ public class ScheduledActionManager extends AbstractIdleService {
 
         @Override
         protected Scheduler scheduler() {
-            return Scheduler.newFixedDelaySchedule(0, provider.getScheduledAction().delaySeconds(), TimeUnit.SECONDS);
+            return Scheduler.newFixedRateSchedule(0, provider.getScheduledAction().intervalSeconds(), TimeUnit.SECONDS);
         }
     }
 }
