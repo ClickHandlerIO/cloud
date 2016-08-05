@@ -54,6 +54,11 @@ public class Main {
     @Module
     public static class M {
         @Provides
+        Boolean bool() {
+            return Boolean.FALSE;
+        }
+
+        @Provides
         String string() {
             return "";
         }

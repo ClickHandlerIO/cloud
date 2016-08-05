@@ -13,4 +13,8 @@ public abstract class AbstractScheduledAction extends AbstractObservableAction<V
     }
 
     protected abstract void start();
+
+    protected void done() {
+        respond(null);
+    }
 }

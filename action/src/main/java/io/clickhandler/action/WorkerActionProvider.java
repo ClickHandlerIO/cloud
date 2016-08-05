@@ -1,5 +1,6 @@
 package io.clickhandler.action;
 
+import javaslang.control.Try;
 import rx.Observable;
 
 import javax.inject.Inject;
@@ -33,6 +34,17 @@ public class WorkerActionProvider<A extends Action<IN, Boolean>, IN> extends Act
         workerAction = getActionClass().getAnnotation(WorkerAction.class);
         type = getActionClass().getCanonicalName();
         super.init();
+    }
+
+    public void send(IN request, Func.Run1<Boolean> callback) {
+        send(request, 0, callback);
+    }
+
+    public void send(IN request, int delaySeconds, Func.Run1<Boolean> callback) {
+        send(request, delaySeconds).subscribe(
+            r -> Try.run(() -> callback.run(r)),
+            e -> Try.run(() -> callback.run(false))
+        );
     }
 
     public Observable<Boolean> send(IN request) {

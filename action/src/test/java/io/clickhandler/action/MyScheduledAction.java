@@ -5,7 +5,7 @@ import javax.inject.Inject;
 /**
  *
  */
-@ActionConfig(maxExecutionMillis = 30000, maxConcurrentRequests = 1)
+@ActionConfig(maxExecutionMillis = 10000, maxConcurrentRequests = 1)
 @ScheduledAction(intervalSeconds = 1, type = ScheduledActionType.CLUSTER_SINGLETON)
 public class MyScheduledAction extends AbstractScheduledAction {
     @Inject
@@ -14,7 +14,7 @@ public class MyScheduledAction extends AbstractScheduledAction {
 
     @Override
     protected void start() {
-        System.out.println(System.currentTimeMillis());
-        respond(null);
+        Main.WireUp.instance.actions().io().clickhandler().action().myWorker()
+            .send(new MyWorker.Request(), success -> done());
     }
 }

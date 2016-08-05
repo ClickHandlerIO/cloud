@@ -100,47 +100,6 @@ public abstract class AbstractObservableAction<IN, OUT>
 
     /**
      * @param subscriber
-     * @param e
-     */
-    protected void error(Subscriber<? super OUT> subscriber, Throwable e) {
-        try {
-            if (!subscriber.isUnsubscribed()) {
-                subscriber.onError(e);
-            }
-        } catch (Exception e1) {
-            subscriber.onError(e);
-        }
-    }
-
-    /**
-     * @param subscriber
-     * @param response
-     */
-    protected void next(Subscriber<? super OUT> subscriber, OUT response) {
-        try {
-            if (!subscriber.isUnsubscribed()) {
-                subscriber.onNext(response);
-            }
-        } catch (Exception e) {
-            subscriber.onError(e);
-        }
-    }
-
-    /**
-     * @param subscriber
-     */
-    protected void complete(Subscriber<? super OUT> subscriber) {
-        try {
-            if (!subscriber.isUnsubscribed()) {
-                subscriber.onCompleted();
-            }
-        } catch (Exception e) {
-            subscriber.onError(e);
-        }
-    }
-
-    /**
-     * @param subscriber
      * @param response
      */
     protected void complete(Subscriber<? super OUT> subscriber, OUT response) {
