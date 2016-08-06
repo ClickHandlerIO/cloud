@@ -3,9 +3,13 @@ package io.clickhandler.action;
 import com.google.common.util.concurrent.AbstractExecutionThreadService;
 import com.google.common.util.concurrent.AbstractIdleService;
 import com.google.common.util.concurrent.AbstractScheduledService;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.core.ILock;
+import io.clickhandler.cloud.cluster.HazelcastProvider;
 import io.vertx.rxjava.core.Vertx;
-import io.vertx.rxjava.core.shareddata.Lock;
 import javaslang.control.Try;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -18,11 +22,14 @@ import java.util.concurrent.TimeUnit;
  */
 @Singleton
 public class ScheduledActionManager extends AbstractIdleService {
+    private static final Logger LOG = LoggerFactory.getLogger(ScheduledActionManager.class);
+    private final List<ClusterSingleton> clusterSingletons = new ArrayList<>();
+    private final List<NodeSingleton> nodeSingletons = new ArrayList<>();
     @Inject
     Vertx vertx;
-
-    private List<ClusterSingleton> clusterSingletons = new ArrayList<>();
-    private List<NodeSingleton> nodeSingletons = new ArrayList<>();
+    @Inject
+    HazelcastProvider hazelcastProvider;
+    HazelcastInstance hazelcastInstance;
 
     @Inject
     ScheduledActionManager() {
@@ -30,6 +37,7 @@ public class ScheduledActionManager extends AbstractIdleService {
 
     @Override
     protected void startUp() throws Exception {
+        hazelcastInstance = hazelcastProvider != null ? hazelcastProvider.get() : null;
         ActionManager.getScheduledActionMap().values().forEach(scheduledActionProvider -> {
             scheduledActionProvider.init();
             switch (scheduledActionProvider.getScheduledAction().type()) {
@@ -52,52 +60,71 @@ public class ScheduledActionManager extends AbstractIdleService {
         nodeSingletons.forEach(value -> value.stopAsync().awaitTerminated());
     }
 
+    /**
+     *
+     */
     private class ClusterSingleton extends AbstractExecutionThreadService {
         private final ScheduledActionProvider provider;
+        private final int intervalSeconds;
 
         public ClusterSingleton(ScheduledActionProvider provider) {
             this.provider = provider;
+            this.intervalSeconds = provider.getScheduledAction().intervalSeconds();
+
+            if (intervalSeconds < 1) {
+                throw new RuntimeException("ScheduledAction: " + provider.getActionClass().getCanonicalName() + " has an invalid value for intervalSeconds() = " + intervalSeconds);
+            }
         }
 
         @Override
         protected void startUp() throws Exception {
-            System.err.println("starting...");
         }
 
         @Override
         protected void run() throws Exception {
             while (isRunning()) {
                 try {
-                    final Lock lock = vertx.sharedData()
-                        .getLockObservable(provider.getActionClass().getCanonicalName())
-                        .toBlocking()
-                        .single();
-
-                    try {
-                        while (true) {
-                            final long start = System.currentTimeMillis();
-
-                            try {
-                                provider.observe(null).toBlocking().single();
-                            } catch (Throwable e) {
-                                // Ignore.
-                                e.printStackTrace();
-                            }
-
-                            final long elapsed = System.currentTimeMillis() - start;
-                            Try.run(() -> Thread.sleep(TimeUnit.SECONDS
-                                .toMillis(provider.getScheduledAction().intervalSeconds()) - elapsed));
+                    if (hazelcastInstance == null) {
+                        while (isRunning()) {
+                            doRun();
                         }
-                    } finally {
-                        lock.release();
+                    } else {
+                        final ILock lock = hazelcastInstance.getLock(provider.getActionClass().getCanonicalName());
+                        lock.lockInterruptibly();
+                        try {
+                            while (isRunning()) {
+                                doRun();
+                            }
+                        } finally {
+                            lock.unlock();
+                        }
                     }
                 } catch (Throwable e) {
                     // Ignore.
+                    LOG.warn("Failed to get Cluster lock for " + provider.getActionClass().getCanonicalName(), e);
                 }
             }
         }
+
+        private void doRun() {
+            final long start = System.currentTimeMillis();
+            try {
+                provider.observe(null).toBlocking().first();
+            } catch (Throwable e) {
+                LOG.warn(provider.getActionClass().getCanonicalName(), e);
+            }
+
+            final long elapsed = System.currentTimeMillis() - start;
+            final long sleepFor = TimeUnit.SECONDS
+                .toMillis(provider.getScheduledAction().intervalSeconds()) - elapsed;
+            if (sleepFor > 0)
+                Try.run(() -> Thread.sleep(sleepFor));
+        }
     }
 
+    /**
+     *
+     */
     private class NodeSingleton extends AbstractScheduledService {
         private final ScheduledActionProvider provider;
 
@@ -108,9 +135,9 @@ public class ScheduledActionManager extends AbstractIdleService {
         @Override
         protected void runOneIteration() throws Exception {
             try {
-                provider.observe(new Object()).toBlocking().single();
+                provider.observe(new Object()).toBlocking().first();
             } catch (Throwable e) {
-                // Ignore.
+                LOG.warn(provider.getActionClass().getCanonicalName(), e);
             }
         }
 

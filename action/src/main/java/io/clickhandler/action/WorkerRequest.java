@@ -1,5 +1,6 @@
 package io.clickhandler.action;
 
+import io.vertx.rxjava.core.Context;
 import rx.Subscriber;
 
 /**
@@ -8,8 +9,9 @@ import rx.Subscriber;
 public class WorkerRequest {
     public WorkerActionProvider actionProvider;
     public int delaySeconds;
-    public Object payload;
+    public Object request;
     Subscriber<? super Boolean> subscriber;
+    Context ctx;
 
     public WorkerRequest actionProvider(final WorkerActionProvider actionProvider) {
         this.actionProvider = actionProvider;
@@ -21,8 +23,8 @@ public class WorkerRequest {
         return this;
     }
 
-    public WorkerRequest payload(final Object payload) {
-        this.payload = payload;
+    public WorkerRequest request(final Object request) {
+        this.request = request;
         return this;
     }
 }

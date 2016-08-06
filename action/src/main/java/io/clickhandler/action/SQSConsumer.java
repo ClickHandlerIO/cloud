@@ -3,6 +3,7 @@ package io.clickhandler.action;
 import com.amazonaws.services.sqs.AmazonSQSClient;
 import com.amazonaws.services.sqs.model.*;
 import com.google.common.base.Charsets;
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.base.Throwables;
 import com.google.common.hash.Hashing;
@@ -26,13 +27,13 @@ import java.util.stream.Collectors;
 
 /**
  * Processes Worker requests from a single AmazonSQS Queue.
- * Supports parallel receive and delete threads to increase message throughput.
+ * Supports parallel receive and delete threads and utilizes SQS batching to increase message throughput.
+ *
+ *
  */
-public class SQSReceiver extends AbstractIdleService {
+public class SQSConsumer extends AbstractIdleService {
     public static final int VISIBILITY_BUFFER_MILLIS = 5000;
-    private static final Logger LOG = LoggerFactory.getLogger(SQSReceiver.class);
-    @Inject
-    ActionManager actionManager;
+    private static final Logger LOG = LoggerFactory.getLogger(SQSConsumer.class);
     private SQSWorkerConfig config;
     private AmazonSQSClient sqsClient;
     private Semaphore buffered;
@@ -45,20 +46,36 @@ public class SQSReceiver extends AbstractIdleService {
     private Map<String, ActionContext> actionMap;
 
     @Inject
-    public SQSReceiver() {
+    public SQSConsumer() {
     }
 
-    public void setConfig(SQSWorkerConfig config) {
+    /**
+     * @param config
+     */
+    void setConfig(SQSWorkerConfig config) {
+        Preconditions.checkNotNull(config, "SQSWorkerConfig cannot be null");
+        Preconditions.checkArgument(config.batchSize > 0, "SQSWorkerConfig.batchSize must be greater than 0");
+        Preconditions.checkArgument(config.minimumVisibility > 0, "SQSWorkerConfig.minimumVisibility must be greater than 0");
+        if (config.deleteThreads < 1)
+            config.deleteThreads = config.receiveThreads;
+        Preconditions.checkArgument(config.deleteThreads > 0, "SQSWorkerConfig.deleteThreads must be greater than 0");
+        Preconditions.checkArgument(config.receiveThreads > 0, "SQSWorkerConfig.receiveThreads must be greater than 0");
         this.config = config;
-        batchSize = config.batchSize;
-        minimumVisibility = config.minimumVisibility;
+        this.batchSize = config.batchSize;
+        this.minimumVisibility = config.minimumVisibility;
     }
 
-    public void setQueueUrl(String queueUrl) {
+    /**
+     * @param queueUrl
+     */
+    void setQueueUrl(String queueUrl) {
         this.queueUrl = queueUrl;
     }
 
-    public void setSqsClient(AmazonSQSClient sqsClient) {
+    /**
+     * @param sqsClient
+     */
+    void setSqsClient(AmazonSQSClient sqsClient) {
         this.sqsClient = sqsClient;
     }
 
@@ -73,15 +90,15 @@ public class SQSReceiver extends AbstractIdleService {
             .collect(Collectors.toMap(k -> k.actionProvider.getActionClass().getCanonicalName(), v -> v));
 
         // Start Delete threads.
-        deleteThreads = new DeleteThread[config.threads];
-        for (int i = 0; i < config.threads; i++) {
+        deleteThreads = new DeleteThread[config.deleteThreads];
+        for (int i = 0; i < deleteThreads.length; i++) {
             deleteThreads[i] = new DeleteThread();
             deleteThreads[i].startAsync().awaitRunning();
         }
 
         // Start Receive threads.
-        receiveThreads = new ReceiveThread[config.threads];
-        for (int i = 0; i < config.threads; i++) {
+        receiveThreads = new ReceiveThread[config.receiveThreads];
+        for (int i = 0; i < receiveThreads.length; i++) {
             receiveThreads[i] = new ReceiveThread();
             receiveThreads[i].startAsync().awaitRunning();
         }
@@ -103,14 +120,9 @@ public class SQSReceiver extends AbstractIdleService {
             Try.run(() -> thread.stopAsync().awaitTerminated());
         }
 
+        // Clear threads.
         receiveThreads = null;
         deleteThreads = null;
-    }
-
-    private DeleteMessageBatchResult delete(ArrayList<DeleteMessageBatchRequestEntry> batch) {
-        return sqsClient.deleteMessageBatch(new DeleteMessageBatchRequest()
-            .withQueueUrl(queueUrl)
-            .withEntries(batch));
     }
 
     /**
@@ -119,42 +131,64 @@ public class SQSReceiver extends AbstractIdleService {
      */
     private boolean deleteRun(LinkedBlockingDeque<String> queue, boolean take) {
         try {
-            ArrayList<DeleteMessageBatchRequestEntry> batch = new ArrayList<>(10);
-            String receiptHandle;
-            while (true) {
-                receiptHandle = take ? queue.take() : queue.poll();
+            final ArrayList<DeleteMessageBatchRequestEntry> batch = new ArrayList<>(batchSize);
+            final ArrayList<String> takeBatch = new ArrayList<>(batchSize);
+
+            int size = queue.drainTo(takeBatch, batchSize);
+            if (size == 0) {
+                String receiptHandle = take ? queue.take() : queue.poll();
                 if (receiptHandle == null)
-                    break;
+                    return false;
 
-                batch.add(new DeleteMessageBatchRequestEntry(Integer.toString(batch.size()), receiptHandle));
+                takeBatch.add(receiptHandle);
+                if (batchSize > 1)
+                    queue.drainTo(takeBatch, batchSize - 1);
+            }
 
-                if (batch.size() == batchSize) {
-                    delete(batch);
-                    batch.clear();
-                }
+            for (int i = 0; i < takeBatch.size(); i++) {
+                batch.add(new DeleteMessageBatchRequestEntry(Integer.toString(i), takeBatch.get(i)));
             }
 
             if (!batch.isEmpty()) {
-                delete(batch);
+                sqsClient.deleteMessageBatch(new DeleteMessageBatchRequest()
+                    .withQueueUrl(queueUrl)
+                    .withEntries(batch));
                 return true;
             } else {
                 return false;
             }
         } catch (Throwable e) {
-            // Ignore.
+            LOG.error("AmazonSQSClient.deleteMessageBatch() threw an exception", e);
         }
 
         return false;
     }
 
+    /**
+     * Schedules a message to be deleted from SQS.
+     * Uses a consistent hash on the ReceiptHandle to pick a thread.
+     *
+     * @param receiptHandle ReceiptHandle to delete.
+     */
     private void scheduleToDelete(String receiptHandle) {
-        final int index = Hashing.consistentHash(
-            Hashing.adler32().hashString(receiptHandle, Charsets.UTF_8),
-            deleteThreads.length
-        );
-        deleteThreads[index].queue.add(receiptHandle);
+        try {
+            // Do we only have 1 thread?
+            if (deleteThreads.length == 1) {
+                deleteThreads[0].queue.add(receiptHandle);
+                return;
+            }
+            deleteThreads[Hashing.consistentHash(
+                Hashing.adler32().hashString(receiptHandle, Charsets.UTF_8),
+                deleteThreads.length
+            )].queue.add(receiptHandle);
+        } catch (Throwable e) {
+            LOG.error("scheduleToDelete threw an exception", e);
+        }
     }
 
+    /**
+     * Delete threads each have their own queue of ReceiptHandles to delete.
+     */
     private class DeleteThread extends AbstractExecutionThreadService {
         private final LinkedBlockingDeque<String> queue = new LinkedBlockingDeque<>();
 
@@ -170,11 +204,15 @@ public class SQSReceiver extends AbstractIdleService {
                     deleteRun(queue, true);
                 } catch (Throwable e) {
                     // Ignore.
+                    LOG.error("DeleteThread.run threw an exception", e);
                 }
             }
         }
     }
 
+    /**
+     *
+     */
     private class ReceiveThread extends AbstractExecutionThreadService {
         @Override
         protected void run() throws Exception {
@@ -188,9 +226,10 @@ public class SQSReceiver extends AbstractIdleService {
                             return;
                         }
 
+                        // Receive a batch of messages.
                         result = sqsClient.receiveMessage(new ReceiveMessageRequest()
                             .withQueueUrl(queueUrl)
-                            .withWaitTimeSeconds(10)
+                            .withWaitTimeSeconds(20)
                             .withVisibilityTimeout(minimumVisibility)
                             .withMaxNumberOfMessages(batchSize));
                     } catch (Throwable e) {
@@ -198,6 +237,7 @@ public class SQSReceiver extends AbstractIdleService {
                         Throwables.propagate(e);
                     }
 
+                    // Were any messages received?
                     if (result == null || result.getMessages() == null || result.getMessages().isEmpty()) {
                         buffered.release(batchSize);
                         continue;
@@ -220,14 +260,15 @@ public class SQSReceiver extends AbstractIdleService {
                             continue;
                         }
 
+                        // Get action name.
                         final String actionType = Try.of(type::getStringValue).getOrElse("");
-
                         if (actionType == null || actionType.isEmpty()) {
                             buffered.release();
                             scheduleToDelete(message.getReceiptHandle());
                             continue;
                         }
 
+                        // Find ActionContext
                         final ActionContext actionContext = actionMap.get(actionType);
                         if (actionContext == null) {
                             buffered.release();
@@ -235,15 +276,20 @@ public class SQSReceiver extends AbstractIdleService {
                             continue;
                         }
 
+                        // Parse request.
                         final String body = Strings.nullToEmpty(message.getBody());
                         final Object in = body.isEmpty() ? null : WireFormat.parse(
                             actionContext.actionProvider.getInClass(),
                             body
                         );
 
+                        // Create ActionRequest.
                         final ActionRequest request = new ActionRequest(message.getReceiptHandle(), in);
+
+                        // Schedule to Run.
                         int extendBySeconds = actionContext.schedule(request);
 
+                        // Do we need to extend the visibility timeout?
                         if (extendBySeconds > 0) {
                             if (changes == null) {
                                 changes = new ArrayList<>(10);
@@ -262,17 +308,15 @@ public class SQSReceiver extends AbstractIdleService {
                                 .withEntries(changes)
                             );
                     }
-                } catch (InterruptedException e) {
-
                 } catch (Throwable e) {
-
+                    LOG.error("ReceiveThread.run() threw an exception", e);
                 }
             }
         }
     }
 
     /**
-     *
+     * Manages executing one Action type.
      */
     private final class ActionContext {
         private final AtomicInteger running = new AtomicInteger(0);
@@ -312,6 +356,10 @@ public class SQSReceiver extends AbstractIdleService {
             }
         }
 
+        /**
+         * @param request
+         * @return
+         */
         private int schedule(final ActionRequest request) {
             if (backlog != null) {
                 synchronized (this) {
@@ -329,7 +377,12 @@ public class SQSReceiver extends AbstractIdleService {
             return changeVisibilityBy;
         }
 
+        /**
+         * @param request
+         */
         private void run(ActionRequest request) {
+            final long duration = System.currentTimeMillis() - request.created;
+
             actionProvider.observe(request.in).subscribe(
                 r -> {
                     try {
@@ -370,8 +423,10 @@ public class SQSReceiver extends AbstractIdleService {
      *
      */
     private final class ActionRequest {
+        final long created = System.currentTimeMillis();
         final String receiptHandle;
         final Object in;
+        long timeoutAt;
 
         public ActionRequest(String receiptHandle, Object in) {
             this.receiptHandle = receiptHandle;

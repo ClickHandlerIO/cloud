@@ -14,12 +14,12 @@ import java.util.concurrent.TimeUnit;
  *
  */
 @Singleton
-public class LocalWorkerService extends AbstractIdleService implements WorkerService, WorkerSender, WorkerReceiver {
+public class LocalWorkerService extends AbstractIdleService implements WorkerService, WorkerProducer, WorkerConsumer {
     private final LinkedBlockingDeque<WorkerRequest> queue = new LinkedBlockingDeque<>();
     @Inject
     Vertx vertx;
 
-    private final Receiver receiver = new Receiver();
+    private final Consumer consumer = new Consumer();
 
     @Inject
     LocalWorkerService() {
@@ -27,13 +27,13 @@ public class LocalWorkerService extends AbstractIdleService implements WorkerSer
 
     @Override
     protected void startUp() throws Exception {
-        ActionManager.getWorkerActionMap().values().forEach(provider -> provider.setSender(this));
-        receiver.startAsync().awaitRunning();
+        ActionManager.getWorkerActionMap().values().forEach(provider -> provider.setProducer(this));
+        consumer.startAsync().awaitRunning();
     }
 
     @Override
     protected void shutDown() throws Exception {
-        receiver.stopAsync().awaitTerminated();
+        consumer.stopAsync().awaitTerminated();
     }
 
     @Override
@@ -52,7 +52,7 @@ public class LocalWorkerService extends AbstractIdleService implements WorkerSer
         });
     }
 
-    private final class Receiver extends AbstractExecutionThreadService {
+    private final class Consumer extends AbstractExecutionThreadService {
         @Override
         protected void run() throws Exception {
             while (isRunning()) {
@@ -61,7 +61,7 @@ public class LocalWorkerService extends AbstractIdleService implements WorkerSer
                     if (request == null)
                         continue;
 
-                    request.actionProvider.observe(request.payload).subscribe();
+                    request.actionProvider.observe(request.request).subscribe();
                 } catch (Throwable e) {
                     // Ignore.
                 }

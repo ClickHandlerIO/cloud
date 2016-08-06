@@ -2,9 +2,13 @@ package io.clickhandler.action;
 
 import com.amazonaws.services.sqs.AmazonSQSClient;
 import com.amazonaws.services.sqs.model.GetQueueUrlResult;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Multimaps;
 import com.google.common.util.concurrent.AbstractIdleService;
+import io.vertx.rxjava.core.Vertx;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -20,28 +24,39 @@ import java.util.stream.Collectors;
  */
 @Singleton
 public class SQSService extends AbstractIdleService implements WorkerService {
-    public static final String ATTRIBUTE_TYPE = "t";
+    static final String ATTRIBUTE_TYPE = "t";
+    private static final Logger LOG = LoggerFactory.getLogger(SQSService.class);
+
     private final Map<String, QueueContext> queueMap = new HashMap<>();
+    @Inject
+    Vertx vertx;
     private AmazonSQSClient sqsClient;
 
     @Inject
     SQSService() {
     }
 
-    public void setSqsClient(AmazonSQSClient sqsClient) {
+    void setSqsClient(AmazonSQSClient sqsClient) {
         this.sqsClient = sqsClient;
     }
 
     @Override
     protected void startUp() throws Exception {
-        if (sqsClient == null) {
-            throw new RuntimeException("WorkerSQSClientProvider has no mapping.");
-        }
+        Preconditions.checkNotNull(sqsClient, "AmazonSQSClient must be set.");
 
         // Build Queue map.
-        final Multimap<String, WorkerActionProvider> map = Multimaps.newListMultimap(new HashMap<>(), ArrayList::new);
-        ActionManager.getWorkerActionMap().values().forEach(provider -> map.put(provider.getQueueName(), provider));
+        final Multimap<String, WorkerActionProvider> map = Multimaps.newListMultimap(
+            new HashMap<>(), ArrayList::new
+        );
+        ActionManager.getWorkerActionMap().values().forEach(
+            provider -> map.put(provider.getQueueName(), provider)
+        );
+        if (map.isEmpty()) {
+            LOG.warn("No WorkerActions were registered.");
+            return;
+        }
 
+        // Get worker configs.
         final ActionManagerConfig actionManagerConfig = ActionManager.getConfig();
         List<WorkerConfig> workerConfigList = actionManagerConfig.workerConfigs;
         if (workerConfigList == null)
@@ -52,23 +67,30 @@ public class SQSService extends AbstractIdleService implements WorkerService {
         map.asMap().entrySet().forEach(entry -> {
             WorkerConfig workerConfig = workerConfigs.get(entry.getKey());
             if (workerConfig == null) {
+                LOG.warn("WorkerConfig for Queue '" + entry.getKey() + "' was not found. Creating a default one.");
                 workerConfig = new WorkerConfig().name(entry.getKey());
             }
             SQSWorkerConfig sqsWorkerConfig = workerConfig.sqsConfig;
             if (sqsWorkerConfig == null) {
-                sqsWorkerConfig = new SQSWorkerConfig();
+                LOG.warn("SQSWorkerConfig for Queue '" + entry.getKey() + "' was not found. Creating a default one.");
+                workerConfig.sqsConfig = sqsWorkerConfig = new SQSWorkerConfig();
             }
 
+            // Get QueueURL from AWS.
             final GetQueueUrlResult result = sqsClient.getQueueUrl(entry.getKey());
             final String queueUrl = result.getQueueUrl();
 
-            final SQSSender sender = new SQSSender();
+            // Create producer.
+            final SQSProducer sender = new SQSProducer(vertx);
             sender.setQueueUrl(queueUrl);
             sender.setSqsClient(sqsClient);
+            sender.setConfig(sqsWorkerConfig);
 
-            final SQSReceiver receiver;
+            final SQSConsumer receiver;
+            // Is this node configured to be a "Worker"?
             if (actionManagerConfig.worker) {
-                receiver = new SQSReceiver();
+                // Create a SQSConsumer to receive Worker Requests.
+                receiver = new SQSConsumer();
                 receiver.setQueueUrl(queueUrl);
                 receiver.setSqsClient(sqsClient);
                 receiver.setConfig(sqsWorkerConfig);
@@ -78,7 +100,7 @@ public class SQSService extends AbstractIdleService implements WorkerService {
 
             if (entry.getValue() != null) {
                 for (WorkerActionProvider actionProvider : entry.getValue()) {
-                    actionProvider.setSender(sender);
+                    actionProvider.setProducer(sender);
                 }
             }
 
@@ -104,10 +126,10 @@ public class SQSService extends AbstractIdleService implements WorkerService {
     }
 
     private final class QueueContext {
-        final SQSSender sender;
-        final SQSReceiver receiver;
+        final SQSProducer sender;
+        final SQSConsumer receiver;
 
-        public QueueContext(SQSSender sender, SQSReceiver receiver) {
+        public QueueContext(SQSProducer sender, SQSConsumer receiver) {
             this.sender = sender;
             this.receiver = receiver;
         }

@@ -6,6 +6,6 @@ import rx.Observable;
 /**
  *
  */
-public interface WorkerSender extends Service {
+public interface WorkerProducer extends Service {
     Observable<Boolean> send(WorkerRequest request);
 }

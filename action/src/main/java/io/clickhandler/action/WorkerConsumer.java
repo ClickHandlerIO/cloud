@@ -5,6 +5,6 @@ import com.google.common.util.concurrent.Service;
 /**
  *
  */
-public interface WorkerReceiver extends Service {
+public interface WorkerConsumer extends Service {
 
 }
