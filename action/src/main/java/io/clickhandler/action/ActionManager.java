@@ -69,19 +69,7 @@ public class ActionManager extends AbstractIdleService {
         actionProviderMap.forEach((k, v) -> v.setExecutionTimeoutEnabled(enabled));
     }
 
-    @Override
-    protected void startUp() throws Exception {
-        workerService.startAsync().awaitRunning();
-        scheduledActionManager.startAsync().awaitRunning();
-    }
-
-    @Override
-    protected void shutDown() throws Exception {
-        scheduledActionManager.stopAsync().awaitTerminated();
-        workerService.stopAsync().awaitTerminated();
-    }
-
-    synchronized void register(Map<Object, ActionProvider<?, ?, ?>> map) {
+    static synchronized void register(Map<Object, ActionProvider<?, ?, ?>> map) {
         if (map == null || map.isEmpty()) {
             return;
         }
@@ -96,7 +84,9 @@ public class ActionManager extends AbstractIdleService {
                 if (key instanceof String) {
                     if (remoteActionMap.containsKey(key)) {
                         final RemoteActionProvider actionProvider = remoteActionMap.get(key);
-                        throw new RuntimeException("Duplicate RemoteAction Entry for key [" + key + "]. " + value.getActionClass().getCanonicalName() + " and " + actionProvider.getActionClass().getCanonicalName());
+                        throw new RuntimeException("Duplicate RemoteAction Entry for key [" + key + "]. " +
+                            value.getActionClass().getCanonicalName() + " and " +
+                            actionProvider.getActionClass().getCanonicalName());
                     }
                 }
                 remoteActionMap.put(key, (RemoteActionProvider<?, ?, ?>) value);
@@ -106,8 +96,20 @@ public class ActionManager extends AbstractIdleService {
                 workerActionMap.put(key, (WorkerActionProvider<?, ?>) value);
                 workerActionMap.put(value.getActionClass().getCanonicalName(), (WorkerActionProvider<?, ?>) value);
             } else if (value instanceof ScheduledActionProvider) {
-                scheduledActionMap.put(key, (ScheduledActionProvider<?>)value);
+                scheduledActionMap.put(key, (ScheduledActionProvider<?>) value);
             }
         });
+    }
+
+    @Override
+    protected void startUp() throws Exception {
+        workerService.startAsync().awaitRunning();
+        scheduledActionManager.startAsync().awaitRunning();
+    }
+
+    @Override
+    protected void shutDown() throws Exception {
+        scheduledActionManager.stopAsync().awaitTerminated();
+        workerService.stopAsync().awaitTerminated();
     }
 }

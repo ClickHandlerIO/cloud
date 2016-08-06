@@ -28,8 +28,8 @@ import java.util.stream.Collectors;
 /**
  * Processes Worker requests from a single AmazonSQS Queue.
  * Supports parallel receive and delete threads and utilizes SQS batching to increase message throughput.
- *
- *
+ * <p>
+ * Reliable
  */
 public class SQSConsumer extends AbstractIdleService {
     public static final int VISIBILITY_BUFFER_MILLIS = 5000;
@@ -317,6 +317,10 @@ public class SQSConsumer extends AbstractIdleService {
 
     /**
      * Manages executing one Action type.
+     * <p>
+     * If the Action has maxConcurrentRequests set, then a backlog is created
+     * and the SQS message visibility may be extended by a configurable multiple
+     * of the maxExecutionMillis that's configured for the Action type.
      */
     private final class ActionContext {
         private final AtomicInteger running = new AtomicInteger(0);
@@ -409,10 +413,14 @@ public class SQSConsumer extends AbstractIdleService {
                 },
                 e -> {
                     try {
-                        // Do not
-                        buffered.release();
+                        LOG.warn("Action [" + actionProvider.getName() + "] threw an exception. Placed back on the Queue.", e);
                     } finally {
-                        running.decrementAndGet();
+                        try {
+                            // Do not
+                            buffered.release();
+                        } finally {
+                            running.decrementAndGet();
+                        }
                     }
                 }
             );

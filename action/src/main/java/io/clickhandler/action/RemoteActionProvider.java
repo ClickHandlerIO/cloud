@@ -1,5 +1,6 @@
 package io.clickhandler.action;
 
+import io.clickhandler.common.Func;
 import rx.Observable;
 
 import javax.inject.Inject;

@@ -1,4 +1,4 @@
-package io.clickhandler.action;
+package io.clickhandler.common;
 
 /**
  *

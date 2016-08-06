@@ -41,9 +41,10 @@ public class SQSWorkerConfig {
      * @ActionConfig annotation.
      */
     @JsonProperty
-    public int minimumVisibility = 30;
+    public int minimumVisibility = 45;
     /**
-     *
+     * The amount of extra visibility time to give an Action when the
+     * backlog for that particular Action type is full.
      */
     @JsonProperty
     public double maxVisibilityMultiple = 2.0;
@@ -99,6 +100,16 @@ public class SQSWorkerConfig {
      */
     public SQSWorkerConfig minimumVisibility(final int minimumVisibility) {
         this.minimumVisibility = minimumVisibility;
+        return this;
+    }
+
+    /**
+     *
+     * @param maxVisibilityMultiple
+     * @return
+     */
+    public SQSWorkerConfig maxVisibilityMultiple(final double maxVisibilityMultiple) {
+        this.maxVisibilityMultiple = maxVisibilityMultiple;
         return this;
     }
 }

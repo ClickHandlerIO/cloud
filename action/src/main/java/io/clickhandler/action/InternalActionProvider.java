@@ -1,5 +1,6 @@
 package io.clickhandler.action;
 
+import io.clickhandler.common.Func;
 import rx.Observable;
 
 import javax.inject.Inject;
@@ -14,6 +15,10 @@ public class InternalActionProvider<A extends Action<IN, OUT>, IN, OUT> extends 
 
     @Inject
     public InternalActionProvider() {
+    }
+
+    public InternalAction getInternalAction() {
+        return internalAction;
     }
 
     @Override

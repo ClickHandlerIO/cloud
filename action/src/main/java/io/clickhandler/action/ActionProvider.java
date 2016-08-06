@@ -1,6 +1,7 @@
 package io.clickhandler.action;
 
 import com.netflix.hystrix.*;
+import io.clickhandler.common.Func;
 import io.vertx.core.Context;
 import io.vertx.rxjava.core.Vertx;
 import javaslang.control.Try;

@@ -1,6 +1,7 @@
 package io.clickhandler.action;
 
 import com.google.common.base.Preconditions;
+import io.clickhandler.common.Func;
 import javaslang.control.Try;
 import rx.Observable;
 

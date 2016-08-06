@@ -1,6 +1,7 @@
 package io.clickhandler.action;
 
 import com.netflix.hystrix.HystrixObservableCommand;
+import io.clickhandler.common.Func;
 import io.vertx.core.Context;
 import io.vertx.core.Vertx;
 import rx.Observable;

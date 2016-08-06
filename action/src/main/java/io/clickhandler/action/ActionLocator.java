@@ -11,10 +11,13 @@ import java.util.Map;
 /**
  *
  */
+@SuppressWarnings("all")
 public abstract class ActionLocator {
     protected final List<ActionLocator> children = new ArrayList<>();
     private final Map<Object, RemoteActionProvider<?, ?, ?>> remoteActionMap = new HashMap<>();
     private final Map<Object, InternalActionProvider<?, ?, ?>> internalActionMap = new HashMap<>();
+    private final Map<Object, WorkerActionProvider<?, ?>> workerActionMap = new HashMap<>();
+    private final Map<Object, ScheduledActionProvider<?>> scheduledActionMap = new HashMap<>();
     protected Map<Object, ActionProvider<?, ?, ?>> actionMap = new HashMap<>();
     private ActionManager actionManager;
     private boolean inited;
@@ -30,6 +33,14 @@ public abstract class ActionLocator {
 
     public Map<Object, InternalActionProvider<?, ?, ?>> getInternalActionMap() {
         return ImmutableMap.copyOf(internalActionMap);
+    }
+
+    public Map<Object, WorkerActionProvider<?, ?>> getWorkerActionMap() {
+        return ImmutableMap.copyOf(workerActionMap);
+    }
+
+    public Map<Object, ScheduledActionProvider<?>> getScheduledActionMap() {
+        return ImmutableMap.copyOf(scheduledActionMap);
     }
 
     public Map<Object, ActionProvider<?, ?, ?>> getActionMap() {
@@ -130,17 +141,21 @@ public abstract class ActionLocator {
             if (value instanceof RemoteActionProvider) {
                 if (remoteActionMap.containsKey(key)) {
                     final RemoteActionProvider actionProvider = remoteActionMap.get(key);
-                    throw new RuntimeException("Duplicate RemoteAction Entry for key [" + key + "]. " + value.getActionClass().getCanonicalName() + " and " + actionProvider.getActionClass().getCanonicalName());
+                    throw new RuntimeException("Duplicate RemoteAction Entry for key [" + key + "]. " +
+                        value.getActionClass().getCanonicalName() + " and " + actionProvider.getActionClass().getCanonicalName());
                 }
                 remoteActionMap.put(key, (RemoteActionProvider<?, ?, ?>) value);
             } else if (value instanceof InternalActionProvider) {
                 internalActionMap.put(key, (InternalActionProvider<?, ?, ?>) value);
+            } else if (value instanceof WorkerActionProvider) {
+                workerActionMap.put(key, (WorkerActionProvider<?, ?>) value);
+                workerActionMap.put(value.getActionClass().getCanonicalName(), (WorkerActionProvider<?, ?>) value);
+            } else if (value instanceof ScheduledActionProvider) {
+                scheduledActionMap.put(key, (ScheduledActionProvider<?>)value);
             }
         });
 
-        if (actionManager != null) {
-            actionManager.register(actionMap);
-        }
+        ActionManager.register(actionMap);
     }
 
     protected void initActions() {
