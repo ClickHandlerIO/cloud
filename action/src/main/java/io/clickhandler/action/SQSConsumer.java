@@ -251,7 +251,7 @@ public class SQSConsumer extends AbstractIdleService {
                     List<ChangeMessageVisibilityBatchRequestEntry> changes = null;
                     for (Message message : result.getMessages()) {
                         final MessageAttributeValue type = message.getMessageAttributes() != null
-                            ? message.getMessageAttributes().get(SQSService.ATTRIBUTE_TYPE)
+                            ? message.getMessageAttributes().get(SQSService.ATTRIBUTE_NAME)
                             : null;
 
                         if (type == null) {
@@ -292,7 +292,7 @@ public class SQSConsumer extends AbstractIdleService {
                         // Do we need to extend the visibility timeout?
                         if (extendBySeconds > 0) {
                             if (changes == null) {
-                                changes = new ArrayList<>(10);
+                                changes = new ArrayList<>(batchSize);
                             }
                             changes.add(new ChangeMessageVisibilityBatchRequestEntry(
                                 Integer.toString(changes.size()),

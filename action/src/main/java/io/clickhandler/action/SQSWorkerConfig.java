@@ -7,22 +7,51 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  */
 public class SQSWorkerConfig {
     /**
+     * Application queue name.
+     */
+    @JsonProperty
+    public String name;
+    /**
+     * AWS SQS queue name
+     */
+    @JsonProperty
+    public String sqsName;
+    /**
+     * AWS region
+     */
+    @JsonProperty
+    public String region;
+    /**
+     *
+     */
+    @JsonProperty
+    public String awsAccessKey;
+    /**
+     *
+     */
+    @JsonProperty
+    public String awsSecretKey;
+    /**
      * Number of messages that can be "In-Flight" at a time.
      */
     @JsonProperty
     public int bufferSize = 1000;
     /**
-     *
+     * Number of sender threads.
      */
     @JsonProperty
     public int sendThreads = 1;
     /**
-     *
+     * Number of ReceiveMessageBatch threads.
+     * <p>
+     * If 0, then this node will not consume messages from this queue.
      */
     @JsonProperty
     public int receiveThreads = 1;
     /**
-     *
+     * Number of DeleteMessageBatch threads.
+     * <p>
+     * If 0, then this node will not consume messages from this queue.
      */
     @JsonProperty
     public int deleteThreads = 1;
@@ -37,8 +66,7 @@ public class SQSWorkerConfig {
      * When pulling off of the queue the initial visibility timeout
      * is set to this number of seconds. The visibility timeout is increased
      * based on a particular Action's "maxExecutionMillis" property in it's
-     *
-     * @ActionConfig annotation.
+     * ActionConfig annotation.
      */
     @JsonProperty
     public int minimumVisibility = 45;
@@ -48,6 +76,33 @@ public class SQSWorkerConfig {
      */
     @JsonProperty
     public double maxVisibilityMultiple = 2.0;
+
+    /**
+     * @param name
+     * @return
+     */
+    public SQSWorkerConfig name(final String name) {
+        this.name = name;
+        return this;
+    }
+
+    /**
+     * @param sqsName
+     * @return
+     */
+    public SQSWorkerConfig sqsName(final String sqsName) {
+        this.sqsName = sqsName;
+        return this;
+    }
+
+    /**
+     * @param region
+     * @return
+     */
+    public SQSWorkerConfig region(final String region) {
+        this.region = region;
+        return this;
+    }
 
     /**
      * @param bufferSize
@@ -104,7 +159,6 @@ public class SQSWorkerConfig {
     }
 
     /**
-     *
      * @param maxVisibilityMultiple
      * @return
      */

@@ -25,8 +25,7 @@ public class ActionManager extends AbstractIdleService {
     private final static Map<Object, InternalActionProvider<?, ?, ?>> internalActionMap = new HashMap<>();
     private final static Map<Object, WorkerActionProvider<?, ?>> workerActionMap = new HashMap<>();
     private final static Map<Object, ScheduledActionProvider<?>> scheduledActionMap = new HashMap<>();
-
-    private static ActionManagerConfig config = new ActionManagerConfig();
+    private static boolean worker = true;
 
     @Inject
     Vertx vertx;
@@ -41,8 +40,12 @@ public class ActionManager extends AbstractIdleService {
     ActionManager() {
     }
 
-    public static ActionManagerConfig getConfig() {
-        return config;
+    public static boolean isWorker() {
+        return worker;
+    }
+
+    public static void setWorker(boolean worker) {
+        ActionManager.worker = worker;
     }
 
     public static Map<Object, ActionProvider<?, ?, ?>> getActionProviderMap() {

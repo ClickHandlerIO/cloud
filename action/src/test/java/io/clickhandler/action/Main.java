@@ -5,7 +5,6 @@ import dagger.Component;
 import dagger.Module;
 import dagger.Provides;
 import io.Action_LocatorRoot;
-import io.Io_Locator;
 import io.clickhandler.cloud.cluster.HazelcastProvider;
 import io.vertx.rxjava.core.Vertx;
 
@@ -43,8 +42,6 @@ public class Main {
     @Component(modules = M.class)
     public interface WireUp {
         WireUp instance = DaggerMain_WireUp.create();
-
-        Io_Locator locator();
 
         Action_LocatorRoot actions();
 

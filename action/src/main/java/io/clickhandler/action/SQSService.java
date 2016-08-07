@@ -1,8 +1,12 @@
 package io.clickhandler.action;
 
+import com.amazonaws.auth.BasicAWSCredentials;
+import com.amazonaws.regions.Region;
+import com.amazonaws.regions.Regions;
 import com.amazonaws.services.sqs.AmazonSQSClient;
 import com.amazonaws.services.sqs.model.GetQueueUrlResult;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Multimaps;
 import com.google.common.util.concurrent.AbstractIdleService;
@@ -24,25 +28,29 @@ import java.util.stream.Collectors;
  */
 @Singleton
 public class SQSService extends AbstractIdleService implements WorkerService {
-    static final String ATTRIBUTE_TYPE = "t";
+    static final String ATTRIBUTE_NAME = "n";
     private static final Logger LOG = LoggerFactory.getLogger(SQSService.class);
 
     private final Map<String, QueueContext> queueMap = new HashMap<>();
+    private final Map<String, AmazonSQSClient> sqsClientMap = new HashMap<>();
     @Inject
     Vertx vertx;
-    private AmazonSQSClient sqsClient;
+    private SQSConfig config;
 
     @Inject
     SQSService() {
     }
 
-    void setSqsClient(AmazonSQSClient sqsClient) {
-        this.sqsClient = sqsClient;
+    /**
+     * @param config
+     */
+    void setConfig(SQSConfig config) {
+        this.config = config;
     }
 
     @Override
     protected void startUp() throws Exception {
-        Preconditions.checkNotNull(sqsClient, "AmazonSQSClient must be set.");
+        Preconditions.checkNotNull(config, "config must be set.");
 
         // Build Queue map.
         final Multimap<String, WorkerActionProvider> map = Multimaps.newListMultimap(
@@ -57,24 +65,67 @@ public class SQSService extends AbstractIdleService implements WorkerService {
         }
 
         // Get worker configs.
-        final ActionManagerConfig actionManagerConfig = ActionManager.getConfig();
-        List<WorkerConfig> workerConfigList = actionManagerConfig.workerConfigs;
+        List<SQSWorkerConfig> workerConfigList = config.workers;
         if (workerConfigList == null)
             workerConfigList = new ArrayList<>(0);
-        final Map<String, WorkerConfig> workerConfigs = workerConfigList.stream()
+        final Map<String, SQSWorkerConfig> workerConfigs = workerConfigList.stream()
             .collect(Collectors.toMap(k -> k.name, Function.identity()));
 
         map.asMap().entrySet().forEach(entry -> {
-            WorkerConfig workerConfig = workerConfigs.get(entry.getKey());
-            if (workerConfig == null) {
-                LOG.warn("WorkerConfig for Queue '" + entry.getKey() + "' was not found. Creating a default one.");
-                workerConfig = new WorkerConfig().name(entry.getKey());
+                SQSWorkerConfig workerConfig = workerConfigs.get(entry.getKey());
+                if (workerConfig == null) {
+                    LOG.warn("SQSWorkerConfig for Queue '" + entry.getKey() + "' was not found.");
+                    return;
+                }
+                final String regionName = Strings.nullToEmpty(workerConfig.region).trim();
+                Preconditions.checkArgument(
+                    regionName.isEmpty(),
+                    "SQSWorkerConfig for Queue '" + entry.getKey() + "' does not have a region specified"
+                );
+
+                final AmazonSQSClient client = sqsClientMap.get(regionName);
+                if (client != null)
+                    return;
+
+                final Regions region = Regions.fromName(regionName);
+                Preconditions.checkNotNull(region,
+                    "SQSWorkerConfig for Queue '" +
+                        entry.getKey() +
+                        "' region '" +
+                        regionName +
+                        "' is not a valid AWS region name."
+                );
+
+                final String awsAccessKey = Strings.nullToEmpty(workerConfig.awsAccessKey).trim();
+                final String awsSecretKey = Strings.nullToEmpty(workerConfig.awsSecretKey).trim();
+
+                final AmazonSQSClient sqsClient;
+                if (awsAccessKey.isEmpty()) {
+                    sqsClient = new AmazonSQSClient();
+                } else {
+                    sqsClient = new AmazonSQSClient(new BasicAWSCredentials(awsAccessKey, awsSecretKey));
+                }
+
+                // Set region.
+                sqsClient.setRegion(Region.getRegion(region));
+
+                // Put in sqsClientMap.
+                sqsClientMap.put(regionName, sqsClient);
             }
-            SQSWorkerConfig sqsWorkerConfig = workerConfig.sqsConfig;
-            if (sqsWorkerConfig == null) {
-                LOG.warn("SQSWorkerConfig for Queue '" + entry.getKey() + "' was not found. Creating a default one.");
-                workerConfig.sqsConfig = sqsWorkerConfig = new SQSWorkerConfig();
-            }
+        );
+
+        map.asMap().entrySet().forEach(entry -> {
+            final SQSWorkerConfig workerConfig = workerConfigs.get(entry.getKey());
+            Preconditions.checkNotNull(
+                workerConfig,
+                "SQSWorkerConfig for Queue '" + entry.getKey() + "' was not found."
+            );
+
+            final AmazonSQSClient sqsClient = sqsClientMap.get(workerConfig.region);
+            Preconditions.checkNotNull(
+                sqsClient,
+                "AmazonSQSClient was not found for region '" + workerConfig.region + "'"
+            );
 
             // Get QueueURL from AWS.
             final GetQueueUrlResult result = sqsClient.getQueueUrl(entry.getKey());
@@ -84,16 +135,16 @@ public class SQSService extends AbstractIdleService implements WorkerService {
             final SQSProducer sender = new SQSProducer(vertx);
             sender.setQueueUrl(queueUrl);
             sender.setSqsClient(sqsClient);
-            sender.setConfig(sqsWorkerConfig);
+            sender.setConfig(workerConfig);
 
             final SQSConsumer receiver;
             // Is this node configured to be a "Worker"?
-            if (actionManagerConfig.worker) {
+            if (ActionManager.isWorker()) {
                 // Create a SQSConsumer to receive Worker Requests.
                 receiver = new SQSConsumer();
                 receiver.setQueueUrl(queueUrl);
                 receiver.setSqsClient(sqsClient);
-                receiver.setConfig(sqsWorkerConfig);
+                receiver.setConfig(workerConfig);
             } else {
                 receiver = null;
             }
@@ -125,6 +176,9 @@ public class SQSService extends AbstractIdleService implements WorkerService {
         });
     }
 
+    /**
+     *
+     */
     private final class QueueContext {
         final SQSProducer sender;
         final SQSConsumer receiver;
