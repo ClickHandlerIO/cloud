@@ -157,11 +157,6 @@ public class ActionProvider<A, IN, OUT> {
             this.executionTimeoutEnabled = true;
         }
 
-        if (actionConfig != null && actionConfig.maxConcurrentRequests() > 0) {
-            maxConcurrentRequests = actionConfig.maxConcurrentRequests();
-            commandPropertiesDefaults.withExecutionIsolationSemaphoreMaxConcurrentRequests(actionConfig.maxConcurrentRequests());
-        }
-
         // Default isolation strategy.
         final ExecutionIsolationStrategy isolationStrategy = actionConfig != null
             ? actionConfig.isolationStrategy()
@@ -195,6 +190,11 @@ public class ActionProvider<A, IN, OUT> {
                     .andCommandPropertiesDefaults(commandPropertiesDefaults)
                     // Set command key
                     .andCommandKey(HystrixCommandKey.Factory.asKey(commandKey(actionConfig, actionClass)));
+
+            if (actionConfig != null && actionConfig.maxConcurrentRequests() > 0) {
+                maxConcurrentRequests = actionConfig.maxConcurrentRequests();
+                commandPropertiesDefaults.withExecutionIsolationSemaphoreMaxConcurrentRequests(actionConfig.maxConcurrentRequests());
+            }
         }
 
         // Is it a blocking action.

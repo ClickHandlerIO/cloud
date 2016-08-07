@@ -284,29 +284,36 @@ public class SQSConsumer extends AbstractIdleService {
                         );
 
                         // Create ActionRequest.
-                        final ActionRequest request = new ActionRequest(message.getReceiptHandle(), in);
+                        final ActionRequest request = actionContext.createRequest(message.getReceiptHandle(), in);
 
-                        // Schedule to Run.
-                        int extendBySeconds = actionContext.schedule(request);
-
-                        // Do we need to extend the visibility timeout?
-                        if (extendBySeconds > 0) {
-                            if (changes == null) {
-                                changes = new ArrayList<>(batchSize);
+                        try {
+                            // Do we need to extend the visibility timeout?
+                            if (request.extendBySeconds > 0) {
+                                if (changes == null) {
+                                    changes = new ArrayList<>(batchSize);
+                                }
+                                changes.add(new ChangeMessageVisibilityBatchRequestEntry(
+                                    Integer.toString(changes.size()),
+                                    message.getReceiptHandle()
+                                ));
                             }
-                            changes.add(new ChangeMessageVisibilityBatchRequestEntry(
-                                Integer.toString(changes.size()),
-                                message.getReceiptHandle()
-                            ));
+                        } finally {
+                            if (!request.queued) {
+                                actionContext.run(request);
+                            }
                         }
                     }
 
                     if (changes != null) {
-                        final ChangeMessageVisibilityBatchResult visibilityBatchResult =
-                            sqsClient.changeMessageVisibilityBatch(new ChangeMessageVisibilityBatchRequest()
-                                .withQueueUrl(queueUrl)
-                                .withEntries(changes)
-                            );
+                        try {
+                            final ChangeMessageVisibilityBatchResult visibilityBatchResult =
+                                sqsClient.changeMessageVisibilityBatch(new ChangeMessageVisibilityBatchRequest()
+                                    .withQueueUrl(queueUrl)
+                                    .withEntries(changes)
+                                );
+                        } catch (Throwable e) {
+                            LOG.error("changeMessageVisibilityBatch threw an exception", e);
+                        }
                     }
                 } catch (Throwable e) {
                     LOG.error("ReceiveThread.run() threw an exception", e);
@@ -361,15 +368,21 @@ public class SQSConsumer extends AbstractIdleService {
         }
 
         /**
-         * @param request
          * @return
          */
-        private int schedule(final ActionRequest request) {
+        private ActionRequest createRequest(final String receiptHandle, Object in) {
             if (backlog != null) {
                 synchronized (this) {
                     if (maxConcurrentRequests > 0 && running.get() >= maxConcurrentRequests) {
+                        final ActionRequest request = new ActionRequest(
+                            receiptHandle,
+                            in,
+                            true,
+                            changeVisibilityByQueue,
+                            actionProvider.getTimeoutMillis()
+                        );
                         backlog.add(request);
-                        return changeVisibilityByQueue;
+                        return request;
                     }
                     running.incrementAndGet();
                 }
@@ -377,15 +390,30 @@ public class SQSConsumer extends AbstractIdleService {
                 running.incrementAndGet();
             }
 
-            run(request);
-            return changeVisibilityBy;
+            return new ActionRequest(
+                receiptHandle,
+                in,
+                false,
+                changeVisibilityBy,
+                actionProvider.getTimeoutMillis()
+            );
         }
 
         /**
          * @param request
          */
         private void run(ActionRequest request) {
-            final long duration = System.currentTimeMillis() - request.created;
+            final long worstCaseTime = System.currentTimeMillis() + actionProvider.getTimeoutMillis();
+
+            // Is there enough time leased to reliably run this Action?
+            if (request.timeoutAt > worstCaseTime + VISIBILITY_BUFFER_MILLIS) {
+                try {
+                    buffered.release();
+                } finally {
+                    dequeue();
+                }
+                return;
+            }
 
             actionProvider.observe(request.in).subscribe(
                 r -> {
@@ -395,35 +423,43 @@ public class SQSConsumer extends AbstractIdleService {
                             scheduleToDelete(request.receiptHandle);
                         }
                     } finally {
-                        buffered.release();
-
-                        if (backlog != null) {
-                            synchronized (this) {
-                                final ActionRequest next = backlog.poll();
-                                if (next != null) {
-                                    run(next);
-                                } else {
-                                    running.decrementAndGet();
-                                }
-                            }
-                        } else {
-                            running.decrementAndGet();
+                        try {
+                            buffered.release();
+                        } finally {
+                            dequeue();
                         }
                     }
                 },
                 e -> {
                     try {
-                        LOG.warn("Action [" + actionProvider.getName() + "] threw an exception. Placed back on the Queue.", e);
+                        LOG.warn(
+                            "Action [" + actionProvider.getName() + "] threw an exception. Placed back on the Queue.",
+                            e
+                        );
                     } finally {
                         try {
-                            // Do not
                             buffered.release();
                         } finally {
-                            running.decrementAndGet();
+                            dequeue();
                         }
                     }
                 }
             );
+        }
+
+        private void dequeue() {
+            if (backlog != null) {
+                synchronized (this) {
+                    final ActionRequest next = backlog.poll();
+                    if (next != null) {
+                        run(next);
+                    } else {
+                        running.decrementAndGet();
+                    }
+                }
+            } else {
+                running.decrementAndGet();
+            }
         }
     }
 
@@ -434,11 +470,20 @@ public class SQSConsumer extends AbstractIdleService {
         final long created = System.currentTimeMillis();
         final String receiptHandle;
         final Object in;
-        long timeoutAt;
+        final boolean queued;
+        final int extendBySeconds;
+        final long timeoutAt;
 
-        public ActionRequest(String receiptHandle, Object in) {
+        public ActionRequest(String receiptHandle,
+                             Object in,
+                             boolean queued,
+                             int extendBySeconds,
+                             long maxExecutionMillis) {
             this.receiptHandle = receiptHandle;
             this.in = in;
+            this.queued = queued;
+            this.extendBySeconds = extendBySeconds;
+            this.timeoutAt = created + maxExecutionMillis;
         }
     }
 }

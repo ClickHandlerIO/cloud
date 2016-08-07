@@ -37,10 +37,9 @@ public @interface ActionConfig {
     int maxExecutionMillis() default 5000;
 
     /**
-     *
      * @return
      */
-    int maxConcurrentRequests() default 0;
+    int maxConcurrentRequests() default 250;
 
     /**
      * @return
@@ -53,7 +52,6 @@ public @interface ActionConfig {
     Class<? extends ActionProvider> provider() default ActionProvider.class;
 
     /**
-     *
      * @return
      */
     ExecutionIsolationStrategy isolationStrategy() default ExecutionIsolationStrategy.SEMAPHORE;
