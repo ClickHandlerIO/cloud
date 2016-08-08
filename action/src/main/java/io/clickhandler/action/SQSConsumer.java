@@ -1,6 +1,6 @@
 package io.clickhandler.action;
 
-import com.amazonaws.services.sqs.AmazonSQSClient;
+import com.amazonaws.services.sqs.AmazonSQS;
 import com.amazonaws.services.sqs.model.*;
 import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
@@ -32,10 +32,10 @@ import java.util.stream.Collectors;
  * Reliable
  */
 public class SQSConsumer extends AbstractIdleService {
-    public static final int VISIBILITY_BUFFER_MILLIS = 5000;
+    public static final int VISIBILITY_BUFFER_MILLIS = 5_000;
     private static final Logger LOG = LoggerFactory.getLogger(SQSConsumer.class);
     private SQSWorkerConfig config;
-    private AmazonSQSClient sqsClient;
+    private AmazonSQS sqsClient;
     private Semaphore buffered;
     private ReceiveThread[] receiveThreads;
     private DeleteThread[] deleteThreads;
@@ -53,13 +53,28 @@ public class SQSConsumer extends AbstractIdleService {
      * @param config
      */
     void setConfig(SQSWorkerConfig config) {
-        Preconditions.checkNotNull(config, "SQSWorkerConfig cannot be null");
-        Preconditions.checkArgument(config.batchSize > 0, "SQSWorkerConfig.batchSize must be greater than 0");
-        Preconditions.checkArgument(config.minimumVisibility > 0, "SQSWorkerConfig.minimumVisibility must be greater than 0");
+        Preconditions.checkNotNull(
+            config,
+            "SQSWorkerConfig cannot be null"
+        );
+        Preconditions.checkArgument(
+            config.batchSize > 0,
+            "SQSWorkerConfig.batchSize must be greater than 0"
+        );
+        Preconditions.checkArgument(
+            config.minimumVisibility > 0,
+            "SQSWorkerConfig.minimumVisibility must be greater than 0"
+        );
         if (config.deleteThreads < 1)
             config.deleteThreads = config.receiveThreads;
-        Preconditions.checkArgument(config.deleteThreads > 0, "SQSWorkerConfig.deleteThreads must be greater than 0");
-        Preconditions.checkArgument(config.receiveThreads > 0, "SQSWorkerConfig.receiveThreads must be greater than 0");
+        Preconditions.checkArgument(
+            config.deleteThreads > 0,
+            "SQSWorkerConfig.deleteThreads must be greater than 0"
+        );
+        Preconditions.checkArgument(
+            config.receiveThreads > 0,
+            "SQSWorkerConfig.receiveThreads must be greater than 0"
+        );
         this.config = config;
         this.batchSize = config.batchSize;
         this.minimumVisibility = config.minimumVisibility;
@@ -75,7 +90,7 @@ public class SQSConsumer extends AbstractIdleService {
     /**
      * @param sqsClient
      */
-    void setSqsClient(AmazonSQSClient sqsClient) {
+    void setSqsClient(AmazonSQS sqsClient) {
         this.sqsClient = sqsClient;
     }
 

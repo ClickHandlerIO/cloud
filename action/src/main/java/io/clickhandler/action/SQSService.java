@@ -1,8 +1,12 @@
 package io.clickhandler.action;
 
+import com.amazon.sqs.javamessaging.AmazonSQSExtendedClient;
+import com.amazon.sqs.javamessaging.ExtendedClientConfiguration;
 import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.regions.Region;
 import com.amazonaws.regions.Regions;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.sqs.AmazonSQSClient;
 import com.amazonaws.services.sqs.model.GetQueueUrlResult;
 import com.google.common.base.Preconditions;
@@ -32,7 +36,8 @@ public class SQSService extends AbstractIdleService implements WorkerService {
     private static final Logger LOG = LoggerFactory.getLogger(SQSService.class);
 
     private final Map<String, QueueContext> queueMap = new HashMap<>();
-    private final Map<String, AmazonSQSClient> sqsClientMap = new HashMap<>();
+    private final Map<String, AmazonSQSExtendedClient> sqsClientMap = new HashMap<>();
+    private final Map<String, AmazonS3> s3ClientMap = new HashMap<>();
     @Inject
     Vertx vertx;
     private SQSConfig config;
@@ -71,6 +76,7 @@ public class SQSService extends AbstractIdleService implements WorkerService {
         final Map<String, SQSWorkerConfig> workerConfigs = workerConfigList.stream()
             .collect(Collectors.toMap(k -> k.name, Function.identity()));
 
+        // Create SQS Clients.
         map.asMap().entrySet().forEach(entry -> {
                 SQSWorkerConfig workerConfig = workerConfigs.get(entry.getKey());
                 if (workerConfig == null) {
@@ -83,7 +89,7 @@ public class SQSService extends AbstractIdleService implements WorkerService {
                     "SQSWorkerConfig for Queue '" + entry.getKey() + "' does not have a region specified"
                 );
 
-                final AmazonSQSClient client = sqsClientMap.get(regionName);
+                AmazonSQSExtendedClient client = sqsClientMap.get(regionName);
                 if (client != null)
                     return;
 
@@ -96,9 +102,36 @@ public class SQSService extends AbstractIdleService implements WorkerService {
                         "' is not a valid AWS region name."
                 );
 
+                final AmazonS3Client s3Client;
+                final String s3AwsAccessKey = Strings.nullToEmpty(workerConfig.s3AccessKey).trim();
+                final String s3AwsSecretKey = Strings.nullToEmpty(workerConfig.s3SecretKey).trim();
+
+                if (s3AwsAccessKey.isEmpty()) {
+                    s3Client = new AmazonS3Client();
+                } else {
+                    s3Client = new AmazonS3Client(new BasicAWSCredentials(s3AwsAccessKey, s3AwsSecretKey));
+                }
+
+                // Put in s3ClientMap.
+                s3ClientMap.put(regionName, s3Client);
+
                 final String awsAccessKey = Strings.nullToEmpty(workerConfig.awsAccessKey).trim();
                 final String awsSecretKey = Strings.nullToEmpty(workerConfig.awsSecretKey).trim();
 
+                final ExtendedClientConfiguration extendedClientConfiguration = new ExtendedClientConfiguration();
+                if (workerConfig.alwaysUseS3) {
+                    extendedClientConfiguration.withAlwaysThroughS3(true);
+                } else if (workerConfig.s3MessageSizeCutoff > 0) {
+                    extendedClientConfiguration.withMessageSizeThreshold(workerConfig.s3MessageSizeCutoff);
+                }
+
+                // Set bucket.
+                extendedClientConfiguration.withLargePayloadSupportEnabled(
+                    s3Client,
+                    workerConfig.s3Bucket
+                );
+
+                // Create SQSClient.
                 final AmazonSQSClient sqsClient;
                 if (awsAccessKey.isEmpty()) {
                     sqsClient = new AmazonSQSClient();
@@ -108,9 +141,10 @@ public class SQSService extends AbstractIdleService implements WorkerService {
 
                 // Set region.
                 sqsClient.setRegion(Region.getRegion(region));
+                s3Client.setRegion(Region.getRegion(region));
 
                 // Put in sqsClientMap.
-                sqsClientMap.put(regionName, sqsClient);
+                sqsClientMap.put(regionName, new AmazonSQSExtendedClient(sqsClient, extendedClientConfiguration));
             }
         );
 
@@ -121,7 +155,7 @@ public class SQSService extends AbstractIdleService implements WorkerService {
                 "SQSWorkerConfig for Queue '" + entry.getKey() + "' was not found."
             );
 
-            final AmazonSQSClient sqsClient = sqsClientMap.get(workerConfig.region);
+            final AmazonSQSExtendedClient sqsClient = sqsClientMap.get(workerConfig.region);
             Preconditions.checkNotNull(
                 sqsClient,
                 "AmazonSQSClient was not found for region '" + workerConfig.region + "'"

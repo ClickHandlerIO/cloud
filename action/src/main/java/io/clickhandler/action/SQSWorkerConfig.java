@@ -76,6 +76,41 @@ public class SQSWorkerConfig {
      */
     @JsonProperty
     public double maxVisibilityMultiple = 2.0;
+    /**
+     * S3 Region the bucket resides in.
+     */
+    @JsonProperty
+    public String s3Region;
+    /**
+     * S3 Bucket.
+     */
+    @JsonProperty
+    public String s3Bucket;
+    /**
+     * S3 AWS Acccess Key.
+     */
+    @JsonProperty
+    public String s3AccessKey;
+    /**
+     * S3 AWS Secret Key.
+     */
+    @JsonProperty
+    public String s3SecretKey;
+    /**
+     * Determines whether to use S3 for the message transport.
+     * This is a way to support encrypted transport as long as
+     * the S3 bucket is encrypted.
+     */
+    @JsonProperty
+    public boolean alwaysUseS3;
+    /**
+     * The size in bytes that determines when to use S3 for message payload.
+     * If "alwaysUseS3" is set to true, then this parameter is ignored.
+     * If set to 0 then messages larger than 256kb will we stored in S3.
+     * Value must be between 0 and 262000.
+     */
+    @JsonProperty
+    public int s3MessageSizeCutoff = 0;
 
     /**
      * @param name
@@ -164,6 +199,51 @@ public class SQSWorkerConfig {
      */
     public SQSWorkerConfig maxVisibilityMultiple(final double maxVisibilityMultiple) {
         this.maxVisibilityMultiple = maxVisibilityMultiple;
+        return this;
+    }
+
+    /**
+     * @param useS3
+     * @return
+     */
+    public SQSWorkerConfig useS3(final boolean useS3) {
+        this.alwaysUseS3 = useS3;
+        return this;
+    }
+
+    /**
+     * @param s3Region
+     * @return
+     */
+    public SQSWorkerConfig s3Region(final String s3Region) {
+        this.s3Region = s3Region;
+        return this;
+    }
+
+    /**
+     * @param s3Bucket
+     * @return
+     */
+    public SQSWorkerConfig s3Bucket(final String s3Bucket) {
+        this.s3Bucket = s3Bucket;
+        return this;
+    }
+
+    /**
+     * @param s3AccessKey
+     * @return
+     */
+    public SQSWorkerConfig s3AccessKey(final String s3AccessKey) {
+        this.s3AccessKey = s3AccessKey;
+        return this;
+    }
+
+    /**
+     * @param s3SecretKey
+     * @return
+     */
+    public SQSWorkerConfig s3SecretKey(final String s3SecretKey) {
+        this.s3SecretKey = s3SecretKey;
         return this;
     }
 }

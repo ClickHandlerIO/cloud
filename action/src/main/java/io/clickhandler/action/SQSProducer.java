@@ -1,6 +1,6 @@
 package io.clickhandler.action;
 
-import com.amazonaws.services.sqs.AmazonSQSClient;
+import com.amazonaws.services.sqs.AmazonSQS;
 import com.amazonaws.services.sqs.model.*;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.AbstractExecutionThreadService;
@@ -28,7 +28,7 @@ public class SQSProducer extends AbstractIdleService implements WorkerProducer {
 
     private final LinkedBlockingDeque<WorkerRequest> queue = new LinkedBlockingDeque<>();
     private final Vertx vertx;
-    private AmazonSQSClient sqsClient;
+    private AmazonSQS sqsClient;
     private SendThread[] sendThreads;
     private int batchSize;
     private int threadCount;
@@ -45,7 +45,7 @@ public class SQSProducer extends AbstractIdleService implements WorkerProducer {
     /**
      * @param sqsClient
      */
-    void setSqsClient(AmazonSQSClient sqsClient) {
+    void setSqsClient(AmazonSQS sqsClient) {
         this.sqsClient = sqsClient;
     }
 

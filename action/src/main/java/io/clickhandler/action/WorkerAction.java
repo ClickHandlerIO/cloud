@@ -16,4 +16,6 @@ public @interface WorkerAction {
     String BACKGROUND = "background";
 
     String queueName() default DEFAULT;
+
+    boolean encrypted() default false;
 }

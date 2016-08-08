@@ -255,6 +255,13 @@ http://www.w3.org/2001/XMLSchema-instance ">
             </dependency>
 
             <dependency>
+                <groupId>com.amazonaws</groupId>
+                <artifactId>amazon-sqs-java-extended-client-lib</artifactId>
+                <version>1.0.0</version>
+                <type>jar</type>
+            </dependency>
+
+            <dependency>
                 <groupId>com.google.dagger</groupId>
                 <artifactId>dagger</artifactId>
                 <version>${dagger.version}</version>
