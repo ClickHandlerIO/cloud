@@ -135,7 +135,7 @@ public class ScheduledActionManager extends AbstractIdleService {
         @Override
         protected void runOneIteration() throws Exception {
             try {
-                provider.observe(new Object()).toBlocking().first();
+                provider.observe(null).toBlocking().first();
             } catch (Throwable e) {
                 LOG.warn(provider.getActionClass().getCanonicalName(), e);
             }
