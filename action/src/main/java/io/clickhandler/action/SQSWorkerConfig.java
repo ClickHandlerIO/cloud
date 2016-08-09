@@ -25,12 +25,12 @@ public class SQSWorkerConfig {
      *
      */
     @JsonProperty
-    public String awsAccessKey;
+    public String accessKey;
     /**
      *
      */
     @JsonProperty
-    public String awsSecretKey;
+    public String secretKey;
     /**
      * Number of messages that can be "In-Flight" at a time.
      */
@@ -71,16 +71,19 @@ public class SQSWorkerConfig {
     @JsonProperty
     public int minimumVisibility = 45;
     /**
+     * Number of seconds to add to calculations regarding "ChangeMessageVisibility" calls.
+     *
+     * This can help alleviate / eliminate duplicate message deliveries based
+     * on a race condition to delete a "processed" message before it's visibility timeout is reached.
+     */
+    @JsonProperty
+    public int visibilityBuffer = 5;
+    /**
      * The amount of extra visibility time to give an Action when the
      * backlog for that particular Action type is full.
      */
     @JsonProperty
     public double maxVisibilityMultiple = 2.0;
-    /**
-     * S3 Region the bucket resides in.
-     */
-    @JsonProperty
-    public String s3Region;
     /**
      * S3 Bucket.
      */
@@ -110,140 +113,95 @@ public class SQSWorkerConfig {
      * Value must be between 0 and 262000.
      */
     @JsonProperty
-    public int s3MessageSizeCutoff = 0;
+    public int s3MessageThreshold = 0;
 
-    /**
-     * @param name
-     * @return
-     */
     public SQSWorkerConfig name(final String name) {
         this.name = name;
         return this;
     }
 
-    /**
-     * @param sqsName
-     * @return
-     */
     public SQSWorkerConfig sqsName(final String sqsName) {
         this.sqsName = sqsName;
         return this;
     }
 
-    /**
-     * @param region
-     * @return
-     */
     public SQSWorkerConfig region(final String region) {
         this.region = region;
         return this;
     }
 
-    /**
-     * @param bufferSize
-     * @return
-     */
+    public SQSWorkerConfig accessKey(final String accessKey) {
+        this.accessKey = accessKey;
+        return this;
+    }
+
+    public SQSWorkerConfig secretKey(final String secretKey) {
+        this.secretKey = secretKey;
+        return this;
+    }
+
     public SQSWorkerConfig bufferSize(final int bufferSize) {
         this.bufferSize = bufferSize;
         return this;
     }
 
-    /**
-     * @param sendThreads
-     * @return
-     */
     public SQSWorkerConfig sendThreads(final int sendThreads) {
         this.sendThreads = sendThreads;
         return this;
     }
 
-    /**
-     * @param receiveThreads
-     * @return
-     */
     public SQSWorkerConfig receiveThreads(final int receiveThreads) {
         this.receiveThreads = receiveThreads;
         return this;
     }
 
-    /**
-     * @param deleteThreads
-     * @return
-     */
     public SQSWorkerConfig deleteThreads(final int deleteThreads) {
         this.deleteThreads = deleteThreads;
         return this;
     }
 
-    /**
-     * @param batchSize
-     * @return
-     */
     public SQSWorkerConfig batchSize(final int batchSize) {
         this.batchSize = batchSize;
         return this;
     }
 
-    /**
-     * @param minimumVisibility
-     * @return
-     */
     public SQSWorkerConfig minimumVisibility(final int minimumVisibility) {
         this.minimumVisibility = minimumVisibility;
         return this;
     }
 
-    /**
-     * @param maxVisibilityMultiple
-     * @return
-     */
+    public SQSWorkerConfig visibilityBuffer(final int visibilityBuffer) {
+        this.visibilityBuffer = visibilityBuffer;
+        return this;
+    }
+
     public SQSWorkerConfig maxVisibilityMultiple(final double maxVisibilityMultiple) {
         this.maxVisibilityMultiple = maxVisibilityMultiple;
         return this;
     }
 
-    /**
-     * @param useS3
-     * @return
-     */
-    public SQSWorkerConfig useS3(final boolean useS3) {
-        this.alwaysUseS3 = useS3;
-        return this;
-    }
-
-    /**
-     * @param s3Region
-     * @return
-     */
-    public SQSWorkerConfig s3Region(final String s3Region) {
-        this.s3Region = s3Region;
-        return this;
-    }
-
-    /**
-     * @param s3Bucket
-     * @return
-     */
     public SQSWorkerConfig s3Bucket(final String s3Bucket) {
         this.s3Bucket = s3Bucket;
         return this;
     }
 
-    /**
-     * @param s3AccessKey
-     * @return
-     */
     public SQSWorkerConfig s3AccessKey(final String s3AccessKey) {
         this.s3AccessKey = s3AccessKey;
         return this;
     }
 
-    /**
-     * @param s3SecretKey
-     * @return
-     */
     public SQSWorkerConfig s3SecretKey(final String s3SecretKey) {
         this.s3SecretKey = s3SecretKey;
+        return this;
+    }
+
+    public SQSWorkerConfig alwaysUseS3(final boolean alwaysUseS3) {
+        this.alwaysUseS3 = alwaysUseS3;
+        return this;
+    }
+
+    public SQSWorkerConfig s3MessageThreshold(final int s3MessageThreshold) {
+        this.s3MessageThreshold = s3MessageThreshold;
         return this;
     }
 }

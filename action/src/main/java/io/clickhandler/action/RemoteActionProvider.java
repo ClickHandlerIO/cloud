@@ -6,7 +6,7 @@ import rx.Observable;
 import javax.inject.Inject;
 
 /**
- *
+ * ActionProvider for Remote Actions.
  */
 public class RemoteActionProvider<A extends Action<IN, OUT>, IN, OUT> extends ActionProvider<A, IN, OUT> {
     private RemoteAction remoteAction;
@@ -16,7 +16,6 @@ public class RemoteActionProvider<A extends Action<IN, OUT>, IN, OUT> extends Ac
     }
 
     /**
-     *
      * @return
      */
     public RemoteAction getRemoteAction() {
@@ -33,7 +32,6 @@ public class RemoteActionProvider<A extends Action<IN, OUT>, IN, OUT> extends Ac
     }
 
     /**
-     *
      * @return
      */
     public boolean isGuarded() {
@@ -41,7 +39,6 @@ public class RemoteActionProvider<A extends Action<IN, OUT>, IN, OUT> extends Ac
     }
 
     /**
-     *
      * @param context
      * @param callback
      * @return
@@ -51,7 +48,6 @@ public class RemoteActionProvider<A extends Action<IN, OUT>, IN, OUT> extends Ac
     }
 
     /**
-     *
      * @param callback
      * @return
      */
@@ -60,7 +56,6 @@ public class RemoteActionProvider<A extends Action<IN, OUT>, IN, OUT> extends Ac
     }
 
     /**
-     *
      * @param context
      * @param request
      * @return

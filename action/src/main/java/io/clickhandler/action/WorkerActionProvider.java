@@ -87,4 +87,17 @@ public class WorkerActionProvider<A extends Action<IN, Boolean>, IN> extends Act
         );
         return producer.send(new WorkerRequest().actionProvider(this).request(request).delaySeconds(delaySeconds));
     }
+
+    /**
+     * @param request
+     * @param delaySeconds
+     * @return
+     */
+    public Observable<Boolean> send(IN request, String throttleKey, int delaySeconds) {
+        Preconditions.checkNotNull(
+            producer,
+            "WorkerProducer is null. Ensure ActionManager has been started and all actions have been registered."
+        );
+        return producer.send(new WorkerRequest().actionProvider(this).request(request).delaySeconds(delaySeconds));
+    }
 }

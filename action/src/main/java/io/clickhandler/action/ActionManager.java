@@ -3,6 +3,7 @@ package io.clickhandler.action;
 import com.google.common.util.concurrent.AbstractIdleService;
 import io.clickhandler.cloud.cluster.HazelcastProvider;
 import io.vertx.rxjava.core.Vertx;
+import javaslang.control.Try;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,7 +14,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Monitors and manages all Actions.
+ * Central repository of all actions registered from ActionProviders.
  *
  * @author Clay Molocznik
  */
@@ -112,7 +113,12 @@ public class ActionManager extends AbstractIdleService {
 
     @Override
     protected void shutDown() throws Exception {
-        scheduledActionManager.stopAsync().awaitTerminated();
-        workerService.stopAsync().awaitTerminated();
+        Try.run(() -> scheduledActionManager.stopAsync().awaitTerminated())
+            .onFailure(e -> LOG.error("Failed to stop ScheduledActionManager", e));
+        Try.run(() -> workerService.stopAsync().awaitTerminated())
+            .onFailure(e -> LOG.error(
+                "Failed to stop WorkerService[" + workerService.getClass().getCanonicalName() + "]",
+                e
+            ));
     }
 }

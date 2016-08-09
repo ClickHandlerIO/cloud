@@ -49,7 +49,7 @@ public class SQSService extends AbstractIdleService implements WorkerService {
     /**
      * @param config
      */
-    void setConfig(SQSConfig config) {
+    public void setConfig(SQSConfig config) {
         this.config = config;
     }
 
@@ -115,14 +115,14 @@ public class SQSService extends AbstractIdleService implements WorkerService {
                 // Put in s3ClientMap.
                 s3ClientMap.put(regionName, s3Client);
 
-                final String awsAccessKey = Strings.nullToEmpty(workerConfig.awsAccessKey).trim();
-                final String awsSecretKey = Strings.nullToEmpty(workerConfig.awsSecretKey).trim();
+                final String awsAccessKey = Strings.nullToEmpty(workerConfig.accessKey).trim();
+                final String awsSecretKey = Strings.nullToEmpty(workerConfig.secretKey).trim();
 
                 final ExtendedClientConfiguration extendedClientConfiguration = new ExtendedClientConfiguration();
                 if (workerConfig.alwaysUseS3) {
                     extendedClientConfiguration.withAlwaysThroughS3(true);
-                } else if (workerConfig.s3MessageSizeCutoff > 0) {
-                    extendedClientConfiguration.withMessageSizeThreshold(workerConfig.s3MessageSizeCutoff);
+                } else if (workerConfig.s3MessageThreshold > 0) {
+                    extendedClientConfiguration.withMessageSizeThreshold(workerConfig.s3MessageThreshold);
                 }
 
                 // Set bucket.

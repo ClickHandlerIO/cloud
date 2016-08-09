@@ -81,10 +81,12 @@ public class TypeParameterResolver {
                 final TypeMirror typeArg = typeArgs.get(i);
 
                 if (typeArg.getKind() == TypeKind.DECLARED) {
-                    final List<? extends TypeParameterElement> typeParams = ((TypeElement) ((DeclaredType) type).asElement()).getTypeParameters();
+                    final List<? extends TypeParameterElement> typeParams =
+                        ((TypeElement) ((DeclaredType) type).asElement()).getTypeParameters();
                     final String typeVarName = typeParams.get(i).getSimpleName().toString();
 
-                    final DeclaredTypeVar declaredTypeVar = new DeclaredTypeVar(declaredType, element, i, typeVarName, typeArg);
+                    final DeclaredTypeVar declaredTypeVar =
+                        new DeclaredTypeVar(declaredType, element, i, typeVarName, typeArg);
                     declaredTypeVar.resolve();
                     vars.add(declaredTypeVar);
                 }

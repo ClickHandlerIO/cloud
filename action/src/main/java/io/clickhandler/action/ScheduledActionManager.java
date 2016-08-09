@@ -1,5 +1,6 @@
 package io.clickhandler.action;
 
+import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.AbstractExecutionThreadService;
 import com.google.common.util.concurrent.AbstractIdleService;
 import com.google.common.util.concurrent.AbstractScheduledService;
@@ -71,9 +72,10 @@ public class ScheduledActionManager extends AbstractIdleService {
             this.provider = provider;
             this.intervalSeconds = provider.getScheduledAction().intervalSeconds();
 
-            if (intervalSeconds < 1) {
-                throw new RuntimeException("ScheduledAction: " + provider.getActionClass().getCanonicalName() + " has an invalid value for intervalSeconds() = " + intervalSeconds);
-            }
+            Preconditions.checkNotNull(intervalSeconds, "ScheduledAction: " +
+                provider.getActionClass().getCanonicalName() +
+                " has an invalid value for intervalSeconds() = " +
+                intervalSeconds);
         }
 
         @Override
@@ -115,10 +117,11 @@ public class ScheduledActionManager extends AbstractIdleService {
             }
 
             final long elapsed = System.currentTimeMillis() - start;
-            final long sleepFor = TimeUnit.SECONDS
-                .toMillis(provider.getScheduledAction().intervalSeconds()) - elapsed;
+            final long sleepFor = TimeUnit.SECONDS.toMillis(intervalSeconds) - elapsed;
             if (sleepFor > 0)
                 Try.run(() -> Thread.sleep(sleepFor));
+            else
+                Try.run(Thread::yield);
         }
     }
 
@@ -143,7 +146,11 @@ public class ScheduledActionManager extends AbstractIdleService {
 
         @Override
         protected Scheduler scheduler() {
-            return Scheduler.newFixedRateSchedule(0, provider.getScheduledAction().intervalSeconds(), TimeUnit.SECONDS);
+            return Scheduler.newFixedRateSchedule(
+                0,
+                provider.getScheduledAction().intervalSeconds(),
+                TimeUnit.SECONDS
+            );
         }
     }
 }

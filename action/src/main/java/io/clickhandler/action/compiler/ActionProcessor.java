@@ -144,14 +144,24 @@ public class ActionProcessor extends AbstractProcessor {
                 if (holder.workerAction != null) actionAnnotationCount++;
                 if (holder.scheduledAction != null) actionAnnotationCount++;
                 if (actionAnnotationCount > 1) {
-                    messager.printMessage(Diagnostic.Kind.ERROR, element.getQualifiedName() + "  has multiple Action annotations. Only one of the following may be used... @RemoteAction or @QueueAction or @InternalAction or @ActorAction");
+                    messager.printMessage(
+                        Diagnostic.Kind.ERROR,
+                        element.getQualifiedName() +
+                            "  has multiple Action annotations. Only one of the following may be used... " +
+                            "@RemoteAction or @QueueAction or @InternalAction or @ActorAction"
+                    );
                     continue;
                 }
 
                 // Make sure it's concrete.
                 if (element.getModifiers().contains(Modifier.ABSTRACT)
                     || (element.getTypeParameters() != null && !element.getTypeParameters().isEmpty())) {
-                    messager.printMessage(Diagnostic.Kind.ERROR, "@RemoteAction was placed on a non-concrete class   " + element.getQualifiedName() + "   It cannot be abstract or have TypeParameters.");
+                    messager.printMessage(
+                        Diagnostic.Kind.ERROR,
+                        "@RemoteAction was placed on a non-concrete class " +
+                            element.getQualifiedName() +
+                            " It cannot be abstract or have TypeParameters."
+                    );
                 }
 
                 if (holder.inType == null || holder.outType == null) {
@@ -193,7 +203,9 @@ public class ActionProcessor extends AbstractProcessor {
                         final String nextName = parts[i];
                         Pkg next = parent.children.get(nextName);
                         if (next == null) {
-                            next = new Pkg(nextName, parent.path == null || parent.path.isEmpty() ? nextName : parent.path + "." + nextName, parent);
+                            next = new Pkg(nextName, parent.path == null || parent.path.isEmpty()
+                                ? nextName
+                                : parent.path + "." + nextName, parent);
                             parent.children.put(nextName, next);
                         }
                         parent = next;
@@ -255,17 +267,20 @@ public class ActionProcessor extends AbstractProcessor {
 
         public String getClassName() {
 //            return "Action_Locator";
-            return name == null || name.isEmpty() ? "Root" : Character.toUpperCase(name.charAt(0)) + name.substring(1) + (root ? LOCATOR_ROOT : LOCATOR);
+            return name == null || name.isEmpty()
+                ? "Root"
+                : Character.toUpperCase(name.charAt(0)) + name.substring(1) + (root ? LOCATOR_ROOT : LOCATOR);
         }
 
         public void generateJava() {
-            if (processed) return;
+            if (processed)
+                return;
 
             if (root) {
-                if (children.isEmpty()) return;
+                if (children.isEmpty())
+                    return;
 
                 path = children.values().iterator().next().path;
-//                messager.printMessage(Diagnostic.Kind.WARNING, "Found ActionRoot Path: " + path);
             }
 
             processed = true;
@@ -385,7 +400,11 @@ public class ActionProcessor extends AbstractProcessor {
 
             if (!actions.isEmpty()) {
                 try {
-                    FileObject fileObject = filer.getResource(StandardLocation.SOURCE_OUTPUT, path, getClassName() + ".java");
+                    final FileObject fileObject = filer.getResource(
+                        StandardLocation.SOURCE_OUTPUT,
+                        path,
+                        getClassName() + ".java"
+                    );
                     final CharSequence content = fileObject.getCharContent(true);
                     final String contents = content.toString();
 
@@ -393,28 +412,53 @@ public class ActionProcessor extends AbstractProcessor {
                         for (ActionHolder action : actions.values()) {
                             if (action.isInternal()) {
                                 if (!contents.contains("InternalActionProvider<" + action.type.getSimpleName())) {
-                                    messager.printMessage(Diagnostic.Kind.ERROR, "Action: " + action.getName() + " was created. Full Regeneration needed. \"clean\" and \"compile\"");
+                                    messager.printMessage(
+                                        Diagnostic.Kind.ERROR,
+                                        "Action: " +
+                                            action.getName() +
+                                            " was created. Full Regeneration needed. \"clean\" and \"compile\""
+                                    );
                                     return;
                                 }
                             } else if (action.isRemote()) {
                                 if (!contents.contains("RemoteActionProvider<" + action.type.getSimpleName())) {
-                                    messager.printMessage(Diagnostic.Kind.ERROR, "Action: " + action.getName() + " was created. Full Regeneration needed. \"clean\" and \"compile\"");
+                                    messager.printMessage(
+                                        Diagnostic.Kind.ERROR,
+                                        "Action: " +
+                                            action.getName() +
+                                            " was created. Full Regeneration needed. \"clean\" and \"compile\""
+                                    );
                                     return;
                                 }
                             } else if (action.isWorker()) {
                                 if (!contents.contains("WorkerActionProvider<" + action.type.getSimpleName())) {
-                                    messager.printMessage(Diagnostic.Kind.ERROR, "Action: " + action.getName() + " was created. Full Regeneration needed. \"clean\" and \"compile\"");
+                                    messager.printMessage(
+                                        Diagnostic.Kind.ERROR,
+                                        "Action: " +
+                                            action.getName() +
+                                            " was created. Full Regeneration needed. \"clean\" and \"compile\""
+                                    );
                                     return;
                                 }
                             } else if (action.isScheduled()) {
                                 if (!contents.contains("ScheduledActionProvider<" + action.type.getSimpleName())) {
-                                    messager.printMessage(Diagnostic.Kind.ERROR, "Action: " + action.getName() + " was created. Full Regeneration needed. \"clean\" and \"compile\"");
+                                    messager.printMessage(
+                                        Diagnostic.Kind.ERROR,
+                                        "Action: " +
+                                            action.getName() +
+                                            " was created. Full Regeneration needed. \"clean\" and \"compile\""
+                                    );
                                     return;
                                 }
                             }
                         }
 
-                        messager.printMessage(Diagnostic.Kind.WARNING, getFullPath() + " has a change, but it appears that it may save a full re-compile. When in doubt \"clean\" and \"compile\"");
+                        messager.printMessage(
+                            Diagnostic.Kind.WARNING,
+                            getFullPath() +
+                                " has a change, but it appears that it may save a full re-compile. " +
+                                "When in doubt \"clean\" and \"compile\""
+                        );
 
                         // Generate child packages.
                         for (Pkg childPackage : children.values()) {
@@ -430,19 +474,32 @@ public class ActionProcessor extends AbstractProcessor {
 
             if (!children.isEmpty()) {
                 try {
-                    FileObject fileObject = filer.getResource(StandardLocation.SOURCE_OUTPUT, path, getClassName() + ".java");
+                    final FileObject fileObject = filer.getResource(
+                        StandardLocation.SOURCE_OUTPUT,
+                        path,
+                        getClassName() + ".java"
+                    );
                     final CharSequence content = fileObject.getCharContent(true);
                     final String contents = content.toString();
 
                     if (!contents.isEmpty()) {
                         for (Pkg child : children.values()) {
                             if (!contents.contains(child.getClassName() + " " + child.name + ";")) {
-                                messager.printMessage(Diagnostic.Kind.ERROR, "ActionLocator: " + child.path + " was created. Full Regeneration needed. \"clean\" and \"compile\"");
+                                messager.printMessage(
+                                    Diagnostic.Kind.ERROR,
+                                    "ActionLocator: " +
+                                        child.path +
+                                        " was created. Full Regeneration needed. \"clean\" and \"compile\""
+                                );
                                 return;
                             }
                         }
 
-                        messager.printMessage(Diagnostic.Kind.WARNING, getFullPath() + " has a change, but it appears that it may save a full re-compile. When in doubt \"clean\" and \"compile\"");
+                        messager.printMessage(
+                            Diagnostic.Kind.WARNING,
+                            getFullPath() +
+                                " has a change, but it appears that it may save a full re-compile. " +
+                                "When in doubt \"clean\" and \"compile\"");
 
                         // Generate child packages.
                         for (Pkg childPackage : children.values()) {

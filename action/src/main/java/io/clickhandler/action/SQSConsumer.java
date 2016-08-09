@@ -32,7 +32,6 @@ import java.util.stream.Collectors;
  * Reliable
  */
 public class SQSConsumer extends AbstractIdleService {
-    public static final int VISIBILITY_BUFFER_MILLIS = 5_000;
     private static final Logger LOG = LoggerFactory.getLogger(SQSConsumer.class);
     private SQSWorkerConfig config;
     private AmazonSQS sqsClient;
@@ -41,6 +40,7 @@ public class SQSConsumer extends AbstractIdleService {
     private DeleteThread[] deleteThreads;
     private int batchSize = 10;
     private int minimumVisibility = 30;
+    private int visibilityBufferMillis = 5_000;
     private String queueUrl;
 
     private Map<String, ActionContext> actionMap;
@@ -78,6 +78,17 @@ public class SQSConsumer extends AbstractIdleService {
         this.config = config;
         this.batchSize = config.batchSize;
         this.minimumVisibility = config.minimumVisibility;
+
+        if (config.visibilityBuffer < 1 || config.visibilityBuffer > 10) {
+            this.visibilityBufferMillis = 5_000;
+            LOG.warn("SQSWorkerConfig[" +
+                config.name +
+                "].visibilityBuffer must be between 1 and 10. Value attempted was " +
+                config.visibilityBuffer +
+                ". Setting to 5 seconds.");
+        } else {
+            this.visibilityBufferMillis = (int) TimeUnit.SECONDS.toMillis(config.visibilityBuffer);
+        }
     }
 
     /**
@@ -365,9 +376,9 @@ public class SQSConsumer extends AbstractIdleService {
                 this.backlog = null;
             }
 
-            if (executionMillis >= TimeUnit.SECONDS.toMillis(minimumVisibility) - VISIBILITY_BUFFER_MILLIS) {
+            if (executionMillis >= TimeUnit.SECONDS.toMillis(minimumVisibility) - visibilityBufferMillis) {
                 changeVisibilityBy = (int) TimeUnit.MILLISECONDS.toSeconds(
-                    executionMillis + VISIBILITY_BUFFER_MILLIS - TimeUnit.SECONDS.toMillis(minimumVisibility)
+                    executionMillis + visibilityBufferMillis - TimeUnit.SECONDS.toMillis(minimumVisibility)
                 );
             } else {
                 changeVisibilityBy = 0;
@@ -421,7 +432,7 @@ public class SQSConsumer extends AbstractIdleService {
             final long worstCaseTime = System.currentTimeMillis() + actionProvider.getTimeoutMillis();
 
             // Is there enough time leased to reliably run this Action?
-            if (request.timeoutAt > worstCaseTime + VISIBILITY_BUFFER_MILLIS) {
+            if (request.timeoutAt > worstCaseTime + visibilityBufferMillis) {
                 try {
                     buffered.release();
                 } finally {

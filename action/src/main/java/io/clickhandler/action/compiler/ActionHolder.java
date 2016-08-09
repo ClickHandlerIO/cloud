@@ -4,7 +4,6 @@ import com.squareup.javapoet.ClassName;
 import io.clickhandler.action.*;
 
 import javax.lang.model.element.TypeElement;
-import javax.lang.model.type.TypeMirror;
 
 /**
  *
@@ -16,8 +15,6 @@ public class ActionHolder {
     ScheduledAction scheduledAction;
     ActionConfig config;
     TypeElement type;
-    TypeMirror actorTypeClass;
-    DeclaredTypeVar actorType;
     DeclaredTypeVar inType;
     DeclaredTypeVar outType;
 

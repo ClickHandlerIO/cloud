@@ -142,7 +142,9 @@ public abstract class ActionLocator {
                 if (remoteActionMap.containsKey(key)) {
                     final RemoteActionProvider actionProvider = remoteActionMap.get(key);
                     throw new RuntimeException("Duplicate RemoteAction Entry for key [" + key + "]. " +
-                        value.getActionClass().getCanonicalName() + " and " + actionProvider.getActionClass().getCanonicalName());
+                        value.getActionClass().getCanonicalName() +
+                        " and " +
+                        actionProvider.getActionClass().getCanonicalName());
                 }
                 remoteActionMap.put(key, (RemoteActionProvider<?, ?, ?>) value);
             } else if (value instanceof InternalActionProvider) {
