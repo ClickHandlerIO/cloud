@@ -6,6 +6,7 @@ import com.google.common.collect.Lists;
 import io.clickhandler.common.UID;
 import org.jooq.*;
 import org.jooq.impl.DSL;
+import org.jooq.impl.JooqUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -665,7 +666,17 @@ public class SqlSession {
      */
     public <E extends AbstractEntity> SqlResult<Integer> insert(E entity) {
         Preconditions.checkNotNull(entity, "entity must be specified");
-        return SqlResult.create(insertQuery(entity).execute());
+        return SqlResult.success(insertQuery(entity).queryTimeout(4).execute());
+    }
+
+    /**
+     * @param entity
+     * @param <E>
+     * @return
+     */
+    public <E extends AbstractEntity> SqlResult<Integer> insertAtomic(E entity) {
+        Preconditions.checkNotNull(entity, "entity must be specified");
+        return SqlResult.atomic(insertQuery(entity).execute());
     }
 
     /**
@@ -673,13 +684,51 @@ public class SqlSession {
      * @param <E>
      */
     public <E extends AbstractEntity> SqlResult<int[]> insert(List<E> entities) {
+        return insert(entities, 30);
+    }
+
+    /**
+     * @param entities
+     * @param <E>
+     */
+    public <E extends AbstractEntity> SqlResult<int[]> insert(List<E> entities, int timeoutSeconds) {
         if (entities == null || entities.isEmpty()) {
             return success(new int[0]);
         }
 
-        return SqlResult.create(create().batch(
-            entities.stream().map(this::insertQuery).collect(Collectors.toList())
-        ).execute());
+        return SqlResult.success(
+            JooqUtils.execute(
+                configuration,
+                timeoutSeconds,
+                entities.stream().map(this::insertQuery).collect(Collectors.toList())
+            )
+        );
+    }
+
+    /**
+     * @param entities
+     * @param <E>
+     */
+    public <E extends AbstractEntity> SqlResult<int[]> insertAtomic(List<E> entities) {
+        return insertAtomic(entities, 30);
+    }
+
+    /**
+     * @param entities
+     * @param <E>
+     */
+    public <E extends AbstractEntity> SqlResult<int[]> insertAtomic(List<E> entities, int timeoutSeconds) {
+        if (entities == null || entities.isEmpty()) {
+            return success(new int[0]);
+        }
+
+        return SqlResult.atomic(
+            JooqUtils.execute(
+                configuration,
+                timeoutSeconds,
+                entities.stream().map(this::insertQuery).collect(Collectors.toList())
+            )
+        );
     }
 
     /**
@@ -750,7 +799,17 @@ public class SqlSession {
      */
     public <E extends AbstractEntity> SqlResult<Integer> update(final E entity) {
         Preconditions.checkNotNull(entity, "entity must be specified");
-        return SqlResult.create(updateQuery(entity).execute());
+        return SqlResult.success(updateQuery(entity).execute());
+    }
+
+    /**
+     * @param entity
+     * @param <E>
+     * @return
+     */
+    public <E extends AbstractEntity> SqlResult<Integer> updateAtomic(final E entity) {
+        Preconditions.checkNotNull(entity, "entity must be specified");
+        return SqlResult.atomic(updateQuery(entity).execute());
     }
 
     /**
@@ -761,7 +820,18 @@ public class SqlSession {
      */
     public <E extends AbstractEntity> SqlResult<Integer> update(final E entity, Condition condition) {
         Preconditions.checkNotNull(entity, "entity must be specified");
-        return SqlResult.create(updateQuery(entity, condition).execute());
+        return SqlResult.success(updateQuery(entity, condition).execute());
+    }
+
+    /**
+     * @param entity
+     * @param condition
+     * @param <E>
+     * @return
+     */
+    public <E extends AbstractEntity> SqlResult<Integer> updateAtomic(final E entity, Condition condition) {
+        Preconditions.checkNotNull(entity, "entity must be specified");
+        return SqlResult.atomic(updateQuery(entity, condition).execute());
     }
 
     /**
@@ -771,7 +841,17 @@ public class SqlSession {
      */
     public <E extends AbstractEntity, R extends Record> SqlResult<Integer> update(final E entity, Collection<? extends Field<?>> fields) {
         Preconditions.checkNotNull(entity, "entity must be specified");
-        return SqlResult.create(updateQuery(entity).execute());
+        return SqlResult.success(updateQuery(entity).execute());
+    }
+
+    /**
+     * @param entity
+     * @param <E>
+     * @return
+     */
+    public <E extends AbstractEntity, R extends Record> SqlResult<Integer> updateAtomic(final E entity, Collection<? extends Field<?>> fields) {
+        Preconditions.checkNotNull(entity, "entity must be specified");
+        return SqlResult.atomic(updateQuery(entity).execute());
     }
 
     /**
@@ -781,6 +861,16 @@ public class SqlSession {
      * @return
      */
     public <E extends AbstractEntity, R extends UpdatableRecord<R>> SqlResult<int[]> update(final List<E> entities) {
+        return update(entities, 30);
+    }
+
+    /**
+     * @param entities
+     * @param <E>
+     * @param <R>
+     * @return
+     */
+    public <E extends AbstractEntity, R extends UpdatableRecord<R>> SqlResult<int[]> update(final List<E> entities, int timeoutSeconds) {
         Preconditions.checkNotNull(entities, "entities was null");
 
         // Ensure list to update isn't empty.
@@ -788,9 +878,46 @@ public class SqlSession {
             return success(new int[0]);
         }
 
-        return SqlResult.create(create().batch(
-            entities.stream().map(this::updateQuery).collect(Collectors.toList())
-        ).execute());
+        return SqlResult.success(
+            JooqUtils.execute(
+                configuration,
+                timeoutSeconds,
+                entities.stream().map(this::updateQuery).collect(Collectors.toList())
+            )
+        );
+    }
+
+    /**
+     * @param entities
+     * @param <E>
+     * @param <R>
+     * @return
+     */
+    public <E extends AbstractEntity, R extends UpdatableRecord<R>> SqlResult<int[]> updateAtomic(final List<E> entities) {
+        return updateAtomic(entities, 30);
+    }
+
+    /**
+     * @param entities
+     * @param <E>
+     * @param <R>
+     * @return
+     */
+    public <E extends AbstractEntity, R extends UpdatableRecord<R>> SqlResult<int[]> updateAtomic(final List<E> entities, int timeoutSeconds) {
+        Preconditions.checkNotNull(entities, "entities was null");
+
+        // Ensure list to update isn't empty.
+        if (entities.isEmpty()) {
+            return success(new int[0]);
+        }
+
+        return SqlResult.atomic(
+            JooqUtils.execute(
+                configuration,
+                timeoutSeconds,
+                entities.stream().map(this::updateQuery).collect(Collectors.toList())
+            )
+        );
     }
 
     /**
@@ -851,7 +978,17 @@ public class SqlSession {
      */
     public <E extends AbstractEntity, R extends Record> SqlResult<Integer> delete(final E object) {
         Preconditions.checkNotNull(object, "object must be specified");
-        return SqlResult.create(deleteQuery(object).execute());
+        return SqlResult.success(deleteQuery(object).execute());
+    }
+
+    /**
+     * @param object
+     * @param <E>
+     * @return
+     */
+    public <E extends AbstractEntity, R extends Record> SqlResult<Integer> deleteAtomic(final E object) {
+        Preconditions.checkNotNull(object, "object must be specified");
+        return SqlResult.atomic(deleteQuery(object).execute());
     }
 
     /**
@@ -861,6 +998,16 @@ public class SqlSession {
      * @return
      */
     public <E extends AbstractEntity, R extends UpdatableRecord<R>> SqlResult<int[]> delete(final List<E> entities) {
+        return delete(entities, 30);
+    }
+
+    /**
+     * @param entities
+     * @param <E>
+     * @param <R>
+     * @return
+     */
+    public <E extends AbstractEntity, R extends UpdatableRecord<R>> SqlResult<int[]> delete(final List<E> entities, int timeoutSeconds) {
         Preconditions.checkNotNull(entities, "entities was null");
 
         // Ensure list to delete isn't empty.
@@ -868,9 +1015,46 @@ public class SqlSession {
             return success(new int[0]);
         }
 
-        return SqlResult.create(create().batch(
-            entities.stream().map(this::deleteQuery).collect(Collectors.toList())
-        ).execute());
+        return SqlResult.success(
+            JooqUtils.execute(
+                configuration,
+                timeoutSeconds,
+                entities.stream().map(this::deleteQuery).collect(Collectors.toList())
+            )
+        );
+    }
+
+    /**
+     * @param entities
+     * @param <E>
+     * @param <R>
+     * @return
+     */
+    public <E extends AbstractEntity, R extends UpdatableRecord<R>> SqlResult<int[]> deleteAtomic(final List<E> entities) {
+        return deleteAtomic(entities, 30);
+    }
+
+    /**
+     * @param entities
+     * @param <E>
+     * @param <R>
+     * @return
+     */
+    public <E extends AbstractEntity, R extends UpdatableRecord<R>> SqlResult<int[]> deleteAtomic(final List<E> entities, int timeoutSeconds) {
+        Preconditions.checkNotNull(entities, "entities was null");
+
+        // Ensure list to delete isn't empty.
+        if (entities.isEmpty()) {
+            return success(new int[0]);
+        }
+
+        return SqlResult.atomic(
+            JooqUtils.execute(
+                configuration,
+                timeoutSeconds,
+                entities.stream().map(this::deleteQuery).collect(Collectors.toList())
+            )
+        );
     }
 
     /**
@@ -881,7 +1065,18 @@ public class SqlSession {
      */
     public <T extends AbstractEntity> SqlResult<Integer> delete(Class<T> entityClass, String id) {
         Preconditions.checkNotNull(entityClass, "entityClass was null");
-        return SqlResult.create(deleteQuery(entityClass, id).execute());
+        return SqlResult.success(deleteQuery(entityClass, id).execute());
+    }
+
+    /**
+     * @param entityClass
+     * @param id
+     * @param <T>
+     * @return
+     */
+    public <T extends AbstractEntity> SqlResult<Integer> deleteAtomic(Class<T> entityClass, String id) {
+        Preconditions.checkNotNull(entityClass, "entityClass was null");
+        return SqlResult.atomic(deleteQuery(entityClass, id).execute());
     }
 
     /**
@@ -908,8 +1103,52 @@ public class SqlSession {
      * @param queries
      * @return
      */
+    public SqlResult<int[]> saveAtomic(Stream<? extends Query> queries) {
+        return saveAtomic(queries.collect(Collectors.toList()), 30);
+    }
+
+    /**
+     * @param queries
+     * @return
+     */
     public SqlResult<int[]> save(Collection<? extends Query> queries) {
-        return SqlResult.create(create().batch(queries).execute());
+        return save(queries, 30);
+    }
+
+    /**
+     * @param queries
+     * @return
+     */
+    public SqlResult<int[]> save(Collection<? extends Query> queries, int timeoutSeconds) {
+        return SqlResult.success(
+            JooqUtils.execute(
+                configuration,
+                timeoutSeconds,
+                queries
+            )
+        );
+    }
+
+    /**
+     * @param queries
+     * @return
+     */
+    public SqlResult<int[]> saveAtomic(Collection<? extends Query> queries) {
+        return saveAtomic(queries, 30);
+    }
+
+    /**
+     * @param queries
+     * @return
+     */
+    public SqlResult<int[]> saveAtomic(Collection<? extends Query> queries, int timeoutSeconds) {
+        return SqlResult.atomic(
+            JooqUtils.execute(
+                configuration,
+                timeoutSeconds,
+                queries
+            )
+        );
     }
 
     /**
@@ -917,7 +1156,49 @@ public class SqlSession {
      * @return
      */
     public SqlResult<int[]> save(List<? extends Query> queries, Logger logger) {
-        final SqlResult<int[]> result = SqlResult.create(create().batch(queries).execute());
+        return save(queries, 30, logger);
+    }
+
+    /**
+     * @param queries
+     * @return
+     */
+    public SqlResult<int[]> save(List<? extends Query> queries, int timeoutSeconds, Logger logger) {
+        final SqlResult<int[]> result = SqlResult.success(
+            JooqUtils.execute(
+                configuration,
+                timeoutSeconds,
+                queries
+            )
+        );
+        if (result.isRollback()) {
+            if (logger.isDebugEnabled()) {
+                SqlUtils.failedQueries(queries, result.get()).forEach(s -> logger.debug("Failed to Commit: " + s));
+            }
+        }
+        return result;
+    }
+
+    /**
+     * @param queries
+     * @return
+     */
+    public SqlResult<int[]> saveAtomic(List<? extends Query> queries, Logger logger) {
+        return saveAtomic(queries, 30, logger);
+    }
+
+    /**
+     * @param queries
+     * @return
+     */
+    public SqlResult<int[]> saveAtomic(List<? extends Query> queries, int timeoutSeconds, Logger logger) {
+        final SqlResult<int[]> result = SqlResult.atomic(
+            JooqUtils.execute(
+                configuration,
+                timeoutSeconds,
+                queries
+            )
+        );
         if (result.isRollback()) {
             if (logger.isDebugEnabled()) {
                 SqlUtils.failedQueries(queries, result.get()).forEach(s -> logger.debug("Failed to Commit: " + s));

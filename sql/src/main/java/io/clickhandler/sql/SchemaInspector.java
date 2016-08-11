@@ -18,18 +18,22 @@ public class SchemaInspector {
     private final SqlPlatform platform;
     private final Map<Class, TableMapping> tableMappings;
     private final List<Change> changes = new ArrayList<>();
+    private final boolean indexes;
 
     private SchemaInspector(final SqlPlatform platform,
-                            final Map<Class, TableMapping> tableMappings) {
+                            final Map<Class, TableMapping> tableMappings,
+                            final boolean indexes) {
         Preconditions.checkNotNull(platform, "dbPlatform must be set.");
         Preconditions.checkNotNull(tableMappings, "tableMappings must be set.");
         this.platform = platform;
         this.tableMappings = tableMappings;
+        this.indexes = indexes;
     }
 
     public static List<Change> inspect(final SqlPlatform platform,
-                                       final Map<Class, TableMapping> tableMappings) throws SQLException {
-        return new SchemaInspector(platform, tableMappings).inspect();
+                                       final Map<Class, TableMapping> tableMappings,
+                                       final boolean indexes) throws SQLException {
+        return new SchemaInspector(platform, tableMappings, indexes).inspect();
     }
 
     private List<Change> inspect() {
@@ -70,27 +74,28 @@ public class SchemaInspector {
                 }
             }
 
-
-            for (TableMapping.Index index : mapping.getIndexes()) {
-                if (index.dbIndex == null) {
-                    changes.add(new CreateIndex(mapping, index));
-                } else {
-                    if (index.dbIndex.columns.size() != index.properties.length) {
-                        // Rebuild Index.
+            if (indexes) {
+                for (TableMapping.Index index : mapping.getIndexes()) {
+                    if (index.dbIndex == null) {
+                        changes.add(new CreateIndex(mapping, index));
+                    } else {
+                        if (index.dbIndex.columns.size() != index.properties.length) {
+                            // Rebuild Index.
 //                        changes.add(new DropIndex(mapping, index.dbIndex));
 //                        changes.add(new CreateIndex(mapping, index));
-                    } else {
-                        boolean changed = false;
-                        for (TableMapping.IndexProperty indexProperty : index.properties) {
-                            if (indexProperty.dbIndexColumn == null) {
-                                changed = true;
-                                break;
+                        } else {
+                            boolean changed = false;
+                            for (TableMapping.IndexProperty indexProperty : index.properties) {
+                                if (indexProperty.dbIndexColumn == null) {
+                                    changed = true;
+                                    break;
+                                }
                             }
-                        }
-                        if (changed) {
-                            // Rebuild Index.
+                            if (changed) {
+                                // Rebuild Index.
 //                            changes.add(new DropIndex(mapping, index.dbIndex));
 //                            changes.add(new CreateIndex(mapping, index));
+                            }
                         }
                     }
                 }

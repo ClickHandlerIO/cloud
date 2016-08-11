@@ -271,10 +271,12 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             // This is valid SQL and is supported by any "ACTUAL" SQL database engine.
             hikariConfig.setConnectionTestQuery("SELECT 1");
             hikariReadConfig.setConnectionTestQuery("SELECT 1");
+            hikariConfig.setValidationTimeout(5000);
+            hikariReadConfig.setValidationTimeout(5000);
 
             final MetricRegistry registry = SharedMetricRegistries.getOrCreate("app");
 
-            hikariConfig.setPoolName(("sql-" + config.getName() + "-write").toLowerCase());
+            hikariConfig.setPoolName(("sql-" + config.getName() + "-master").toLowerCase());
             hikariReadConfig.setPoolName(("sql-" + config.getName() + "-read").toLowerCase());
 
             hikariConfig.setMetricRegistry(registry);
@@ -400,7 +402,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             findJooqSchema();
 
             writeExecutor = Executors.newFixedThreadPool(config.getMaxPoolSize());
-            readExecutor = Executors.newFixedThreadPool(config.getMaxReadPoolSize());
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////
             // H2 TCP Server to allow remote connections
@@ -417,18 +418,25 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 throw new PersistException(e);
             }
 
-            try {
-                readDataSource = buildReadDataSource();
-            } catch (Throwable e) {
-                LOG.error("Could not create a Hikari read connection pool.", e);
-                throw new PersistException(e);
-            }
-
             // Set Connection Provider.
             configuration.set(new DataSourceConnectionProvider(dataSource));
 
-            // Create Read Configuration.
-            readConfiguration = configuration.derive(new DataSourceConnectionProvider(readDataSource));
+            if (!Strings.nullToEmpty(config.getReadUrl()).trim().isEmpty()) {
+                readExecutor = Executors.newFixedThreadPool(config.getMaxReadPoolSize());
+
+                try {
+                    readDataSource = buildReadDataSource();
+                } catch (Throwable e) {
+                    LOG.error("Could not create a Hikari read connection pool.", e);
+                    throw new PersistException(e);
+                }
+                // Create Read Configuration.
+                readConfiguration = configuration.derive(new DataSourceConnectionProvider(readDataSource));
+            } else {
+                readExecutor = writeExecutor;
+                readDataSource = dataSource;
+                readConfiguration = configuration;
+            }
 
             // Detect changes.
             List<SchemaInspector.Change> changes = buildEvolution();
@@ -449,7 +457,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 return;
             }
 
-            // Finish initializing Table Mappings and ensure Validity.
+            // Finish initializing Table Mappings and atomic Validity.
             // Validate Table Mapping.
             tableMappingList.forEach(TableMapping::checkValidity);
 
@@ -468,8 +476,8 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
 
     @Override
     protected void shutDown() throws Exception {
-        writeExecutor.shutdown();
-        readExecutor.shutdown();
+        Try.run(() -> writeExecutor.shutdown());
+        Try.run(() -> readExecutor.shutdown());
 
         // Completely destroy H2 memory database if necessary.
         if (config.getUrl().startsWith("jdbc:h2:mem")) {
@@ -601,9 +609,9 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      */
     private List<SchemaInspector.Change> buildEvolution() {
         try (Connection connection = dataSource.getConnection()) {
-            this.sqlSchema = new SqlSchema(connection, config.getCatalog(), config.getSchema());
+            this.sqlSchema = new SqlSchema(connection, config.getCatalog(), config.getSchema(), config.isSyncIndexes());
             buildTableMappings();
-            return SchemaInspector.inspect(dbPlatform, tableMappingsByEntity);
+            return SchemaInspector.inspect(dbPlatform, tableMappingsByEntity, config.isSyncIndexes());
         } catch (Exception e) {
             // Ignore.
             LOG.error("EvolutionChecker.inspect failed.", e);
@@ -687,7 +695,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                         // SQL Transaction since it would be rolled back.
                         executeWrite(sql -> {
                             sql.insert(evolution);
-                            changeEntities.forEach(sql::insert);
+                            sql.insert(changeEntities);
                             return SqlResult.success();
                         });
                     }
@@ -932,6 +940,40 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
 
     /**
      * @param batch
+     * @param <T>
+     * @return
+     */
+    @Override
+    public <T extends AbstractEntity> Observable<SqlResult<int[]>> batch(
+        Function<SqlBatch, SqlBatch> batch,
+        int timeoutSeconds) {
+        return write(sql -> batch.apply(sql.batch()).execute(timeoutSeconds));
+    }
+
+    /**
+     * @param batch
+     * @param <T>
+     * @return
+     */
+    @Override
+    public <T extends AbstractEntity> Observable<SqlResult<int[]>> batchAtomic(Function<SqlBatch, SqlBatch> batch) {
+        return write(sql -> batch.apply(sql.batch()).executeAtomic());
+    }
+
+    /**
+     * @param batch
+     * @param <T>
+     * @return
+     */
+    @Override
+    public <T extends AbstractEntity> Observable<SqlResult<int[]>> batchAtomic(
+        Function<SqlBatch, SqlBatch> batch,
+        int timeoutSeconds) {
+        return write(sql -> batch.apply(sql.batch()).executeAtomic(timeoutSeconds));
+    }
+
+    /**
+     * @param batch
      * @param logger
      * @param <T>
      * @return
@@ -939,6 +981,45 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     @Override
     public <T extends AbstractEntity> Observable<SqlResult<int[]>> batch(Function<SqlBatch, SqlBatch> batch, Logger logger) {
         return write(sql -> batch.apply(sql.batch()).execute(logger));
+    }
+
+    /**
+     * @param batch
+     * @param logger
+     * @param <T>
+     * @return
+     */
+    @Override
+    public <T extends AbstractEntity> Observable<SqlResult<int[]>> batch(
+        Function<SqlBatch, SqlBatch> batch,
+        int timeoutSeconds,
+        Logger logger) {
+        return write(sql -> batch.apply(sql.batch()).execute(timeoutSeconds, logger));
+    }
+
+    /**
+     * @param batch
+     * @param logger
+     * @param <T>
+     * @return
+     */
+    @Override
+    public <T extends AbstractEntity> Observable<SqlResult<int[]>> batchAtomic(Function<SqlBatch, SqlBatch> batch, Logger logger) {
+        return write(sql -> batch.apply(sql.batch()).executeAtomic(logger));
+    }
+
+    /**
+     * @param batch
+     * @param logger
+     * @param <T>
+     * @return
+     */
+    @Override
+    public <T extends AbstractEntity> Observable<SqlResult<int[]>> batchAtomic(
+        Function<SqlBatch, SqlBatch> batch,
+        int timeoutSeconds,
+        Logger logger) {
+        return write(sql -> batch.apply(sql.batch()).executeAtomic(timeoutSeconds, logger));
     }
 
     /**
@@ -952,6 +1033,16 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     }
 
     /**
+     * @param entity
+     * @param <T>
+     * @return
+     */
+    @Override
+    public <T extends AbstractEntity> Observable<SqlResult<Integer>> insertAtomic(T entity) {
+        return write(sql -> sql.insertAtomic(entity));
+    }
+
+    /**
      * @param entities
      * @param <T>
      * @return
@@ -959,6 +1050,36 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     @Override
     public <T extends AbstractEntity> Observable<SqlResult<int[]>> insert(List<T> entities) {
         return write(sql -> sql.insert(entities));
+    }
+
+    /**
+     * @param entities
+     * @param <T>
+     * @return
+     */
+    @Override
+    public <T extends AbstractEntity> Observable<SqlResult<int[]>> insert(List<T> entities, int timeoutSeconds) {
+        return write(sql -> sql.insert(entities, timeoutSeconds));
+    }
+
+    /**
+     * @param entities
+     * @param <T>
+     * @return
+     */
+    @Override
+    public <T extends AbstractEntity> Observable<SqlResult<int[]>> insertAtomic(List<T> entities) {
+        return write(sql -> sql.insertAtomic(entities));
+    }
+
+    /**
+     * @param entities
+     * @param <T>
+     * @return
+     */
+    @Override
+    public <T extends AbstractEntity> Observable<SqlResult<int[]>> insertAtomic(List<T> entities, int timeoutSeconds) {
+        return write(sql -> sql.insertAtomic(entities, timeoutSeconds));
     }
 
     /**
@@ -972,6 +1093,16 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     }
 
     /**
+     * @param entity
+     * @param <T>
+     * @return
+     */
+    @Override
+    public <T extends AbstractEntity> Observable<SqlResult<Integer>> updateAtomic(T entity) {
+        return write(sql -> sql.updateAtomic(entity));
+    }
+
+    /**
      * @param entities
      * @param <T>
      * @return
@@ -979,6 +1110,36 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     @Override
     public <T extends AbstractEntity> Observable<SqlResult<int[]>> update(List<T> entities) {
         return write(sql -> sql.update(entities));
+    }
+
+    /**
+     * @param entities
+     * @param <T>
+     * @return
+     */
+    @Override
+    public <T extends AbstractEntity> Observable<SqlResult<int[]>> update(List<T> entities, int timeoutSeconds) {
+        return write(sql -> sql.update(entities, timeoutSeconds));
+    }
+
+    /**
+     * @param entities
+     * @param <T>
+     * @return
+     */
+    @Override
+    public <T extends AbstractEntity> Observable<SqlResult<int[]>> updateAtomic(List<T> entities) {
+        return write(sql -> sql.updateAtomic(entities));
+    }
+
+    /**
+     * @param entities
+     * @param <T>
+     * @return
+     */
+    @Override
+    public <T extends AbstractEntity> Observable<SqlResult<int[]>> updateAtomic(List<T> entities, int timeoutSeconds) {
+        return write(sql -> sql.updateAtomic(entities, timeoutSeconds));
     }
 
     public <T> Observable<SqlResult<T>> write(SqlCallable<T> task) {
@@ -1115,30 +1276,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             throw new PersistException(e);
         }
     }
-
-//    /**
-//     * @param task
-//     * @throws ExecutionException
-//     * @throws InterruptedException
-//     */
-//    public void writeBlocking(SqlRunnable task) {
-//        try {
-//            writeExecutor.submit(() -> {
-//                try {
-//                    executeWrite(session -> {
-//                        task.run(session);
-//                        return null;
-//                    });
-//                } catch (Exception e) {
-//                    throw new PersistException(e);
-//                }
-//            }).get();
-//        } catch (InterruptedException e) {
-//            throw new PersistException(e);
-//        } catch (ExecutionException e) {
-//            throw new PersistException(e);
-//        }
-//    }
 
     /**
      * @param task

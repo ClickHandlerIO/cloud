@@ -221,6 +221,8 @@ public class TableMapping {
 
         final String[] primaryKeys = tableAnnotation.primaryKey();
         if (primaryKeys.length == 0) {
+            final Property pkProp = getProperty(AbstractEntity.ID);
+            pkProp.primaryKey = true;
             primaryKey.add(getProperty(AbstractEntity.ID));
         } else {
             for (String pkColumn : primaryKeys) {
@@ -237,7 +239,9 @@ public class TableMapping {
 
         final String[] shardKeys = tableAnnotation.shardKey();
         if (shardKeys.length == 0) {
-            shardKeys.equals(getProperty(AbstractEntity.ID));
+            for (Property pkProp : primaryKey) {
+                pkProp.shardKey = true;
+            }
         } else {
             for (String shardColumn : shardKeys) {
                 final Property shardProp = getProperty(shardColumn);

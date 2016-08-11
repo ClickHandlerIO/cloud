@@ -154,6 +154,16 @@ public interface SqlExecutor {
      */
     <T extends AbstractEntity> Observable<SqlResult<int[]>> batch(Function<SqlBatch, SqlBatch> batch);
 
+    <T extends AbstractEntity> Observable<SqlResult<int[]>> batch(
+        Function<SqlBatch, SqlBatch> batch,
+        int timeoutSeconds);
+
+    <T extends AbstractEntity> Observable<SqlResult<int[]>> batchAtomic(Function<SqlBatch, SqlBatch> batch);
+
+    <T extends AbstractEntity> Observable<SqlResult<int[]>> batchAtomic(
+        Function<SqlBatch, SqlBatch> batch,
+        int timeoutSeconds);
+
     /**
      *
      * @param batch
@@ -163,6 +173,18 @@ public interface SqlExecutor {
      */
     <T extends AbstractEntity> Observable<SqlResult<int[]>> batch(Function<SqlBatch, SqlBatch> batch, Logger logger);
 
+    <T extends AbstractEntity> Observable<SqlResult<int[]>> batch(
+        Function<SqlBatch, SqlBatch> batch,
+        int timeoutSeconds,
+        Logger logger);
+
+    <T extends AbstractEntity> Observable<SqlResult<int[]>> batchAtomic(Function<SqlBatch, SqlBatch> batch, Logger logger);
+
+    <T extends AbstractEntity> Observable<SqlResult<int[]>> batchAtomic(
+        Function<SqlBatch, SqlBatch> batch,
+        int timeoutSeconds,
+        Logger logger);
+
     /**
      *
      * @param entity
@@ -170,6 +192,8 @@ public interface SqlExecutor {
      * @return
      */
     <T extends AbstractEntity> Observable<SqlResult<Integer>> insert(T entity);
+
+    <T extends AbstractEntity> Observable<SqlResult<Integer>> insertAtomic(T entity);
 
     /**
      *
@@ -179,6 +203,12 @@ public interface SqlExecutor {
      */
     <T extends AbstractEntity> Observable<SqlResult<int[]>> insert(List<T> entities);
 
+    <T extends AbstractEntity> Observable<SqlResult<int[]>> insert(List<T> entities, int timeoutSeconds);
+
+    <T extends AbstractEntity> Observable<SqlResult<int[]>> insertAtomic(List<T> entities);
+
+    <T extends AbstractEntity> Observable<SqlResult<int[]>> insertAtomic(List<T> entities, int timeoutSeconds);
+
     /**
      *
      * @param entity
@@ -186,6 +216,8 @@ public interface SqlExecutor {
      * @return
      */
     <T extends AbstractEntity> Observable<SqlResult<Integer>> update(T entity);
+
+    <T extends AbstractEntity> Observable<SqlResult<Integer>> updateAtomic(T entity);
 
     /**
      *
@@ -200,6 +232,12 @@ public interface SqlExecutor {
      * @param handler
      */
     void writeRunnable(SqlRunnable task, Handler<AsyncResult<Void>> handler);
+
+    <T extends AbstractEntity> Observable<SqlResult<int[]>> update(List<T> entities, int timeoutSeconds);
+
+    <T extends AbstractEntity> Observable<SqlResult<int[]>> updateAtomic(List<T> entities);
+
+    <T extends AbstractEntity> Observable<SqlResult<int[]>> updateAtomic(List<T> entities, int timeoutSeconds);
 
     /**
      * @param task

@@ -130,10 +130,52 @@ public class SqlBatch {
         return session.save(queryList);
     }
 
+    public SqlResult<int[]> execute(int timeoutSeconds) {
+        if (queryList.isEmpty())
+            return SqlResult.success(new int[0]);
+
+        return session.save(queryList, timeoutSeconds);
+    }
+
     public SqlResult<int[]> execute(Logger logger) {
         if (queryList.isEmpty())
             return SqlResult.success(new int[0]);
 
         return session.save(queryList, logger);
+    }
+
+    public SqlResult<int[]> execute(int timeoutSeconds, Logger logger) {
+        if (queryList.isEmpty())
+            return SqlResult.success(new int[0]);
+
+        return session.save(queryList, timeoutSeconds, logger);
+    }
+
+    public SqlResult<int[]> executeAtomic() {
+        if (queryList.isEmpty())
+            return SqlResult.success(new int[0]);
+
+        return session.saveAtomic(queryList);
+    }
+
+    public SqlResult<int[]> executeAtomic(int timeoutSeconds) {
+        if (queryList.isEmpty())
+            return SqlResult.success(new int[0]);
+
+        return session.saveAtomic(queryList, timeoutSeconds);
+    }
+
+    public SqlResult<int[]> executeAtomic(Logger logger) {
+        if (queryList.isEmpty())
+            return SqlResult.success(new int[0]);
+
+        return session.saveAtomic(queryList, logger);
+    }
+
+    public SqlResult<int[]> executeAtomic(int timeoutSeconds, Logger logger) {
+        if (queryList.isEmpty())
+            return SqlResult.success(new int[0]);
+
+        return session.saveAtomic(queryList, timeoutSeconds, logger);
     }
 }

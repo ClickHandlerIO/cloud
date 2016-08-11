@@ -50,7 +50,7 @@ public class SqlResult<T> {
         return result;
     }
 
-    public static SqlResult<Integer> create(int result) {
+    public static SqlResult<Integer> atomic(int result) {
         if (result != 1) {
             return rollback(result);
         } else {
@@ -58,7 +58,7 @@ public class SqlResult<T> {
         }
     }
 
-    public static SqlResult<int[]> create(int[] results) {
+    public static SqlResult<int[]> atomic(int[] results) {
         if (results == null || results.length == 0)
             return rollback(results);
 

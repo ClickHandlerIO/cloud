@@ -27,6 +27,7 @@ public class SqlConfig {
     private boolean prod;
     private boolean test;
     private boolean generateSchema;
+    private boolean syncIndexes = false;
 
     public String getName() {
         return name;
@@ -202,5 +203,13 @@ public class SqlConfig {
 
     public void setGenerateSchema(boolean generateSchema) {
         this.generateSchema = generateSchema;
+    }
+
+    public boolean isSyncIndexes() {
+        return syncIndexes;
+    }
+
+    public void setSyncIndexes(boolean syncIndexes) {
+        this.syncIndexes = syncIndexes;
     }
 }

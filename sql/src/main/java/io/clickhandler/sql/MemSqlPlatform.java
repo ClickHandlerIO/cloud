@@ -138,7 +138,7 @@ public class MemSqlPlatform extends SqlPlatform {
                 return MySQLDataType.BIGINT;
             case DBTypes.BOOLEAN:
             case DBTypes.BIT:
-                return MySQLDataType.BIT;
+                return MySQLDataType.BOOLEAN;
             case DBTypes.TIMESTAMP:
                 return MySQLDataType.TIMESTAMP;
             case DBTypes.TIME:

@@ -32,9 +32,10 @@ public class SqlSchema {
     public final String extraNameCharacters;
     public final String driverVersion;
     public final long elapsedMs;
+    public final boolean indexes;
     public final Map<String, DbTable> tables = new LinkedHashMap<String, DbTable>();
 
-    public SqlSchema(Connection connection, String catalog, String schema) throws SQLException {
+    public SqlSchema(Connection connection, String catalog, String schema, boolean indexes) throws SQLException {
         long start = System.currentTimeMillis();
         final DatabaseMetaData metaData = connection.getMetaData();
 
@@ -53,6 +54,7 @@ public class SqlSchema {
         timeDateFunctions = metaData.getTimeDateFunctions();
         extraNameCharacters = metaData.getExtraNameCharacters();
         searchStringEscape = metaData.getSearchStringEscape();
+        this.indexes = indexes;
 
         String[] tableTypes = new String[]{"TABLE"};
 
@@ -137,54 +139,55 @@ public class SqlSchema {
             throw new RuntimeException(e);
         }
 
-        final Map<String, DbIndex> indexMap = new HashMap<>();
-
-        for (DbTable table : tables.values()) {
-            try (ResultSet rs = metaData.getIndexInfo(table.catalog, table.schema, table.name, false, false)) {
+        if (indexes) {
+            final Map<String, DbIndex> indexMap = new HashMap<>();
+            for (DbTable table : tables.values()) {
+                try (ResultSet rs = metaData.getIndexInfo(table.catalog, table.schema, table.name, false, false)) {
 //            try (ResultSet rs = metaData.getIndexInfo(null, null, table.name.toUpperCase(), false, false)) {
-                while (rs.next()) {
-                    final String cat = Strings.nullToEmpty(rs.getString(1)).trim().toLowerCase();
-                    final String sch = Strings.nullToEmpty(rs.getString(2)).trim().toLowerCase();
-                    final String tableName = Strings.nullToEmpty(rs.getString(3)).trim().toLowerCase();
-                    final boolean unique = !rs.getBoolean(4);
-                    final String qualifier = Strings.nullToEmpty(rs.getString(5)).trim().toLowerCase();
-                    final String name = Strings.nullToEmpty(rs.getString(6)).trim().toLowerCase();
-                    final short type = rs.getShort(7);
-                    final short ordinalPosition = rs.getShort(8);
-                    final String columnName = Strings.nullToEmpty(rs.getString(9)).trim().toLowerCase();
-                    final String ascStr = Strings.nullToEmpty(rs.getString(10)).trim();
-                    final Boolean asc = ascStr.isEmpty() ? null : ascStr.equalsIgnoreCase("A");
-                    final long cardinality = rs.getInt(11);
-                    final long pages = rs.getInt(12);
+                    while (rs.next()) {
+                        final String cat = Strings.nullToEmpty(rs.getString(1)).trim().toLowerCase();
+                        final String sch = Strings.nullToEmpty(rs.getString(2)).trim().toLowerCase();
+                        final String tableName = Strings.nullToEmpty(rs.getString(3)).trim().toLowerCase();
+                        final boolean unique = !rs.getBoolean(4);
+                        final String qualifier = Strings.nullToEmpty(rs.getString(5)).trim().toLowerCase();
+                        final String name = Strings.nullToEmpty(rs.getString(6)).trim().toLowerCase();
+                        final short type = rs.getShort(7);
+                        final short ordinalPosition = rs.getShort(8);
+                        final String columnName = Strings.nullToEmpty(rs.getString(9)).trim().toLowerCase();
+                        final String ascStr = Strings.nullToEmpty(rs.getString(10)).trim();
+                        final Boolean asc = ascStr.isEmpty() ? null : ascStr.equalsIgnoreCase("A");
+                        final long cardinality = rs.getInt(11);
+                        final long pages = rs.getInt(12);
 
-                    final DbColumn column = table.getColumn(columnName);
+                        final DbColumn column = table.getColumn(columnName);
 
-                    DbIndex index = indexMap.get(name);
-                    if (index == null) {
-                        index = new DbIndex(cat, sch, tableName, unique, qualifier, name, type, cardinality, pages);
-                        indexMap.put(name, index);
-                        table.indexes.put(name, index);
+                        DbIndex index = indexMap.get(name);
+                        if (index == null) {
+                            index = new DbIndex(cat, sch, tableName, unique, qualifier, name, type, cardinality, pages);
+                            indexMap.put(name, index);
+                            table.indexes.put(name, index);
 
-                        if (column != null) {
-                            column.indexes.add(index);
+                            if (column != null) {
+                                column.indexes.add(index);
+                            }
                         }
-                    }
-                    final DbIndexColumn indexColumn = new DbIndexColumn(
+                        final DbIndexColumn indexColumn = new DbIndexColumn(
                             column,
                             ordinalPosition,
                             columnName,
                             asc
-                    );
+                        );
 
-                    if (column != null) {
-                        column.indexColumns.add(indexColumn);
+                        if (column != null) {
+                            column.indexColumns.add(indexColumn);
+                        }
+
+                        index.columns.add(indexColumn);
                     }
-
-                    index.columns.add(indexColumn);
+                    rs.close();
+                } catch (Exception e) {
+                    LOG.error("Unexpected exception while running metaData.getIndexInfo", e);
                 }
-                rs.close();
-            } catch (Exception e) {
-                LOG.error("Unexpected exception while running metaData.getIndexInfo", e);
             }
         }
 
@@ -193,8 +196,8 @@ public class SqlSchema {
         LOG.warn("SqlSchema took " + elapsedMs + "ms to init.");
     }
 
-    public static SqlSchema create(Connection connection, String catalog, String schema) throws SQLException {
-        return new SqlSchema(connection, catalog, schema);
+    public static SqlSchema create(Connection connection, String catalog, String schema, boolean indexes) throws SQLException {
+        return new SqlSchema(connection, catalog, schema, indexes);
     }
 
     public DbTable getTable(String tableName) {
