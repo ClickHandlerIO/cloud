@@ -1,4 +1,4 @@
-package io.clickhandler.action.compiler;
+package io.clickhandler.action.codegen;
 
 import com.squareup.javapoet.ClassName;
 import io.clickhandler.action.*;

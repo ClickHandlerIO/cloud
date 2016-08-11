@@ -134,6 +134,8 @@ public class SqlPlatform {
         for (TableMapping.Property property : mapping.getProperties()) {
             createColumnStep = step.column(property.getColumnName(), property.fieldDataType());
         }
+        createColumnStep.constraints(DSL.constraint("pk_" + mapping.getTableName())
+            .primaryKey(columnNames(mapping.getPrimaryKeyProperties())));
         return createColumnStep.getSQL();
     }
 
@@ -142,10 +144,11 @@ public class SqlPlatform {
      * @return
      */
     public String ddlPrimaryKey(TableMapping mapping) {
-        return create()
-            .alterTable(mapping.getTableName())
-            .add(DSL.constraint("pk_" + mapping.getTableName())
-                .primaryKey(columnNames(mapping.getPrimaryKeyProperties()))).getSQL();
+        return null;
+//        return create()
+//            .alterTable(mapping.getTableName())
+//            .add(DSL.constraint("pk_" + mapping.getTableName())
+//                .primaryKey(columnNames(mapping.getPrimaryKeyProperties()))).getSQL();
     }
 
     /**

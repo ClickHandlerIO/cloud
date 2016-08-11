@@ -327,7 +327,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                     break;
                 case MARIADB:
                 case MYSQL:
-                    dbPlatform = new MySqlPlatform(configuration, config);
+                    dbPlatform = config.isMemSQL() ? new MemSqlPlatform(configuration, config) : new MySqlPlatform(configuration, config);
                     hikariConfig.setUsername(jdbcUser);
                     hikariConfig.setPassword(jdbcPassword);
                     hikariConfig.setDataSourceClassName("com.mysql.jdbc.jdbc2.optional.MysqlDataSource");
@@ -633,6 +633,9 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
 
                 for (SchemaInspector.Change change : changes) {
                     final String sql = change.ddl(dbPlatform);
+                    if (sql == null || sql.isEmpty())
+                        continue;
+
                     final String[] sqlParts = sql.trim().split(";");
                     for (String sqlPart : sqlParts) {
                         sqlPart = sqlPart.trim();
@@ -646,7 +649,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                         changeEntity.setType(change.type());
                         changeEntity.setSql(sqlPart);
                         try {
-                            changeEntity.setAffected(session.create().execute(sqlPart));
+                            changeEntity.setAffected(session.create().query(sqlPart).queryTimeout(600).execute());
                             changeEntity.setSuccess(true);
                         } catch (Exception e) {
                             failed = true;
@@ -670,7 +673,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 // Insert Evolution into Db.
                 if (!config.isGenerateSchema()) {
                     session.insert(evolution);
-                    session.insert(changeEntities);
+                    changeEntities.forEach(session::insert);
                 }
 
                 return SqlResult.success(evolution);
@@ -684,7 +687,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                         // SQL Transaction since it would be rolled back.
                         executeWrite(sql -> {
                             sql.insert(evolution);
-                            sql.insert(changeEntities);
+                            changeEntities.forEach(sql::insert);
                             return SqlResult.success();
                         });
                     }

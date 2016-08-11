@@ -28,7 +28,7 @@ public class TableMapping {
     public static final int COLUMN_LENGTH_ID = 32;
     public static final int COLUMN_LENGTH_ENUM = 64;
     public static final int COLUMN_LENGTH_STRING = 128;
-    
+
     public final static String ENTITY_SUFFIX = "Entity";
     private static final Logger LOG = LoggerFactory.getLogger(TableMapping.class);
 
@@ -50,11 +50,14 @@ public class TableMapping {
     private final EntityMapper<? extends AbstractEntity, ? extends Record> entityMapper;
     private final Class recordClass;
 
+    private final List<Property> primaryKey = new ArrayList<>();
+    private final List<Property> shardKey = new ArrayList<>();
+
     private final List<Index> indexes = new ArrayList<>();
     private final Map<String, Index> indexMap = new HashMap<>();
     private Multimap<Property, Index> propertyIndexMap = Multimaps.newMultimap(
-            Maps.newHashMap(),
-            () -> Lists.newArrayListWithExpectedSize(2));
+        Maps.newHashMap(),
+        () -> Lists.newArrayListWithExpectedSize(2));
 
     protected TableMapping(final SqlSchema.DbTable schemaTable,
                            final SqlPlatform dbPlatform,
@@ -216,6 +219,38 @@ public class TableMapping {
             this.idField = field(String.class, AbstractEntity.ID);
         }
 
+        final String[] primaryKeys = tableAnnotation.primaryKey();
+        if (primaryKeys.length == 0) {
+            primaryKey.add(getProperty(AbstractEntity.ID));
+        } else {
+            for (String pkColumn : primaryKeys) {
+                final Property pkProp = getProperty(pkColumn);
+
+                if (pkProp == null) {
+                    throw new PersistException("Primary Key column '" + pkColumn + "' does not map to any property.");
+                }
+
+                pkProp.primaryKey = true;
+                primaryKey.add(pkProp);
+            }
+        }
+
+        final String[] shardKeys = tableAnnotation.shardKey();
+        if (shardKeys.length == 0) {
+            shardKeys.equals(getProperty(AbstractEntity.ID));
+        } else {
+            for (String shardColumn : shardKeys) {
+                final Property shardProp = getProperty(shardColumn);
+
+                if (shardProp == null) {
+                    throw new PersistException("Shard Key column '" + shardColumn + "' does not map to any property.");
+                }
+
+                shardProp.shardKey = true;
+                shardKey.add(shardProp);
+            }
+        }
+
         Indexes indexes = (Indexes) entityClass.getAnnotation(Indexes.class);
         if (indexes != null && indexes.value() != null && indexes.value().length > 0) {
             for (final io.clickhandler.sql.Index indexAnnotation : indexes.value()) {
@@ -268,13 +303,13 @@ public class TableMapping {
                 }
 
                 final Index index = new Index(
-                        this,
-                        name,
-                        indexAnnotation.unique(),
-                        indexAnnotation.clustered(),
-                        columnNames,
-                        dbIndex,
-                        indexProperties
+                    this,
+                    name,
+                    indexAnnotation.unique(),
+                    indexAnnotation.clustered(),
+                    columnNames,
+                    dbIndex,
+                    indexProperties
                 );
 
                 this.indexMap.put(index.name, index);
@@ -364,7 +399,11 @@ public class TableMapping {
     }
 
     public List<Property> getPrimaryKeyProperties() {
-        return Lists.newArrayList(getProperty(AbstractEntity.ID));
+        return primaryKey;
+    }
+
+    public List<Property> getShardKeyProperties() {
+        return shardKey;
     }
 
     public List<Index> getIndexes() {
@@ -680,6 +719,8 @@ public class TableMapping {
         protected Map<String, Object> enumConstantMap;
         private int columnLength;
         private boolean nullable;
+        private boolean primaryKey;
+        private boolean shardKey;
 
         public Property getParent() {
             return parent;
@@ -707,6 +748,14 @@ public class TableMapping {
 
         public boolean isEmbedded() {
             return embedded;
+        }
+
+        public boolean isPrimaryKey() {
+            return primaryKey;
+        }
+
+        public boolean isShardKey() {
+            return shardKey;
         }
 
         public int getDbType() {

@@ -1,4 +1,4 @@
-package io.clickhandler.action.compiler;
+package io.clickhandler.action.codegen;
 
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.DeclaredType;

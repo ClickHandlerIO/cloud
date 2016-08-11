@@ -1,4 +1,4 @@
-package io.clickhandler.action.compiler;
+package io.clickhandler.action.codegen;
 
 import com.google.auto.service.AutoService;
 import com.squareup.javapoet.*;

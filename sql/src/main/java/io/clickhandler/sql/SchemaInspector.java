@@ -47,7 +47,7 @@ public class SchemaInspector {
 
         if (mapping.schemaTable == null) {
             changes.add(new CreateTable(mapping));
-            changes.add(new CreatePrimaryKey(mapping));
+//            changes.add(new CreatePrimaryKey(mapping));
 
             for (TableMapping.Index index : mapping.getIndexes()) {
                 changes.add(new CreateIndex(mapping, index));
@@ -116,8 +116,7 @@ public class SchemaInspector {
         }
 
         if (columnType.getType() != fieldType.getType()
-                || ((platform.isLengthBased(column.dataType) || platform.isLengthBased(property.dbType)) && columnType.length() != fieldType.length())
-                || columnType.nullable() != fieldType.nullable()) {
+                || ((platform.isLengthBased(column.dataType) || platform.isLengthBased(property.dbType)) && columnType.length() != fieldType.length())) {
             changes.add(new ModifyColumn(mapping, property));
         }
     }

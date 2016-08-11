@@ -534,7 +534,6 @@ public class SqlSession {
     }
 
     /**
-     *
      * @param cls
      * @param condition
      * @param <T>
@@ -560,7 +559,6 @@ public class SqlSession {
     }
 
     /**
-     *
      * @param cls
      * @param conditions
      * @param <T>
@@ -615,7 +613,6 @@ public class SqlSession {
     }
 
     /**
-     *
      * @param cls
      * @param conditions
      * @param <T>
@@ -712,6 +709,9 @@ public class SqlSession {
             UpdateSetMoreStep last = null;
 
             for (TableMapping.Property property : mapping.getProperties()) {
+                // Do not update Primary Key and/or Shard Key columns.
+                if (property.isPrimaryKey() || property.isShardKey())
+                    continue;
                 final Object value = property.get(entity);
                 last = query.set(property.jooqField, value);
             }
@@ -720,10 +720,23 @@ public class SqlSession {
                 throw new RuntimeException("Entity [" + entity.getClass().getCanonicalName() + "] has no fields to create.");
             }
 
+            Condition primaryKeyCondition = null;
+            if (mapping.getPrimaryKeyProperties().size() > 0) {
+                for (TableMapping.Property prop : mapping.getPrimaryKeyProperties()) {
+                    if (primaryKeyCondition != null) {
+                        primaryKeyCondition = primaryKeyCondition.and(prop.jooqField.eq(prop.get(entity)));
+                    } else {
+                        primaryKeyCondition = prop.jooqField.eq(prop.get(entity));
+                    }
+                }
+            } else {
+                primaryKeyCondition = mapping.ID().eq(entity.getId());
+            }
+
             if (condition == null)
-                return last.where(mapping.ID().eq(entity.getId()));
+                return last.where(primaryKeyCondition);
             else
-                return last.where(mapping.ID().eq(entity.getId()).and(condition));
+                return last.where(primaryKeyCondition.and(condition));
         } catch (Throwable e) {
             Throwables.propagate(e);
             return null;

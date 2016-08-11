@@ -21,6 +21,7 @@ public class SqlConfig {
     private boolean useServerPrepStmts = true;
     private int defaultQueryTimeoutInSeconds = 4;
     private String storageEngine = "InnoDB";
+    private boolean memSQL;
 
     private boolean dev;
     private boolean prod;
@@ -161,6 +162,14 @@ public class SqlConfig {
 
     public void setStorageEngine(String storageEngine) {
         this.storageEngine = storageEngine;
+    }
+
+    public boolean isMemSQL() {
+        return memSQL;
+    }
+
+    public void setMemSQL(boolean memSQL) {
+        this.memSQL = memSQL;
     }
 
     public boolean isDev() {

@@ -16,4 +16,31 @@ public @interface Table {
      * Name of the table mapped to the class.
      */
     String name() default "";
+
+    /**
+     * @return
+     */
+    String[] primaryKey() default {};
+
+    /**
+     * @return
+     */
+    String[] shardKey() default {};
+
+    /**
+     *
+     * @return
+     */
+    String[] columnStoreKey() default {};
+
+    /**
+     * Reference tables are
+     * @return
+     */
+    boolean reference() default false;
+
+    /**
+     * @return
+     */
+    boolean columnStore() default false;
 }
