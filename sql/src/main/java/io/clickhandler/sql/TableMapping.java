@@ -123,6 +123,42 @@ public class TableMapping {
 
         columns = extractColumnNames(this.properties);
 
+        final String[] primaryKeys = tableAnnotation.primaryKey();
+        if (primaryKeys.length == 0) {
+            final Property pkProp = getProperty(AbstractEntity.ID);
+            pkProp.primaryKey = true;
+            primaryKey.add(pkProp);
+        } else {
+            for (String pkColumn : primaryKeys) {
+                final Property pkProp = getProperty(pkColumn);
+
+                if (pkProp == null) {
+                    throw new PersistException("Primary Key column '" + pkColumn + "' does not map to any property.");
+                }
+
+                pkProp.primaryKey = true;
+                primaryKey.add(pkProp);
+            }
+        }
+
+        final String[] shardKeys = tableAnnotation.shardKey();
+        if (shardKeys.length == 0) {
+            for (Property pkProp : primaryKey) {
+                pkProp.shardKey = true;
+            }
+        } else {
+            for (String shardColumn : shardKeys) {
+                final Property shardProp = getProperty(shardColumn);
+
+                if (shardProp == null) {
+                    throw new PersistException("Shard Key column '" + shardColumn + "' does not map to any property.");
+                }
+
+                shardProp.shardKey = true;
+                shardKey.add(shardProp);
+            }
+        }
+
         {
             this.tbl = jooqMap.get(tableName);
 
@@ -217,42 +253,6 @@ public class TableMapping {
 
             this.fields = jooqFields;
             this.idField = field(String.class, AbstractEntity.ID);
-        }
-
-        final String[] primaryKeys = tableAnnotation.primaryKey();
-        if (primaryKeys.length == 0) {
-            final Property pkProp = getProperty(AbstractEntity.ID);
-            pkProp.primaryKey = true;
-            primaryKey.add(getProperty(AbstractEntity.ID));
-        } else {
-            for (String pkColumn : primaryKeys) {
-                final Property pkProp = getProperty(pkColumn);
-
-                if (pkProp == null) {
-                    throw new PersistException("Primary Key column '" + pkColumn + "' does not map to any property.");
-                }
-
-                pkProp.primaryKey = true;
-                primaryKey.add(pkProp);
-            }
-        }
-
-        final String[] shardKeys = tableAnnotation.shardKey();
-        if (shardKeys.length == 0) {
-            for (Property pkProp : primaryKey) {
-                pkProp.shardKey = true;
-            }
-        } else {
-            for (String shardColumn : shardKeys) {
-                final Property shardProp = getProperty(shardColumn);
-
-                if (shardProp == null) {
-                    throw new PersistException("Shard Key column '" + shardColumn + "' does not map to any property.");
-                }
-
-                shardProp.shardKey = true;
-                shardKey.add(shardProp);
-            }
         }
 
         Indexes indexes = (Indexes) entityClass.getAnnotation(Indexes.class);
