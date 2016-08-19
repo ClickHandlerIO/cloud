@@ -223,7 +223,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             final String jdbcReadUrl = Strings.nullToEmpty((config.getReadUrl()));
             final String jdbcReadUser = Strings.nullToEmpty((config.getReadUser()));
             final String jdbcReadPassword = Strings.nullToEmpty((config.getReadPassword()));
-            final SQLDialect dialect = JDBCUtils.dialect(jdbcUrl);
+            SQLDialect dialect = JDBCUtils.dialect(jdbcUrl);
 
             // Configure connection pool.
             hikariConfig = new HikariConfig();
@@ -298,79 +298,131 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             configuration = new DefaultConfiguration();
             configuration.set(new RecordMapperProviderImpl());
             configuration.set(settings);
-            configuration.set(dialect);
 
             configuration.set(PrettyPrinter::new, TimeoutListener::new);
 
-            ////////////////////////////////////////////////////////////////////////////////////////////////////
-            // SqlDatabase Vendor Specific Configuration
-            ////////////////////////////////////////////////////////////////////////////////////////////////////
-            switch (dialect) {
-                case DEFAULT:
-                    break;
-                case CUBRID:
-                    break;
-                case DERBY:
-                    break;
-                case FIREBIRD:
-                    break;
-                case H2:
-                    dbPlatform = new H2Platform(configuration, config);
-                    hikariConfig.setDataSourceClassName("org.h2.jdbcx.JdbcDataSource");
-                    hikariConfig.addDataSourceProperty("URL", jdbcUrl);
-                    hikariConfig.addDataSourceProperty("user", jdbcUser);
-                    hikariConfig.addDataSourceProperty("password", jdbcPassword);
-                    hikariReadConfig.setDataSourceClassName("org.h2.jdbcx.JdbcDataSource");
-                    hikariReadConfig.addDataSourceProperty("URL", jdbcReadUrl);
-                    hikariReadConfig.addDataSourceProperty("user", jdbcReadUser);
-                    hikariReadConfig.addDataSourceProperty("password", jdbcReadPassword);
-                    break;
-                case HSQLDB:
-                    break;
-                case MARIADB:
-                case MYSQL:
-                    dbPlatform = config.isMemSQL() ? new MemSqlPlatform(configuration, config) : new MySqlPlatform(configuration, config);
-                    hikariConfig.setUsername(jdbcUser);
-                    hikariConfig.setPassword(jdbcPassword);
-                    hikariConfig.setDataSourceClassName("com.mysql.jdbc.jdbc2.optional.MysqlDataSource");
-                    hikariConfig.addDataSourceProperty("URL", jdbcUrl);
-                    hikariConfig.addDataSourceProperty("user", jdbcUser);
-                    hikariConfig.addDataSourceProperty("password", jdbcPassword);
+            if (config.getUrl().startsWith("jdbc:com.nuodb")) {
+                configuration.set(SQLDialect.MYSQL);
+                dbPlatform = new NuoDBPlatform(configuration, config);
 
-                    hikariReadConfig.setUsername(jdbcReadUser);
-                    hikariReadConfig.setPassword(jdbcReadPassword);
-                    hikariReadConfig.setDataSourceClassName("com.mysql.jdbc.jdbc2.optional.MysqlDataSource");
-                    hikariReadConfig.addDataSourceProperty("URL", jdbcReadUrl);
-                    hikariReadConfig.addDataSourceProperty("user", jdbcReadUser);
-                    hikariReadConfig.addDataSourceProperty("password", jdbcReadPassword);
+                settings.setRenderSchema(false);
+                settings.setRenderNameStyle(RenderNameStyle.AS_IS);
+                settings.setQueryTimeout(10);
 
-                    ////////////////////////////////////////////////////////////////////////////////////////////////////
-                    // MySQL Performance Configuration
-                    ////////////////////////////////////////////////////////////////////////////////////////////////////
-                    hikariConfig.addDataSourceProperty("cachePrepStmts", config.isCachePrepStmts());
-                    hikariReadConfig.addDataSourceProperty("cachePrepStmts", config.isCachePrepStmts());
-                    int prepStmtCacheSize = config.getPrepStmtCacheSize();
-                    if (prepStmtCacheSize < 1) {
-                        prepStmtCacheSize = config.isProd()
-                            ? PROD_MYSQL_PREPARE_STMT_CACHE_SIZE
-                            : DEV_MYSQL_PREPARE_STMT_CACHE_SIZE;
-                    }
-                    hikariConfig.addDataSourceProperty("prepStmtCacheSize", prepStmtCacheSize);
-                    hikariReadConfig.addDataSourceProperty("prepStmtCacheSize", prepStmtCacheSize);
-                    int prepStmtCacheSqlLimit = config.getPrepStmtCacheSqlLimit();
-                    if (prepStmtCacheSqlLimit < 1) {
-                        prepStmtCacheSqlLimit = config.isProd()
-                            ? PROD_MYSQL_PREPARE_STMT_CACHE_SQL_LIMIT
-                            : DEV_MYSQL_PREPARE_STMT_CACHE_SQL_LIMIT;
-                    }
-                    hikariConfig.addDataSourceProperty("prepStmtCacheSqlLimit", prepStmtCacheSqlLimit);
-                    hikariReadConfig.addDataSourceProperty("prepStmtCacheSqlLimit", prepStmtCacheSqlLimit);
-                    hikariConfig.addDataSourceProperty("useServerPrepStmts", config.isUseServerPrepStmts());
-                    hikariReadConfig.addDataSourceProperty("useServerPrepStmts", config.isUseServerPrepStmts());
-                    break;
-                case POSTGRES:
-                case POSTGRES_9_3:
-                case POSTGRES_9_4:
+                {
+                    final Properties props = new Properties();
+                    props.setProperty("url", jdbcUrl);
+                    props.setProperty("user", jdbcUser);
+                    props.setProperty("password", jdbcPassword);
+                    props.setProperty("defaultSchema", config.getSchema());
+                    props.setProperty("isolation", "write_committed");
+                    final com.nuodb.jdbc.DataSource dataSource = new com.nuodb.jdbc.DataSource(props);
+                    hikariConfig.setDataSource(dataSource);
+                    hikariConfig.setConnectionTestQuery("SELECT 1 FROM dual");
+                }
+
+                if (!Strings.nullToEmpty(config.getReadUrl()).trim().isEmpty()) {
+                    final Properties props = new Properties();
+                    props.setProperty("url", jdbcReadUrl);
+                    props.setProperty("user", jdbcReadUser);
+                    props.setProperty("password", jdbcReadPassword);
+                    props.setProperty("defaultSchema", config.getSchema());
+                    props.setProperty("isolation", "write_committed");
+                    final com.nuodb.jdbc.DataSource dataSource = new com.nuodb.jdbc.DataSource(props);
+                    hikariReadConfig.setDataSource(dataSource);
+                    hikariReadConfig.setConnectionTestQuery("SELECT 1 FROM dual");
+                }
+
+//                hikariConfig.setJdbcUrl(jdbcUrl);
+//                hikariConfig.setUsername(jdbcUser);
+//                hikariConfig.setPassword(jdbcPassword);
+//                hikariConfig.setDataSourceClassName("com.nuodb.jdbc.DataSource");
+//                hikariConfig.addDataSourceProperty("url", jdbcUrl);
+//                hikariConfig.addDataSourceProperty("username", jdbcUser);
+//                hikariConfig.addDataSourceProperty("password", jdbcPassword);
+//                hikariReadConfig.setDataSourceClassName("com.nuodb.jdbc.DataSource");
+//                hikariReadConfig.addDataSourceProperty("url", jdbcReadUrl);
+//                hikariReadConfig.addDataSourceProperty("username", jdbcReadUser);
+//                hikariReadConfig.addDataSourceProperty("password", jdbcReadPassword);
+//                hikariReadConfig.setJdbcUrl(jdbcReadUrl);
+//                hikariReadConfig.setUsername(jdbcReadUser);
+//                hikariReadConfig.setPassword(jdbcReadPassword);
+            } else {
+                configuration.set(dialect);
+
+                ////////////////////////////////////////////////////////////////////////////////////////////////////
+                // SqlDatabase Vendor Specific Configuration
+                ////////////////////////////////////////////////////////////////////////////////////////////////////
+                switch (dialect) {
+                    case DEFAULT:
+                        break;
+                    case CUBRID:
+                        break;
+                    case DERBY:
+                        break;
+                    case FIREBIRD:
+                        break;
+                    case H2:
+                        settings.setRenderSchema(false);
+                        settings.setRenderNameStyle(RenderNameStyle.AS_IS);
+                        settings.setQueryTimeout(10);
+
+                        dbPlatform = new H2Platform(configuration, config);
+                        hikariConfig.setDataSourceClassName("org.h2.jdbcx.JdbcDataSource");
+                        hikariConfig.addDataSourceProperty("URL", jdbcUrl);
+                        hikariConfig.addDataSourceProperty("user", jdbcUser);
+                        hikariConfig.addDataSourceProperty("password", jdbcPassword);
+                        hikariReadConfig.setDataSourceClassName("org.h2.jdbcx.JdbcDataSource");
+                        hikariReadConfig.addDataSourceProperty("URL", jdbcReadUrl);
+                        hikariReadConfig.addDataSourceProperty("user", jdbcReadUser);
+                        hikariReadConfig.addDataSourceProperty("password", jdbcReadPassword);
+                        break;
+                    case HSQLDB:
+                        break;
+                    case MARIADB:
+                    case MYSQL:
+                        dbPlatform = config.isMemSQL() ? new MemSqlPlatform(configuration, config) : new MySqlPlatform(configuration, config);
+                        hikariConfig.setUsername(jdbcUser);
+                        hikariConfig.setPassword(jdbcPassword);
+                        hikariConfig.setDataSourceClassName("com.mysql.jdbc.jdbc2.optional.MysqlDataSource");
+                        hikariConfig.addDataSourceProperty("URL", jdbcUrl);
+                        hikariConfig.addDataSourceProperty("user", jdbcUser);
+                        hikariConfig.addDataSourceProperty("password", jdbcPassword);
+
+                        hikariReadConfig.setUsername(jdbcReadUser);
+                        hikariReadConfig.setPassword(jdbcReadPassword);
+                        hikariReadConfig.setDataSourceClassName("com.mysql.jdbc.jdbc2.optional.MysqlDataSource");
+                        hikariReadConfig.addDataSourceProperty("URL", jdbcReadUrl);
+                        hikariReadConfig.addDataSourceProperty("user", jdbcReadUser);
+                        hikariReadConfig.addDataSourceProperty("password", jdbcReadPassword);
+
+                        ////////////////////////////////////////////////////////////////////////////////////////////////////
+                        // MySQL Performance Configuration
+                        ////////////////////////////////////////////////////////////////////////////////////////////////////
+                        hikariConfig.addDataSourceProperty("cachePrepStmts", config.isCachePrepStmts());
+                        hikariReadConfig.addDataSourceProperty("cachePrepStmts", config.isCachePrepStmts());
+                        int prepStmtCacheSize = config.getPrepStmtCacheSize();
+                        if (prepStmtCacheSize < 1) {
+                            prepStmtCacheSize = config.isProd()
+                                ? PROD_MYSQL_PREPARE_STMT_CACHE_SIZE
+                                : DEV_MYSQL_PREPARE_STMT_CACHE_SIZE;
+                        }
+                        hikariConfig.addDataSourceProperty("prepStmtCacheSize", prepStmtCacheSize);
+                        hikariReadConfig.addDataSourceProperty("prepStmtCacheSize", prepStmtCacheSize);
+                        int prepStmtCacheSqlLimit = config.getPrepStmtCacheSqlLimit();
+                        if (prepStmtCacheSqlLimit < 1) {
+                            prepStmtCacheSqlLimit = config.isProd()
+                                ? PROD_MYSQL_PREPARE_STMT_CACHE_SQL_LIMIT
+                                : DEV_MYSQL_PREPARE_STMT_CACHE_SQL_LIMIT;
+                        }
+                        hikariConfig.addDataSourceProperty("prepStmtCacheSqlLimit", prepStmtCacheSqlLimit);
+                        hikariReadConfig.addDataSourceProperty("prepStmtCacheSqlLimit", prepStmtCacheSqlLimit);
+                        hikariConfig.addDataSourceProperty("useServerPrepStmts", config.isUseServerPrepStmts());
+                        hikariReadConfig.addDataSourceProperty("useServerPrepStmts", config.isUseServerPrepStmts());
+                        break;
+                    case POSTGRES:
+                    case POSTGRES_9_3:
+                    case POSTGRES_9_4:
 //                dbPlatform = new PGPlatform(configuration, config);
 //                settings.setRenderSchema(true);
 //
@@ -391,9 +443,10 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
 //                d.setPassword(jdbcPassword);
 //                d.setCurrentSchema("public");
 //                hikariConfig.setDataSource(d);
-                    break;
-                case SQLITE:
-                    break;
+                        break;
+                    case SQLITE:
+                        break;
+                }
             }
 
             // Find all Entity classes.
@@ -589,17 +642,35 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
 
         jooqMap.clear();
 
-        for (Reflections reflections : jooqReflections) {
-            final Set<Class<? extends TableImpl>> jooqTables = reflections.getSubTypesOf(TableImpl.class);
-            for (Class<? extends Table> jooqTableClass : jooqTables) {
-                try {
-                    final Table jooqTable = jooqTableClass.newInstance();
-                    jooqMap.put(Strings.nullToEmpty(jooqTable.getName()).trim().toLowerCase(), jooqTable);
-                } catch (Exception e) {
-                    throw new PersistException("Failed to instantiate an instance of jOOQ Table Class [" + jooqTableClass.getCanonicalName() + "]");
+        try {
+            Class cls = Class.forName(jooqPackageNames[0] + ".Tables");
+            java.lang.reflect.Field[] fields = cls.getDeclaredFields();
+            Arrays.stream(fields).forEach(field -> {
+                if (TableImpl.class.isAssignableFrom(field.getType())) {
+                    try {
+                        final String name = ((Table)field.getType().newInstance()).getName();
+                        final Table jooqTable = (Table)field.get(field.getType());
+                        jooqMap.put(Strings.nullToEmpty(name).trim().toLowerCase(), jooqTable);
+                    } catch (Exception e) {
+                        throw new PersistException("Failed to instantiate an instance of jOOQ Table Class [" + field.getType().getCanonicalName() + "]");
+                    }
                 }
-            }
+            });
+        } catch (Throwable e) {
+            Throwables.propagate(e);
         }
+
+//        for (Reflections reflections : jooqReflections) {
+//            final Set<Class<? extends TableImpl>> jooqTables = reflections.getSubTypesOf(TableImpl.class);
+//            for (Class<? extends Table> jooqTableClass : jooqTables) {
+//                try {
+//                    final Table jooqTable = jooqTableClass.newInstance();
+//                    jooqMap.put(Strings.nullToEmpty(jooqTable.getName()).trim().toLowerCase(), jooqTable);
+//                } catch (Exception e) {
+//                    throw new PersistException("Failed to instantiate an instance of jOOQ Table Class [" + jooqTableClass.getCanonicalName() + "]");
+//                }
+//            }
+//        }
     }
 
     /**

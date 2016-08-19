@@ -76,6 +76,10 @@
             <groupId>org.jooq</groupId>
             <artifactId>jooq-meta</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.nuodb.jdbc</groupId>
+            <artifactId>nuodb-jdbc</artifactId>
+        </dependency>
 
     </dependencies>
 

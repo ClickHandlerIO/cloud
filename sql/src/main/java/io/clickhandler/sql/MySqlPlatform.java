@@ -62,7 +62,7 @@ public class MySqlPlatform extends SqlPlatform {
             case DBTypes.BIT:
                 return MySQLDataType.BIT;
             case DBTypes.TIMESTAMP:
-                return MySQLDataType.TIMESTAMP;
+                return MySQLDataType.DATETIME;
             case DBTypes.TIME:
                 return MySQLDataType.TIME;
             case DBTypes.VARBINARY:
@@ -76,7 +76,7 @@ public class MySqlPlatform extends SqlPlatform {
             case DBTypes.CLOB:
                 return MySQLDataType.TEXT;
             case DBTypes.DATE:
-                return MySQLDataType.DATE;
+                return MySQLDataType.DATETIME;
             case DBTypes.DECIMAL:
                 return MySQLDataType.DECIMAL;
             case DBTypes.DOUBLE:

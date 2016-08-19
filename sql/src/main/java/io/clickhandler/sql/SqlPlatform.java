@@ -222,6 +222,8 @@ public class SqlPlatform {
      */
     public DataType fromJdbcType(int type) {
         switch (type) {
+            case DBTypes.NUMERIC:
+                return SQLDataType.NUMERIC;
             case DBTypes.BIGINT:
                 return SQLDataType.BIGINT;
             case DBTypes.BOOLEAN:

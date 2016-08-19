@@ -5,11 +5,13 @@ import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
 import io.clickhandler.common.UID;
 import org.jooq.*;
-import org.jooq.impl.DSL;
+import org.jooq.conf.Settings;
+import org.jooq.impl.DefaultDSLContext;
 import org.jooq.impl.JooqUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.sql.DataSource;
 import java.sql.Connection;
 import java.util.*;
 import java.util.function.Function;
@@ -54,7 +56,8 @@ public class SqlSession {
      * @return
      */
     public DSLContext create() {
-        return DSL.using(configuration);
+        return new DSLContextImpl(configuration);
+//        return DSL.using(configuration);
     }
 
     /**
@@ -261,7 +264,8 @@ public class SqlSession {
      */
     @SuppressWarnings("unchecked")
     public <R extends Record> R getRecord(TableMapping mapping, String id) {
-        return (R) create().selectFrom(mapping.TBL()).where(mapping.ID().eq(id)).fetchOne();
+        org.jooq.Table tbl = mapping.TBL();//.as("a");
+        return (R) create().selectFrom(tbl).where(tbl.field(mapping.ID()).eq(id)).fetchOne();
     }
 
     /**
@@ -647,12 +651,12 @@ public class SqlSession {
             for (TableMapping.Property property : mapping.getProperties()) {
                 final Object value = property.get(entity);
                 if (value != null) {
-                    fields.add(property.jooqField);
+                    fields.add(property.jooqWriteField);
                     values.add(value);
                 }
             }
 
-            return create().insertInto(mapping.tbl).columns(fields).values(values);
+            return create().insertInto(mapping.writeTbl).columns(fields).values(values);
         } catch (Throwable e) {
             Throwables.propagate(e);
             return null;
@@ -754,7 +758,7 @@ public class SqlSession {
         }
 
         try {
-            UpdateSetStep query = create().update(mapping.tbl);
+            UpdateSetStep query = create().update(mapping.writeTbl);
             UpdateSetMoreStep last = null;
 
             for (TableMapping.Property property : mapping.getProperties()) {
@@ -762,7 +766,7 @@ public class SqlSession {
                 if (property.isPrimaryKey() || property.isShardKey())
                     continue;
                 final Object value = property.get(entity);
-                last = query.set(property.jooqField, value);
+                last = query.set(property.jooqWriteField, value);
             }
 
             if (last == null) {
@@ -773,13 +777,13 @@ public class SqlSession {
             if (mapping.getPrimaryKeyProperties().size() > 0) {
                 for (TableMapping.Property prop : mapping.getPrimaryKeyProperties()) {
                     if (primaryKeyCondition != null) {
-                        primaryKeyCondition = primaryKeyCondition.and(prop.jooqField.eq(prop.get(entity)));
+                        primaryKeyCondition = primaryKeyCondition.and(prop.jooqWriteField.eq(prop.get(entity)));
                     } else {
-                        primaryKeyCondition = prop.jooqField.eq(prop.get(entity));
+                        primaryKeyCondition = prop.jooqWriteField.eq(prop.get(entity));
                     }
                 }
             } else {
-                primaryKeyCondition = mapping.ID().eq(entity.getId());
+                primaryKeyCondition = mapping.idWriteField.eq(entity.getId());
             }
 
             if (condition == null)
@@ -946,9 +950,9 @@ public class SqlSession {
 
         final TableMapping mapping = db.getCheckedMapping(entityClass);
         if (condition == null)
-            return create().deleteFrom(mapping.tbl).where(mapping.ID().eq(id));
+            return create().deleteFrom(mapping.writeTbl).where(mapping.idWriteField.eq(id));
         else
-            return create().deleteFrom(mapping.tbl).where(mapping.ID().eq(id).and(condition));
+            return create().deleteFrom(mapping.writeTbl).where(mapping.idWriteField.eq(id).and(condition));
     }
 
     /**
@@ -1205,5 +1209,59 @@ public class SqlSession {
             }
         }
         return result;
+    }
+
+    static class DSLContextImpl extends DefaultDSLContext {
+        public DSLContextImpl() {
+            this(SQLDialect.DEFAULT);
+        }
+
+        public DSLContextImpl(SQLDialect dialect) {
+            super(dialect);
+        }
+
+        public DSLContextImpl(SQLDialect dialect, Settings settings) {
+            super(dialect, settings);
+        }
+
+        public DSLContextImpl(Connection connection, SQLDialect dialect) {
+            super(connection, dialect);
+        }
+
+        public DSLContextImpl(Connection connection, SQLDialect dialect, Settings settings) {
+            super(connection, dialect, settings);
+        }
+
+        public DSLContextImpl(DataSource datasource, SQLDialect dialect) {
+            super(datasource, dialect);
+        }
+
+        public DSLContextImpl(DataSource datasource, SQLDialect dialect, Settings settings) {
+            super(datasource, dialect, settings);
+        }
+
+        public DSLContextImpl(ConnectionProvider connectionProvider, SQLDialect dialect) {
+            super(connectionProvider, dialect);
+        }
+
+        public DSLContextImpl(ConnectionProvider connectionProvider, SQLDialect dialect, Settings settings) {
+            super(connectionProvider, dialect, settings);
+        }
+
+        public DSLContextImpl(Configuration configuration) {
+            super(configuration);
+        }
+
+        @Override
+        public String render(QueryPart part) {
+            return super.render(part);
+        }
+
+        @Override
+        public RenderContext renderContext() {
+            RenderContext context = super.renderContext();
+            context.qualifySchema(false);
+            return context;
+        }
     }
 }

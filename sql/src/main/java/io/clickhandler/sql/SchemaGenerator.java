@@ -42,6 +42,7 @@ public class SchemaGenerator {
                 .withDatabase(new Database()
                     .withName(jooqDatabase)
                     .withIncludes(".*")
+                    .withDateAsTimestamp(false)
                     .withOutputSchemaToDefault(true)
                     .withInputSchema(inputSchema))
                 .withTarget(new Target()

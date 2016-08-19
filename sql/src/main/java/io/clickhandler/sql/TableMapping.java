@@ -7,6 +7,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Multimaps;
+import javaslang.control.Try;
 import net.sf.cglib.reflect.FastClass;
 import net.sf.cglib.reflect.FastMethod;
 import org.jooq.*;
@@ -19,6 +20,8 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Holds mapping data from a given class and a table
@@ -45,7 +48,9 @@ public class TableMapping {
     public final String[] columns;
     public final Field[] fields;
     public final Table tbl;
-    private final Field<String> idField;
+    public final Table writeTbl;
+    public final Field<String> idField;
+    public final Field<String> idWriteField;
     private final RecordMapper<? extends Record, ? extends AbstractEntity> recordMapper;
     private final EntityMapper<? extends AbstractEntity, ? extends Record> entityMapper;
     private final Class recordClass;
@@ -168,23 +173,46 @@ public class TableMapping {
                 this.recordMapper = null;
                 this.entityMapper = null;
                 this.recordClass = null;
+                this.writeTbl = null;
+                this.idWriteField = null;
                 return;
             }
 
             this.recordClass = this.tbl.getRecordType();
+            this.writeTbl = Try.of(() -> this.tbl.getClass().newInstance()).getOrElse(() -> null);
 
             // Map jOOQ fields to properties.
-            final Field<?>[] jooqFields = this.tbl.newRecord().fields();
-            for (Field jooqField : jooqFields) {
-                final String columnName = Strings.nullToEmpty(jooqField.getName()).trim().toLowerCase();
+//            final Field<?>[] jooqFields = this.tbl.fields();
+            final Map<String, Field> jooqFields = Arrays
+                .stream(this.tbl.fields())
+                .collect(Collectors.toMap($->$.getName(), Function.identity()));
+            final Map<String, Field> jooqWriteFields = Arrays
+                .stream(this.writeTbl.fields())
+                .collect(Collectors.toMap($->$.getName().trim().toLowerCase(), Function.identity()));
+
+            jooqFields.forEach((k, v) -> {
+                final String columnName = Strings.nullToEmpty(v.getName()).trim().toLowerCase();
                 final Property property = columnsMap.get(columnName);
                 if (property == null) {
                     throw new PersistException("jOOQ Table [" + this.tbl.getClass().getCanonicalName() +
                         "] specified field [" + columnName + "] that does not correspond to any fields on Entity [" +
                         objectClass.getCanonicalName() + "]. Run Schema Generation to synchronize jOOQ.");
                 }
-                property.jooqField = jooqField;
-            }
+                property.jooqField = v;
+                property.jooqWriteField = jooqWriteFields.get(columnName);
+            });
+
+            idWriteField = (Field<String>)jooqWriteFields.get(AbstractEntity.ID);
+//            for (Field jooqField : jooqFields) {
+//                final String columnName = Strings.nullToEmpty(jooqField.getName()).trim().toLowerCase();
+//                final Property property = columnsMap.get(columnName);
+//                if (property == null) {
+//                    throw new PersistException("jOOQ Table [" + this.tbl.getClass().getCanonicalName() +
+//                        "] specified field [" + columnName + "] that does not correspond to any fields on Entity [" +
+//                        objectClass.getCanonicalName() + "]. Run Schema Generation to synchronize jOOQ.");
+//                }
+//                property.jooqField = jooqField;
+//            }
 
             this.recordMapper = record -> {
                 final AbstractEntity entity;
@@ -251,7 +279,7 @@ public class TableMapping {
                 }
             };
 
-            this.fields = jooqFields;
+            this.fields = jooqFields.values().toArray(new Field[jooqFields.size()]);
             this.idField = field(String.class, AbstractEntity.ID);
         }
 
@@ -725,6 +753,7 @@ public class TableMapping {
         private boolean nullable;
         private boolean primaryKey;
         private boolean shardKey;
+        public Field jooqWriteField;
 
         public Property getParent() {
             return parent;
@@ -911,7 +940,7 @@ public class TableMapping {
             }
 
             if (type == Date.class) {
-                return DBTypes.TIMESTAMP;
+                return DBTypes.DATE;
             }
 
             if (type.isEnum()) {

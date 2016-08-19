@@ -2,13 +2,13 @@ package io.clickhandler.sql;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
-import org.jooq.Configuration;
-import org.jooq.CreateTableAsStep;
-import org.jooq.CreateTableColumnStep;
-import org.jooq.DataType;
+import org.jooq.*;
 import org.jooq.impl.DSL;
+import org.jooq.impl.DefaultDataType;
+import org.jooq.impl.SQLDataType;
 import org.jooq.util.mysql.MySQLDataType;
 
+import java.sql.Timestamp;
 import java.util.LinkedHashSet;
 import java.util.List;
 
@@ -140,7 +140,7 @@ public class MemSqlPlatform extends SqlPlatform {
             case DBTypes.BIT:
                 return MySQLDataType.BOOLEAN;
             case DBTypes.TIMESTAMP:
-                return MySQLDataType.TIMESTAMP;
+                return MySQLDataType.DATETIME.length(6);
             case DBTypes.TIME:
                 return MySQLDataType.TIME;
             case DBTypes.VARBINARY:
@@ -154,7 +154,8 @@ public class MemSqlPlatform extends SqlPlatform {
             case DBTypes.CLOB:
                 return MySQLDataType.TEXT;
             case DBTypes.DATE:
-                return MySQLDataType.DATE;
+                new DefaultDataType<Timestamp>(SQLDialect.MYSQL, SQLDataType.TIMESTAMP, "datetime", "datetime");
+                return MySQLDataType.DATETIME.length(6);
             case DBTypes.DECIMAL:
                 return MySQLDataType.DECIMAL;
             case DBTypes.DOUBLE:
