@@ -30,7 +30,7 @@ public class WireFormat {
         MAPPER.configure(DeserializationFeature.FAIL_ON_IGNORED_PROPERTIES, false);
         MAPPER.configure(DeserializationFeature.FAIL_ON_NUMBERS_FOR_ENUMS, true);
 
-        MAPPER.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, true);
+        MAPPER.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
         MAPPER.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
         MAPPER.configure(SerializationFeature.FAIL_ON_SELF_REFERENCES, true);
         MAPPER.configure(SerializationFeature.FAIL_ON_UNWRAPPED_TYPE_IDENTIFIERS, true);
