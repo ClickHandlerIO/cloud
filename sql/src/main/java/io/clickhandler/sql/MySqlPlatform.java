@@ -3,7 +3,6 @@ package io.clickhandler.sql;
 import com.google.common.base.Strings;
 import org.jooq.Configuration;
 import org.jooq.DataType;
-import org.jooq.util.h2.H2DataType;
 import org.jooq.util.mysql.MySQLDataType;
 
 /**
@@ -58,7 +57,7 @@ public class MySqlPlatform extends SqlPlatform {
     public DataType fromJdbcType(int type) {
         switch (type) {
             case DBTypes.ENUM:
-                return H2DataType.VARCHAR.length(128);
+                return MySQLDataType.VARCHAR.length(128);
             case DBTypes.BIGINT:
                 return MySQLDataType.BIGINT;
             case DBTypes.BOOLEAN:
