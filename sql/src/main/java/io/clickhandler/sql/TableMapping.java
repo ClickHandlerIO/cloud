@@ -64,7 +64,7 @@ public class TableMapping {
         Maps.newHashMap(),
         () -> Lists.newArrayListWithExpectedSize(2));
 
-    protected TableMapping(final SqlSchema.DbTable schemaTable,
+    protected TableMapping(SqlSchema.DbTable schemaTable,
                            final SqlPlatform dbPlatform,
                            final Class objectClass,
                            final Map<String, Table> jooqMap) {

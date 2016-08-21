@@ -9,7 +9,7 @@ import common.client.EventCallback;
 import common.client.Try;
 import io.clickhandler.action.RemoteAction;
 import io.clickhandler.remoting.Push;
-import io.clickhandler.remoting.compiler.*;
+import io.clickhandler.remoting.codegen.*;
 import jsinterop.annotations.JsOverlay;
 import jsinterop.annotations.JsPackage;
 import jsinterop.annotations.JsProperty;
@@ -28,6 +28,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -41,12 +42,12 @@ public class CodeGenerator {
     private final static String RESPONSE_EVENT_NAME = "Event";
     private final String rootPackage;
     private final File outputDir;
-    private RemotingAST ast;
+    private RemotingRegistry ast;
     private TypeSpec.Builder initializerType = null;
     private MethodSpec.Builder initMethod = null;
     private String gwtModuleFileName = "Api.gwt.xml";
 
-    public CodeGenerator(RemotingAST ast, String rootPackage, File outputDir) {
+    public CodeGenerator(RemotingRegistry ast, String rootPackage, File outputDir) {
         this.ast = ast;
         this.rootPackage = rootPackage;
         this.outputDir = outputDir;
@@ -410,6 +411,7 @@ public class CodeGenerator {
                 case DOUBLE:
                 case DATE:
                 case BOOLEAN:
+                case DATETIME:
                     // JavaScript only has 1 number type.
                     typeName = getTypeName(field.type());
                     break;
@@ -512,6 +514,11 @@ public class CodeGenerator {
                         .addStatement("return this")
                         .build());
                     break;
+
+                case DATETIME:
+                    // TODO: Add moment support?
+                    break;
+
                 case BOOLEAN:
                     break;
 
@@ -584,6 +591,8 @@ public class CodeGenerator {
                 return TypeName.get(Double.class);
             case BOOLEAN:
                 return TypeName.get(Boolean.class);
+            case DATETIME:
+                return TypeName.get(double[].class);
             case STRING:
             case WILDCARD:
                 return TypeName.get(type.javaType());
@@ -602,7 +611,7 @@ public class CodeGenerator {
             case MAP:
                 MapType mapType = (MapType) type;
                 return ParameterizedTypeName.get(
-                    ClassName.get(Set.class),
+                    ClassName.get(Map.class),
                     ClassName.bestGuess(mapType.keyType().canonicalName()),
                     ClassName.bestGuess(mapType.valueType().canonicalName())
                 );

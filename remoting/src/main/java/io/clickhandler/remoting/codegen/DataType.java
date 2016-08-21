@@ -1,4 +1,4 @@
-package io.clickhandler.remoting.compiler;
+package io.clickhandler.remoting.codegen;
 
 /**
  *
@@ -15,6 +15,7 @@ public enum DataType {
     DOUBLE,
     STRING,
     DATE,
+    DATETIME,
     LIST,
     SET,
     MAP,

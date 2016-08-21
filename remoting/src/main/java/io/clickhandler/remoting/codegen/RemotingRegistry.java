@@ -1,4 +1,4 @@
-package io.clickhandler.remoting.compiler;
+package io.clickhandler.remoting.codegen;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.Strings;
@@ -13,12 +13,13 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
+import java.time.LocalDateTime;
 import java.util.*;
 
 /**
  * @author Clay Molocznik
  */
-public class RemotingAST {
+public class RemotingRegistry {
     public final Map<Object, RemoteActionProvider<?, ?, ?>> providerMap;
     final StandardType OBJECT_TYPE = new PrimitiveType(Object.class, DataType.WILDCARD, true);
     private final Map<Type, StandardType> types = new HashMap<>();
@@ -35,8 +36,8 @@ public class RemotingAST {
      * @param providerMap
      * @param prefixMap
      */
-    public RemotingAST(Map<Object, RemoteActionProvider<?, ?, ?>> providerMap,
-                       TreeMap<String, String> prefixMap) {
+    public RemotingRegistry(Map<Object, RemoteActionProvider<?, ?, ?>> providerMap,
+                            TreeMap<String, String> prefixMap) {
         this.providerMap = providerMap;
         this.prefixMap = prefixMap == null ? new TreeMap<>() : prefixMap;
         this.prefixMap.put("", "");
@@ -321,6 +322,8 @@ public class RemotingAST {
                     dataType = new PrimitiveType(Double.class, DataType.DOUBLE, true);
                 else if (type == Date.class)
                     dataType = new DateType();
+                else if (type == LocalDateTime.class)
+                    dataType = new DateTimeType();
                 else if (type == String.class)
                     dataType = new StringType();
                 else if (type == Object.class)

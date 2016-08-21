@@ -10,9 +10,9 @@ public class SqlConfig {
     private String schema = "public";
     private String user = "root";
     private String password = "passme";
-    private String readUrl = "jdbc:h2:mem:move;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=TRUE;";
-    private String readUser = "root";
-    private String readPassword = "passme";
+    private String readUrl = "";
+    private String readUser = "";
+    private String readPassword = "";
     private int maxPoolSize = 2;
     private int maxReadPoolSize = 4;
     private boolean cachePrepStmts = true;
@@ -26,6 +26,7 @@ public class SqlConfig {
     private boolean dev;
     private boolean prod;
     private boolean test;
+    private boolean evolutionEnabled = true;
     private boolean generateSchema;
     private boolean syncIndexes = false;
 
@@ -195,6 +196,14 @@ public class SqlConfig {
 
     public void setTest(boolean test) {
         this.test = test;
+    }
+
+    public boolean isEvolutionEnabled() {
+        return evolutionEnabled;
+    }
+
+    public void setEvolutionEnabled(boolean evolutionEnabled) {
+        this.evolutionEnabled = evolutionEnabled;
     }
 
     public boolean isGenerateSchema() {

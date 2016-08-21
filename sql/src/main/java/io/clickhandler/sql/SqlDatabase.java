@@ -466,28 +466,34 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 readConfiguration = configuration;
             }
 
-            // Detect changes.
-            List<SchemaInspector.Change> changes = buildEvolution();
-
-            // Are there schema changes that need to be applied?
-            if (changes == null || !changes.isEmpty()) {
-                applyEvolution(changes);
-
-                changes = buildEvolution();
-
+            if (!config.isProd() || config.isEvolutionEnabled()) {
                 // Detect changes.
-                if (changes != null && !changes.isEmpty()) {
-                    throw new PersistException("Schema Evolution was applied incompletely.");
+                List<SchemaInspector.Change> changes = buildEvolution();
+
+                // Are there schema changes that need to be applied?
+                if (changes == null || !changes.isEmpty()) {
+                    applyEvolution(changes);
+
+                    changes = buildEvolution();
+
+                    // Detect changes.
+                    if (changes != null && !changes.isEmpty()) {
+                        throw new PersistException("Schema Evolution was applied incompletely.");
+                    }
                 }
+            } else {
+                buildTableMappings();
             }
 
             if (config.isGenerateSchema()) {
                 return;
             }
 
-            // Finish initializing Table Mappings and atomic Validity.
-            // Validate Table Mapping.
-            tableMappingList.forEach(TableMapping::checkValidity);
+            if (!config.isProd() || config.isEvolutionEnabled()) {
+                // Finish initializing Table Mappings and atomic Validity.
+                // Validate Table Mapping.
+                tableMappingList.forEach(TableMapping::checkValidity);
+            }
 
             LOG.info("Finished starting SqlDatabase in " + (System.currentTimeMillis() - started) + "ms");
         } catch (Throwable e) {
@@ -538,7 +544,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 continue;
             }
             final TableMapping mapping = TableMapping.create(
-                sqlSchema.getTable(SqlUtils.tableName(cls, tableAnnotation.name())),
+                sqlSchema != null ? sqlSchema.getTable(SqlUtils.tableName(cls, tableAnnotation.name())) : null,
                 dbPlatform,
                 cls,
                 jooqMap

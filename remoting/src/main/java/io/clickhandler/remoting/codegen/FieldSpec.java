@@ -1,4 +1,4 @@
-package io.clickhandler.remoting.compiler;
+package io.clickhandler.remoting.codegen;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 

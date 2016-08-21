@@ -1,4 +1,4 @@
-package io.clickhandler.remoting.compiler;
+package io.clickhandler.remoting.codegen;
 
 import java.lang.reflect.Modifier;
 

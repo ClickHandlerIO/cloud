@@ -1,4 +1,4 @@
-package io.clickhandler.remoting.compiler;
+package io.clickhandler.remoting.codegen;
 
 import java.util.ArrayList;
 import java.util.List;

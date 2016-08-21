@@ -22,15 +22,6 @@ public class WireFormat {
     public static final Logger LOG = LoggerFactory.getLogger(WireFormat.class);
     public static final ObjectMapper MAPPER = new ObjectMapper();
 
-    public static void main(String[] args) {
-        System.out.println(WireFormat.stringify(new MyMessage()));
-    }
-
-    public static class MyMessage {
-        @JsonProperty
-        List<String> myList = List.of("1", "2", "3");
-    }
-
     static {
         MAPPER.registerModule(new JavaslangModule());
         MAPPER.registerModule(new JavaTimeModule());
@@ -44,6 +35,10 @@ public class WireFormat {
         MAPPER.configure(SerializationFeature.FAIL_ON_SELF_REFERENCES, true);
         MAPPER.configure(SerializationFeature.FAIL_ON_UNWRAPPED_TYPE_IDENTIFIERS, true);
         MAPPER.setSerializationInclusion(JsonInclude.Include.NON_NULL);
+    }
+
+    public static void main(String[] args) {
+        System.out.println(WireFormat.stringify(new MyMessage()));
     }
 
     public static <T> T parse(Class<T> cls, String json) {
@@ -107,5 +102,10 @@ public class WireFormat {
             LOG.info("Failed to stringify Object", e);
             throw new RuntimeException(e);
         }
+    }
+
+    public static class MyMessage {
+        @JsonProperty
+        List<String> myList = List.of("1", "2", "3");
     }
 }
