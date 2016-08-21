@@ -10,6 +10,7 @@ import com.google.common.collect.Maps;
 import com.google.common.util.concurrent.AbstractIdleService;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import io.clickhandler.common.UID;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
@@ -31,6 +32,7 @@ import rx.Observable;
 import java.lang.reflect.InvocationTargetException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -70,7 +72,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     private final String[] jooqPackageNames;
     private final Map<String, Table> jooqMap = Maps.newHashMap();
     private final Reflections[] entityReflections;
-    private final Reflections[] jooqReflections;
     protected HikariConfig hikariConfig;
     protected HikariConfig hikariReadConfig;
     protected Configuration configuration;
@@ -112,21 +113,12 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             for (String entityPackageName : entityPackageNames) {
                 entityReflections.add(new Reflections(entityPackageName));
             }
-            // Add all look paths for jOOQ schema.
-            for (String jooqPackageName : jooqPackageNames) {
-                jooqReflections.add(new Reflections(jooqPackageName));
-            }
 
             // Add Core Entity path.
             entityReflections.add(new Reflections(ENTITY_PACKAGE));
-            // Add AMP jOOQ path.
-//            jooqReflections.add(new Reflections(SCHEMA_PACKAGE));
         }
 
         this.entityReflections = entityReflections.toArray(new Reflections[entityReflections.size()]);
-        this.jooqReflections = jooqReflections.toArray(new Reflections[jooqReflections.size()]);
-
-
     }
 
     public static void main(String[] args) {
@@ -290,7 +282,9 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             settings.setRenderKeywordStyle(RenderKeywordStyle.UPPER);
             settings.setReflectionCaching(true);
             settings.setParamType(ParamType.INDEXED);
-            settings.setAttachRecords(true);
+            settings.setAttachRecords(false);
+            settings.setUpdatablePrimaryKeys(false);
+            settings.setQueryTimeout(config.getDefaultQueryTimeoutInSeconds());
             settings.setBackslashEscaping(BackslashEscaping.DEFAULT);
             settings.setStatementType(StatementType.PREPARED_STATEMENT);
 
@@ -302,12 +296,14 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             configuration.set(PrettyPrinter::new, TimeoutListener::new);
 
             if (config.getUrl().startsWith("jdbc:com.nuodb")) {
+                // Use MySQL Dialect.
                 configuration.set(SQLDialect.MYSQL);
                 dbPlatform = new NuoDBPlatform(configuration, config);
 
-                settings.setRenderSchema(false);
-                settings.setRenderNameStyle(RenderNameStyle.AS_IS);
-                settings.setQueryTimeout(10);
+                // NuoDB does not allow "SELECT 1" as a valid SQL statement.
+                // Use the "DUAL" table for the desired result.
+                hikariConfig.setConnectionTestQuery("SELECT 1 FROM DUAL");
+                hikariReadConfig.setConnectionTestQuery("SELECT 1 FROM DUAL");
 
                 {
                     final Properties props = new Properties();
@@ -318,7 +314,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                     props.setProperty("isolation", "write_committed");
                     final com.nuodb.jdbc.DataSource dataSource = new com.nuodb.jdbc.DataSource(props);
                     hikariConfig.setDataSource(dataSource);
-                    hikariConfig.setConnectionTestQuery("SELECT 1 FROM dual");
                 }
 
                 if (!Strings.nullToEmpty(config.getReadUrl()).trim().isEmpty()) {
@@ -327,26 +322,10 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                     props.setProperty("user", jdbcReadUser);
                     props.setProperty("password", jdbcReadPassword);
                     props.setProperty("defaultSchema", config.getSchema());
-                    props.setProperty("isolation", "write_committed");
+                    props.setProperty("isolation", "consistent_read");
                     final com.nuodb.jdbc.DataSource dataSource = new com.nuodb.jdbc.DataSource(props);
                     hikariReadConfig.setDataSource(dataSource);
-                    hikariReadConfig.setConnectionTestQuery("SELECT 1 FROM dual");
                 }
-
-//                hikariConfig.setJdbcUrl(jdbcUrl);
-//                hikariConfig.setUsername(jdbcUser);
-//                hikariConfig.setPassword(jdbcPassword);
-//                hikariConfig.setDataSourceClassName("com.nuodb.jdbc.DataSource");
-//                hikariConfig.addDataSourceProperty("url", jdbcUrl);
-//                hikariConfig.addDataSourceProperty("username", jdbcUser);
-//                hikariConfig.addDataSourceProperty("password", jdbcPassword);
-//                hikariReadConfig.setDataSourceClassName("com.nuodb.jdbc.DataSource");
-//                hikariReadConfig.addDataSourceProperty("url", jdbcReadUrl);
-//                hikariReadConfig.addDataSourceProperty("username", jdbcReadUser);
-//                hikariReadConfig.addDataSourceProperty("password", jdbcReadPassword);
-//                hikariReadConfig.setJdbcUrl(jdbcReadUrl);
-//                hikariReadConfig.setUsername(jdbcReadUser);
-//                hikariReadConfig.setPassword(jdbcReadPassword);
             } else {
                 configuration.set(dialect);
 
@@ -363,10 +342,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                     case FIREBIRD:
                         break;
                     case H2:
-                        settings.setRenderSchema(false);
-                        settings.setRenderNameStyle(RenderNameStyle.AS_IS);
-                        settings.setQueryTimeout(10);
-
                         dbPlatform = new H2Platform(configuration, config);
                         hikariConfig.setDataSourceClassName("org.h2.jdbcx.JdbcDataSource");
                         hikariConfig.addDataSourceProperty("URL", jdbcUrl);
@@ -642,22 +617,24 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
 
         jooqMap.clear();
 
-        try {
-            Class cls = Class.forName(jooqPackageNames[0] + ".Tables");
-            java.lang.reflect.Field[] fields = cls.getDeclaredFields();
-            Arrays.stream(fields).forEach(field -> {
-                if (TableImpl.class.isAssignableFrom(field.getType())) {
-                    try {
-                        final String name = ((Table)field.getType().newInstance()).getName();
-                        final Table jooqTable = (Table)field.get(field.getType());
-                        jooqMap.put(Strings.nullToEmpty(name).trim().toLowerCase(), jooqTable);
-                    } catch (Exception e) {
-                        throw new PersistException("Failed to instantiate an instance of jOOQ Table Class [" + field.getType().getCanonicalName() + "]");
+        for (String jooqPackage : jooqPackageNames) {
+            try {
+                Class cls = Class.forName(jooqPackage + ".Tables");
+                java.lang.reflect.Field[] fields = cls.getDeclaredFields();
+                Arrays.stream(fields).forEach(field -> {
+                    if (TableImpl.class.isAssignableFrom(field.getType())) {
+                        try {
+                            final String name = ((Table) field.getType().newInstance()).getName();
+                            final Table jooqTable = (Table) field.get(field.getType());
+                            jooqMap.put(Strings.nullToEmpty(name).trim().toLowerCase(), jooqTable);
+                        } catch (Exception e) {
+                            throw new PersistException("Failed to instantiate an instance of jOOQ Table Class [" + field.getType().getCanonicalName() + "]");
+                        }
                     }
-                }
-            });
-        } catch (Throwable e) {
-            Throwables.propagate(e);
+                });
+            } catch (Throwable e) {
+                Throwables.propagate(e);
+            }
         }
 
 //        for (Reflections reflections : jooqReflections) {
@@ -701,12 +678,12 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      */
     private void applyEvolution(final List<SchemaInspector.Change> changes) {
         final EvolutionEntity evolution = new EvolutionEntity();
-        evolution.setId(UUID.randomUUID().toString().replace("-", ""));
+        evolution.setId(UID.next());
         final List<EvolutionChangeEntity> changeEntities = new ArrayList<>();
 
         try {
             executeWrite(session -> {
-                evolution.setStarted(new Date());
+                evolution.setStarted(LocalDateTime.now());
 
                 boolean failed = false;
 
@@ -724,7 +701,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                         final EvolutionChangeEntity changeEntity = new EvolutionChangeEntity();
                         changeEntity.setId(UUID.randomUUID().toString().replace("-", ""));
                         changeEntities.add(changeEntity);
-                        changeEntity.setStarted(new Date());
+                        changeEntity.setStarted(LocalDateTime.now());
                         changeEntity.setType(change.type());
                         changeEntity.setSql(sqlPart);
                         try {
@@ -736,12 +713,12 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                             changeEntity.setMessage(e.getMessage());
                             changeEntity.setSuccess(false);
                         } finally {
-                            changeEntity.setEnd(new Date());
+                            changeEntity.setEnd(LocalDateTime.now());
                         }
                     }
                 }
 
-                evolution.setEnd(new Date());
+                evolution.setEnd(LocalDateTime.now());
 
                 if (failed) {
                     throw new PersistException("Failed to create schema.");
@@ -1432,7 +1409,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                             result = callable.call(finalSession);
 
                             if (result == null) {
-                                result = SqlResult.success();
+                                result = SqlResult.commit();
                             }
                         } catch (Throwable e) {
                             result = SqlResult.rollback(null, e);

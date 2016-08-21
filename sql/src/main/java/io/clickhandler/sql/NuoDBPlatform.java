@@ -18,7 +18,7 @@ public class NuoDBPlatform extends SqlPlatform {
      */
     @Override
     public String quote() {
-        return "\"";
+        return "`";
     }
 
     /**
@@ -46,6 +46,8 @@ public class NuoDBPlatform extends SqlPlatform {
      */
     public DataType fromJdbcType(int type) {
         switch (type) {
+            case DBTypes.ENUM:
+                return NuoDBDataType.ENUM;
             case DBTypes.NUMERIC:
                 return NuoDBDataType.NUMERIC;
             case DBTypes.BIGINT:
@@ -66,7 +68,7 @@ public class NuoDBPlatform extends SqlPlatform {
             case DBTypes.LONGVARCHAR:
             case DBTypes.LONGNVARCHAR:
             case DBTypes.CLOB:
-                return NuoDBDataType.TEXT;
+                return NuoDBDataType.STRING;
             case DBTypes.DATE:
                 return NuoDBDataType.TIMESTAMP;
             case DBTypes.DECIMAL:
@@ -84,9 +86,9 @@ public class NuoDBPlatform extends SqlPlatform {
             case DBTypes.SMALLINT:
                 return NuoDBDataType.SMALLINT;
             case DBTypes.VARCHAR:
-                return NuoDBDataType.VARCHAR;
+                return NuoDBDataType.STRING;
             case DBTypes.NVARCHAR:
-                return NuoDBDataType.VARCHAR;
+                return NuoDBDataType.STRING;
         }
         return null;
     }

@@ -24,7 +24,7 @@ public class H2Platform extends SqlPlatform {
 
         if (index.unique) {
             return PersistDSL.createUniqueIndex(getConfiguration(), name)
-                    .on(mapping.getTableName(), index.columnNames).getSQL();
+                .on(mapping.getTableName(), index.columnNames).getSQL();
         }
 
         return create().createIndex(name).on(mapping.getTableName(), index.columnNames).getSQL();
@@ -32,6 +32,8 @@ public class H2Platform extends SqlPlatform {
 
     public DataType fromJdbcType(int type) {
         switch (type) {
+            case DBTypes.ENUM:
+                return H2DataType.VARCHAR.length(128);
             case DBTypes.BIGINT:
                 return H2DataType.BIGINT;
             case DBTypes.BOOLEAN:
@@ -39,9 +41,9 @@ public class H2Platform extends SqlPlatform {
             case DBTypes.BIT:
                 return H2DataType.BOOLEAN;
             case DBTypes.TIMESTAMP:
-                return H2DataType.TIMESTAMP;
+                return H2DataType.DATETIME;
             case DBTypes.TIME:
-                return H2DataType.TIME;
+                return H2DataType.DATETIME;
             case DBTypes.VARBINARY:
                 return H2DataType.VARBINARY;
             case DBTypes.BINARY:
@@ -53,7 +55,7 @@ public class H2Platform extends SqlPlatform {
             case DBTypes.CLOB:
                 return H2DataType.TEXT;
             case DBTypes.DATE:
-                return H2DataType.DATE;
+                return H2DataType.DATETIME;
             case DBTypes.DECIMAL:
                 return H2DataType.DECIMAL;
             case DBTypes.DOUBLE:

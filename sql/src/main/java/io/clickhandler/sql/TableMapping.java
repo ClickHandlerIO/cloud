@@ -7,18 +7,20 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Multimaps;
-import javaslang.control.Try;
 import net.sf.cglib.reflect.FastClass;
 import net.sf.cglib.reflect.FastMethod;
 import org.jooq.*;
 import org.jooq.Table;
 import org.jooq.impl.DSL;
+import org.jooq.impl.DefaultDataType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -48,9 +50,7 @@ public class TableMapping {
     public final String[] columns;
     public final Field[] fields;
     public final Table tbl;
-    public final Table writeTbl;
     public final Field<String> idField;
-    public final Field<String> idWriteField;
     private final RecordMapper<? extends Record, ? extends AbstractEntity> recordMapper;
     private final EntityMapper<? extends AbstractEntity, ? extends Record> entityMapper;
     private final Class recordClass;
@@ -173,22 +173,16 @@ public class TableMapping {
                 this.recordMapper = null;
                 this.entityMapper = null;
                 this.recordClass = null;
-                this.writeTbl = null;
-                this.idWriteField = null;
                 return;
             }
 
             this.recordClass = this.tbl.getRecordType();
-            this.writeTbl = Try.of(() -> this.tbl.getClass().newInstance()).getOrElse(() -> null);
 
             // Map jOOQ fields to properties.
 //            final Field<?>[] jooqFields = this.tbl.fields();
             final Map<String, Field> jooqFields = Arrays
                 .stream(this.tbl.fields())
-                .collect(Collectors.toMap($->$.getName(), Function.identity()));
-            final Map<String, Field> jooqWriteFields = Arrays
-                .stream(this.writeTbl.fields())
-                .collect(Collectors.toMap($->$.getName().trim().toLowerCase(), Function.identity()));
+                .collect(Collectors.toMap($ -> $.getName(), Function.identity()));
 
             jooqFields.forEach((k, v) -> {
                 final String columnName = Strings.nullToEmpty(v.getName()).trim().toLowerCase();
@@ -199,10 +193,8 @@ public class TableMapping {
                         objectClass.getCanonicalName() + "]. Run Schema Generation to synchronize jOOQ.");
                 }
                 property.jooqField = v;
-                property.jooqWriteField = jooqWriteFields.get(columnName);
             });
 
-            idWriteField = (Field<String>)jooqWriteFields.get(AbstractEntity.ID);
 //            for (Field jooqField : jooqFields) {
 //                final String columnName = Strings.nullToEmpty(jooqField.getName()).trim().toLowerCase();
 //                final Property property = columnsMap.get(columnName);
@@ -254,6 +246,8 @@ public class TableMapping {
                             // Handle enum types.
                             if (value != null && property.enumType) {
                                 record.setValue(property.jooqField, value.toString());
+                            } else if (value != null && value instanceof LocalDateTime) {
+                                record.setValue(property.jooqField, Timestamp.valueOf((LocalDateTime) value));
                             } else {
                                 record.setValue(property.jooqField, value);
                             }
@@ -284,7 +278,7 @@ public class TableMapping {
         }
 
         Indexes indexes = (Indexes) entityClass.getAnnotation(Indexes.class);
-        if (indexes != null && indexes.value() != null && indexes.value().length > 0) {
+        if (indexes != null && indexes.value().length > 0) {
             for (final io.clickhandler.sql.Index indexAnnotation : indexes.value()) {
                 final IndexColumn[] columns = indexAnnotation.columns();
                 if (columns.length == 0) {
@@ -646,7 +640,8 @@ public class TableMapping {
                 } else if (property.columnName.toLowerCase().endsWith("_id") || property.columnName.toLowerCase().equals("id")) {
                     property.columnLength = COLUMN_LENGTH_ID;
                 } else {
-                    property.columnLength = COLUMN_LENGTH_STRING;
+                    property.dbType = DBTypes.LONGVARCHAR;
+//                    property.columnLength = COLUMN_LENGTH_STRING;
                 }
             }
 
@@ -753,7 +748,6 @@ public class TableMapping {
         private boolean nullable;
         private boolean primaryKey;
         private boolean shardKey;
-        public Field jooqWriteField;
 
         public Property getParent() {
             return parent;
@@ -824,6 +818,8 @@ public class TableMapping {
             if (enumType && value != null && value instanceof String) {
                 final Object enumConstant = enumConstantMap.get(value);
                 setter.invoke(getParentInstance(obj), new Object[]{enumConstant});
+            } else if (value != null && type == LocalDateTime.class && value instanceof Timestamp) {
+                setter.invoke(getParentInstance(obj), new Object[]{((Timestamp) value).toLocalDateTime()});
             } else {
                 setter.invoke(getParentInstance(obj), new Object[]{value});
             }
@@ -889,8 +885,45 @@ public class TableMapping {
                 return null;
             }
 
+            boolean enumType = false;
+            if (dataType == NuoDBDataType.ENUM) {
+                enumType = true;
+                String val = "('" + Joiner.on("','").join(enumConstants) + "')";
+                dataType = new DefaultDataType<>(SQLDialect.MYSQL, new DefaultDataType<>(null, String.class, "enum " + val), "enum", "enum " + val);
+            }
+
             dataType = dataType.nullable(nullable);
-            dataType = dataType.length(columnLength);
+
+            if (columnLength > 0 && !dataType.getTypeName().equalsIgnoreCase("string") && !enumType)
+                dataType = dataType.length(columnLength);
+
+            if (!dataType.nullable()) {
+                final Class type = getType();
+
+                if (type == byte.class || type == Byte.class) {
+                    dataType.defaultValue((byte) 0);
+                } else if (type == boolean.class || type == Boolean.class) {
+                    dataType.defaultValue(false);
+                } else if (type == short.class || type == Short.class) {
+                    dataType.defaultValue((short) 0);
+                } else if (type == int.class || type == Integer.class) {
+                    dataType.defaultValue(0);
+                } else if (type == long.class || type == Long.class) {
+                    dataType.defaultValue(0L);
+                } else if (type == float.class || type == Float.class) {
+                    dataType.defaultValue(0.0f);
+                } else if (type == double.class || type == Double.class) {
+                    dataType.defaultValue(0.0);
+                } else if (type == String.class) {
+                    dataType.defaultValue("");
+                } else if (type == byte[].class) {
+                    dataType.defaultValue(new byte[0]);
+                } else if (type == Date.class) {
+                    dataType.defaultValue(0L);
+                } else if (type.isEnum()) {
+                    dataType.defaultValue("");
+                }
+            }
 
             return dataType;
         }
@@ -943,8 +976,12 @@ public class TableMapping {
                 return DBTypes.DATE;
             }
 
+            if (type == LocalDateTime.class) {
+                return DBTypes.TIMESTAMP;
+            }
+
             if (type.isEnum()) {
-                return DBTypes.VARCHAR;
+                return DBTypes.ENUM;
             }
 
             return dbType;

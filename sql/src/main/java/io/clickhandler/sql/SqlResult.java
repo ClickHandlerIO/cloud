@@ -18,10 +18,20 @@ public class SqlResult<T> {
         this.reason = reason;
     }
 
+    public static <T> SqlResult<T> commit() {
+        return new SqlResult<T>(true, null);
+    }
+
+    @Deprecated
     public static <T> SqlResult<T> success() {
         return new SqlResult<>(true, null);
     }
 
+    public static <T> SqlResult<T> commit(T result) {
+        return new SqlResult<>(true, result);
+    }
+
+    @Deprecated
     public static <T> SqlResult<T> success(T result) {
         return new SqlResult<>(true, result);
     }
@@ -38,23 +48,11 @@ public class SqlResult<T> {
         return new SqlResult<>(false, result, reason);
     }
 
-    public boolean isSuccess() {
-        return success;
-    }
-
-    public boolean isRollback() {
-        return !success;
-    }
-
-    public T get() {
-        return result;
-    }
-
     public static SqlResult<Integer> atomic(int result) {
         if (result != 1) {
             return rollback(result);
         } else {
-            return success(result);
+            return commit(result);
         }
     }
 
@@ -70,7 +68,19 @@ public class SqlResult<T> {
             }
         }
 
-        return success(results);
+        return commit(results);
+    }
+
+    public boolean isSuccess() {
+        return success;
+    }
+
+    public boolean isRollback() {
+        return !success;
+    }
+
+    public T get() {
+        return result;
     }
 
     public Throwable getReason() {

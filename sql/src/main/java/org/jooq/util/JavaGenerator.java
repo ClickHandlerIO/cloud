@@ -1951,7 +1951,8 @@ public class JavaGenerator extends AbstractGenerator {
                 if (scala)
                     out.tab(1).println("val %s = %s", id, fullId);
                 else
-                    out.tab(1).println("public static final %s %s = %s.as(\"%s\");", className, id, fullId, alias(index++));
+//                    out.tab(1).println("public static final %s %s = %s.as(\"%s\");", className, id, fullId, alias(index++));
+                    out.tab(1).println("public static final %s %s = %s;", className, id, fullId);
             }
 
             // [#3797] Table-valued functions generate two different literals in

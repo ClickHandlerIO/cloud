@@ -289,4 +289,6 @@ public class DBTypes {
     public static final int SQLXML = 2009;
 
     public static final Object NULL_VALUE = new Object();
+
+    public static final int ENUM = 3000;
 }

@@ -222,6 +222,8 @@ public class SqlPlatform {
      */
     public DataType fromJdbcType(int type) {
         switch (type) {
+            case DBTypes.ENUM:
+                return SQLDataType.VARCHAR.length(128);
             case DBTypes.NUMERIC:
                 return SQLDataType.NUMERIC;
             case DBTypes.BIGINT:

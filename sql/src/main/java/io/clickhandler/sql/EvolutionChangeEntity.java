@@ -1,6 +1,6 @@
 package io.clickhandler.sql;
 
-import java.util.Date;
+import java.time.LocalDateTime;
 
 /**
  *
@@ -9,17 +9,17 @@ import java.util.Date;
 public class EvolutionChangeEntity extends AbstractEntity {
     @Column
     private ChangeType type;
-    @Column(dbType = DBTypes.CLOB)
+    @Column
     private String sql;
     @Column
-    private Date started;
+    private LocalDateTime started;
     @Column
-    private Date end;
+    private LocalDateTime end;
     @Column
     private boolean success;
     @Column
     private long affected;
-    @Column(dbType = DBTypes.CLOB)
+    @Column
     private String message;
 
     public ChangeType getType() {
@@ -38,19 +38,19 @@ public class EvolutionChangeEntity extends AbstractEntity {
         this.sql = sql;
     }
 
-    public Date getStarted() {
+    public LocalDateTime getStarted() {
         return started;
     }
 
-    public void setStarted(Date started) {
+    public void setStarted(LocalDateTime started) {
         this.started = started;
     }
 
-    public Date getEnd() {
+    public LocalDateTime getEnd() {
         return end;
     }
 
-    public void setEnd(Date end) {
+    public void setEnd(LocalDateTime end) {
         this.end = end;
     }
 

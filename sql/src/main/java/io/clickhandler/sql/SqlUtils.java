@@ -117,7 +117,7 @@ public class SqlUtils {
                 || type == String.class || type == BigDecimal.class || type == java.util.Date.class
                 || type == java.sql.Date.class || type == Time.class || type == Timestamp.class
                 || type == java.io.InputStream.class || type == java.io.Reader.class || type == Clob.class
-                || type == Blob.class || type == Object.class);
+                || type == Blob.class || type == Object.class || type == java.time.LocalDateTime.class);
     }
 
     /**

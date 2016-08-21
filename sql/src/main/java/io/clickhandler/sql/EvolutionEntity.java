@@ -1,7 +1,7 @@
 package io.clickhandler.sql;
 
 
-import java.util.Date;
+import java.time.LocalDateTime;
 
 /**
  *
@@ -11,9 +11,9 @@ public class EvolutionEntity extends AbstractEntity {
     @Column
     private boolean success;
     @Column
-    private Date started;
+    private LocalDateTime started;
     @Column
-    private Date end;
+    private LocalDateTime end;
 
     public boolean isSuccess() {
         return success;
@@ -23,19 +23,19 @@ public class EvolutionEntity extends AbstractEntity {
         this.success = success;
     }
 
-    public Date getStarted() {
+    public LocalDateTime getStarted() {
         return started;
     }
 
-    public void setStarted(Date started) {
+    public void setStarted(LocalDateTime started) {
         this.started = started;
     }
 
-    public Date getEnd() {
+    public LocalDateTime getEnd() {
         return end;
     }
 
-    public void setEnd(Date end) {
+    public void setEnd(LocalDateTime end) {
         this.end = end;
     }
 }

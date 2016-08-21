@@ -19,9 +19,9 @@ public class NuoDBDataType {
     // Default SQL data types and synonyms thereof
     // -------------------------------------------------------------------------
 
-    public static final DataType<String> STRING = new DefaultDataType<>(SQLDialect.MYSQL, SQLDataType.VARCHAR, "string", "string");
+    public static final DataType<String> STRING = new DefaultDataType<>(SQLDialect.MYSQL, SQLDataType.LONGVARCHAR, "string", "string");
     public static final DataType<String> VARCHAR = new DefaultDataType<>(SQLDialect.MYSQL, SQLDataType.VARCHAR, "varchar", "varchar");
-    public static final DataType<String> TEXT = new DefaultDataType<>(SQLDialect.MYSQL, SQLDataType.VARCHAR, "text", "text");
+    public static final DataType<String> TEXT = new DefaultDataType<>(SQLDialect.MYSQL, SQLDataType.LONGVARCHAR, "text", "text");
 
 
     public static final DataType<Short> SMALLINT = new DefaultDataType<>(SQLDialect.MYSQL, SQLDataType.SMALLINT, "smallint", "smallint");

@@ -51,7 +51,6 @@ public class SchemaInspector {
 
         if (mapping.schemaTable == null) {
             changes.add(new CreateTable(mapping));
-//            changes.add(new CreatePrimaryKey(mapping));
 
             for (TableMapping.Index index : mapping.getIndexes()) {
                 changes.add(new CreateIndex(mapping, index));
@@ -118,6 +117,11 @@ public class SchemaInspector {
 
         if (columnType == null) {
             throw new PersistException("Could not make a DataType for [" + column.tableName + "." + column.name + "] DBType [" + column.dataType + "][" + column.typeName + "]");
+        }
+
+        if (fieldType.getTypeName().equalsIgnoreCase("string")
+            || property.dbType == DBTypes.ENUM) {
+            return;
         }
 
         if (columnType.getType() != fieldType.getType()
