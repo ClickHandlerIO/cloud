@@ -47,7 +47,7 @@ public class NuoDBPlatform extends SqlPlatform {
     public DataType fromJdbcType(int type) {
         switch (type) {
             case DBTypes.ENUM:
-                return NuoDBDataType.ENUM;
+                return NuoDBDataType.STRING;
             case DBTypes.NUMERIC:
                 return NuoDBDataType.NUMERIC;
             case DBTypes.BIGINT:

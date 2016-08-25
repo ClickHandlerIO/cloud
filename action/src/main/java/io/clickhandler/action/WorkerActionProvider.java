@@ -40,6 +40,13 @@ public class WorkerActionProvider<A extends Action<IN, Boolean>, IN> extends Act
         this.producer = producer;
     }
 
+    public WorkerAction getWorkerAction() {
+        if (workerAction == null) {
+            workerAction = getActionClass().getAnnotation(WorkerAction.class);
+        }
+        return workerAction;
+    }
+
     @Override
     protected void init() {
         workerAction = getActionClass().getAnnotation(WorkerAction.class);

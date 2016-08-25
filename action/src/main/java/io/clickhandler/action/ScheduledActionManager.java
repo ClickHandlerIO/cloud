@@ -79,6 +79,11 @@ public class ScheduledActionManager extends AbstractIdleService {
         }
 
         @Override
+        protected String serviceName() {
+            return provider.getActionClass().getCanonicalName();
+        }
+
+        @Override
         protected void startUp() throws Exception {
         }
 
@@ -133,6 +138,11 @@ public class ScheduledActionManager extends AbstractIdleService {
 
         public NodeSingleton(ScheduledActionProvider provider) {
             this.provider = provider;
+        }
+
+        @Override
+        protected String serviceName() {
+            return provider.getActionClass().getCanonicalName();
         }
 
         @Override

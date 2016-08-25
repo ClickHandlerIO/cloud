@@ -11,6 +11,7 @@ import com.amazonaws.services.sqs.AmazonSQSClient;
 import com.amazonaws.services.sqs.model.GetQueueUrlResult;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.Iterators;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Multimaps;
 import com.google.common.util.concurrent.AbstractIdleService;
@@ -44,6 +45,11 @@ public class SQSService extends AbstractIdleService implements WorkerService {
 
     @Inject
     SQSService() {
+    }
+
+    public static void main(String[] args) {
+        Preconditions.checkArgument(true, "True");
+        Preconditions.checkArgument(!false, "False");
     }
 
     /**
@@ -161,35 +167,53 @@ public class SQSService extends AbstractIdleService implements WorkerService {
                 "AmazonSQSClient was not found for region '" + workerConfig.region + "'"
             );
 
+            WorkerActionProvider dedicated = null;
+            if (entry.getValue().size() > 1) {
+                entry.getValue().forEach($ ->
+                    Preconditions.checkArgument(
+                        !$.getWorkerAction().dedicated(),
+                        "Queue [" +
+                            entry.getKey() +
+                            "] with dedicated WorkerAction [" +
+                            $.getActionClass().getCanonicalName() +
+                            "] cannot have other WorkerActions mapped to it."
+                    )
+                );
+            } else if (entry.getValue().size() == 1) {
+                dedicated = Iterators.get(entry.getValue().iterator(), 0);
+            } else {
+                LOG.warn("Queue [" + entry.getKey() + "] is not mapped to any WorkerActions.");
+                return;
+            }
+
             // Get QueueURL from AWS.
             final GetQueueUrlResult result = sqsClient.getQueueUrl(entry.getKey());
             final String queueUrl = result.getQueueUrl();
 
             // Create producer.
-            final SQSProducer sender = new SQSProducer(vertx);
-            sender.setQueueUrl(queueUrl);
-            sender.setSqsClient(sqsClient);
-            sender.setConfig(workerConfig);
+            final SQSProducer producer = new SQSProducer(vertx);
+            producer.setQueueUrl(queueUrl);
+            producer.setSqsClient(sqsClient);
+            producer.setConfig(workerConfig);
 
-            final SQSConsumer receiver;
-            // Is this node configured to be a "Worker"?
-            if (ActionManager.isWorker()) {
-                // Create a SQSConsumer to receive Worker Requests.
-                receiver = new SQSConsumer();
-                receiver.setQueueUrl(queueUrl);
-                receiver.setSqsClient(sqsClient);
-                receiver.setConfig(workerConfig);
-            } else {
-                receiver = null;
+            // Create a SQSConsumer to receive Worker Requests.
+            final SQSConsumer consumer = new SQSConsumer();
+            consumer.setQueueUrl(queueUrl);
+            consumer.setSqsClient(sqsClient);
+            consumer.setConfig(workerConfig);
+
+            // Set dedicated if necessary.
+            if (dedicated != null && dedicated.getWorkerAction().dedicated()) {
+                consumer.setDedicated(dedicated);
             }
 
             if (entry.getValue() != null) {
                 for (WorkerActionProvider actionProvider : entry.getValue()) {
-                    actionProvider.setProducer(sender);
+                    actionProvider.setProducer(producer);
                 }
             }
 
-            queueMap.put(entry.getKey(), new QueueContext(sender, receiver));
+            queueMap.put(entry.getKey(), new QueueContext(producer, consumer));
         });
 
         queueMap.values().forEach(queueContext -> {

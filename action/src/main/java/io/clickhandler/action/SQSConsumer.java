@@ -44,6 +44,7 @@ public class SQSConsumer extends AbstractIdleService {
     private String queueUrl;
 
     private Map<String, ActionContext> actionMap;
+    private ActionContext dedicated;
 
     @Inject
     public SQSConsumer() {
@@ -103,6 +104,10 @@ public class SQSConsumer extends AbstractIdleService {
      */
     void setSqsClient(AmazonSQS sqsClient) {
         this.sqsClient = sqsClient;
+    }
+
+    void setDedicated(WorkerActionProvider dedicated) {
+        this.dedicated = new ActionContext(dedicated);
     }
 
     @Override
@@ -212,6 +217,27 @@ public class SQSConsumer extends AbstractIdleService {
         }
     }
 
+    protected ActionContext getActionContext(Message message) {
+        if (dedicated != null)
+            return dedicated;
+
+        final MessageAttributeValue type = message.getMessageAttributes() != null
+            ? message.getMessageAttributes().get(SQSService.ATTRIBUTE_NAME)
+            : null;
+
+        if (type == null) {
+            return null;
+        }
+
+        // Get action name.
+        final String actionType = Try.of(type::getStringValue).getOrElse("");
+        if (actionType == null || actionType.isEmpty()) {
+            return null;
+        }
+
+        return actionMap.get(actionType);
+    }
+
     /**
      * Delete threads each have their own queue of ReceiptHandles to delete.
      */
@@ -276,26 +302,8 @@ public class SQSConsumer extends AbstractIdleService {
 
                     List<ChangeMessageVisibilityBatchRequestEntry> changes = null;
                     for (Message message : result.getMessages()) {
-                        final MessageAttributeValue type = message.getMessageAttributes() != null
-                            ? message.getMessageAttributes().get(SQSService.ATTRIBUTE_NAME)
-                            : null;
-
-                        if (type == null) {
-                            buffered.release();
-                            scheduleToDelete(message.getReceiptHandle());
-                            continue;
-                        }
-
-                        // Get action name.
-                        final String actionType = Try.of(type::getStringValue).getOrElse("");
-                        if (actionType == null || actionType.isEmpty()) {
-                            buffered.release();
-                            scheduleToDelete(message.getReceiptHandle());
-                            continue;
-                        }
-
                         // Find ActionContext
-                        final ActionContext actionContext = actionMap.get(actionType);
+                        final ActionContext actionContext = getActionContext(message);
                         if (actionContext == null) {
                             buffered.release();
                             scheduleToDelete(message.getReceiptHandle());

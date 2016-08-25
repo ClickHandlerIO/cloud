@@ -15,7 +15,21 @@ public @interface WorkerAction {
     String DEFAULT = "default";
     String BACKGROUND = "background";
 
+    /**
+     *
+     * @return
+     */
     String queueName() default DEFAULT;
 
+    /**
+     *
+     * @return
+     */
     boolean encrypted() default false;
+
+    /**
+     *
+     * @return
+     */
+    boolean dedicated() default false;
 }
