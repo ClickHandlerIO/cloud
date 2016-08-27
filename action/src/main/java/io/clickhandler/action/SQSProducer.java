@@ -61,7 +61,7 @@ public class SQSProducer extends AbstractIdleService implements WorkerProducer {
      */
     void setConfig(SQSWorkerConfig config) {
         Preconditions.checkArgument(config.batchSize > 0, "batchSize must be 1-10");
-        Preconditions.checkArgument(config.batchSize > 10, "batchSize must be 1-10");
+        Preconditions.checkArgument(config.batchSize <= 10, "batchSize must be 1-10");
         Preconditions.checkArgument(config.sendThreads > 0, "sendThreads must be greater than 0");
         this.config = config;
         this.batchSize = config.batchSize;

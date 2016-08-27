@@ -5,7 +5,6 @@ import com.amazon.sqs.javamessaging.ExtendedClientConfiguration;
 import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.regions.Region;
 import com.amazonaws.regions.Regions;
-import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.sqs.AmazonSQSClient;
 import com.amazonaws.services.sqs.model.GetQueueUrlResult;
@@ -21,12 +20,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
+import java.util.*;
 
 /**
  *
@@ -36,20 +30,15 @@ public class SQSService extends AbstractIdleService implements WorkerService {
     static final String ATTRIBUTE_NAME = "n";
     private static final Logger LOG = LoggerFactory.getLogger(SQSService.class);
 
-    private final Map<String, QueueContext> queueMap = new HashMap<>();
-    private final Map<String, AmazonSQSExtendedClient> sqsClientMap = new HashMap<>();
-    private final Map<String, AmazonS3> s3ClientMap = new HashMap<>();
+    private final Multimap<String, QueueContext> queueMap =
+        Multimaps.newListMultimap(new HashMap<>(), ArrayList::new);
+
     @Inject
     Vertx vertx;
     private SQSConfig config;
 
     @Inject
     SQSService() {
-    }
-
-    public static void main(String[] args) {
-        Preconditions.checkArgument(true, "True");
-        Preconditions.checkArgument(!false, "False");
     }
 
     /**
@@ -64,8 +53,8 @@ public class SQSService extends AbstractIdleService implements WorkerService {
         Preconditions.checkNotNull(config, "config must be set.");
 
         // Build Queue map.
-        final Multimap<String, WorkerActionProvider> map = Multimaps.newListMultimap(
-            new HashMap<>(), ArrayList::new
+        final Multimap<String, WorkerActionProvider> map = Multimaps.newSetMultimap(
+            new HashMap<>(), HashSet::new
         );
         ActionManager.getWorkerActionMap().values().forEach(
             provider -> map.put(provider.getQueueName(), provider)
@@ -76,118 +65,93 @@ public class SQSService extends AbstractIdleService implements WorkerService {
         }
 
         // Get worker configs.
-        List<SQSWorkerConfig> workerConfigList = config.workers;
-        if (workerConfigList == null)
-            workerConfigList = new ArrayList<>(0);
-        final Map<String, SQSWorkerConfig> workerConfigs = workerConfigList.stream()
-            .collect(Collectors.toMap(k -> k.name, Function.identity()));
+        final List<SQSWorkerConfig> workerConfigs = config.workers == null ? new ArrayList<>() : config.workers;
 
         // Create SQS Clients.
-        map.asMap().entrySet().forEach(entry -> {
-                SQSWorkerConfig workerConfig = workerConfigs.get(entry.getKey());
-                if (workerConfig == null) {
-                    LOG.warn("SQSWorkerConfig for Queue '" + entry.getKey() + "' was not found.");
-                    return;
-                }
-                final String regionName = Strings.nullToEmpty(workerConfig.region).trim();
-                Preconditions.checkArgument(
-                    regionName.isEmpty(),
-                    "SQSWorkerConfig for Queue '" + entry.getKey() + "' does not have a region specified"
-                );
-
-                AmazonSQSExtendedClient client = sqsClientMap.get(regionName);
-                if (client != null)
-                    return;
-
-                final Regions region = Regions.fromName(regionName);
-                Preconditions.checkNotNull(region,
-                    "SQSWorkerConfig for Queue '" +
-                        entry.getKey() +
-                        "' region '" +
-                        regionName +
-                        "' is not a valid AWS region name."
-                );
-
-                final AmazonS3Client s3Client;
-                final String s3AwsAccessKey = Strings.nullToEmpty(workerConfig.s3AccessKey).trim();
-                final String s3AwsSecretKey = Strings.nullToEmpty(workerConfig.s3SecretKey).trim();
-
-                if (s3AwsAccessKey.isEmpty()) {
-                    s3Client = new AmazonS3Client();
-                } else {
-                    s3Client = new AmazonS3Client(new BasicAWSCredentials(s3AwsAccessKey, s3AwsSecretKey));
-                }
-
-                // Put in s3ClientMap.
-                s3ClientMap.put(regionName, s3Client);
-
-                final String awsAccessKey = Strings.nullToEmpty(workerConfig.accessKey).trim();
-                final String awsSecretKey = Strings.nullToEmpty(workerConfig.secretKey).trim();
-
-                final ExtendedClientConfiguration extendedClientConfiguration = new ExtendedClientConfiguration();
-                if (workerConfig.alwaysUseS3) {
-                    extendedClientConfiguration.withAlwaysThroughS3(true);
-                } else if (workerConfig.s3MessageThreshold > 0) {
-                    extendedClientConfiguration.withMessageSizeThreshold(workerConfig.s3MessageThreshold);
-                }
-
-                // Set bucket.
-                extendedClientConfiguration.withLargePayloadSupportEnabled(
-                    s3Client,
-                    workerConfig.s3Bucket
-                );
-
-                // Create SQSClient.
-                final AmazonSQSClient sqsClient;
-                if (awsAccessKey.isEmpty()) {
-                    sqsClient = new AmazonSQSClient();
-                } else {
-                    sqsClient = new AmazonSQSClient(new BasicAWSCredentials(awsAccessKey, awsSecretKey));
-                }
-
-                // Set region.
-                sqsClient.setRegion(Region.getRegion(region));
-                s3Client.setRegion(Region.getRegion(region));
-
-                // Put in sqsClientMap.
-                sqsClientMap.put(regionName, new AmazonSQSExtendedClient(sqsClient, extendedClientConfiguration));
+        workerConfigs.forEach(workerConfig -> {
+            final Collection<WorkerActionProvider> actionProviders = map.get(workerConfig.name);
+            if (actionProviders == null || actionProviders.isEmpty()) {
+                LOG.warn("No WorkerActions are mapped to Queue [" + workerConfig.name + "]");
+                return;
             }
-        );
 
-        map.asMap().entrySet().forEach(entry -> {
-            final SQSWorkerConfig workerConfig = workerConfigs.get(entry.getKey());
-            Preconditions.checkNotNull(
-                workerConfig,
-                "SQSWorkerConfig for Queue '" + entry.getKey() + "' was not found."
+            final String regionName = Strings.nullToEmpty(workerConfig.region).trim();
+            Preconditions.checkArgument(
+                !regionName.isEmpty(),
+                "SQSWorkerConfig for Queue '" + workerConfig.name + "' does not have a region specified"
             );
 
-            final AmazonSQSExtendedClient sqsClient = sqsClientMap.get(workerConfig.region);
-            Preconditions.checkNotNull(
-                sqsClient,
-                "AmazonSQSClient was not found for region '" + workerConfig.region + "'"
+            AmazonSQSExtendedClient client;
+
+            final Regions region = Regions.fromName(regionName);
+            Preconditions.checkNotNull(region,
+                "SQSWorkerConfig for Queue '" +
+                    workerConfig.name +
+                    "' region '" +
+                    regionName +
+                    "' is not a valid AWS region name.");
+
+            final AmazonS3Client s3Client;
+            final String s3AwsAccessKey = Strings.nullToEmpty(workerConfig.s3AccessKey).trim();
+            final String s3AwsSecretKey = Strings.nullToEmpty(workerConfig.s3SecretKey).trim();
+
+            if (s3AwsAccessKey.isEmpty()) {
+                s3Client = new AmazonS3Client();
+            } else {
+                s3Client = new AmazonS3Client(new BasicAWSCredentials(s3AwsAccessKey, s3AwsSecretKey));
+            }
+
+            final String awsAccessKey = Strings.nullToEmpty(workerConfig.accessKey).trim();
+            final String awsSecretKey = Strings.nullToEmpty(workerConfig.secretKey).trim();
+
+            final ExtendedClientConfiguration extendedClientConfiguration = new ExtendedClientConfiguration();
+            if (workerConfig.alwaysUseS3) {
+                extendedClientConfiguration.withAlwaysThroughS3(true);
+            } else if (workerConfig.s3MessageThreshold > 0) {
+                extendedClientConfiguration.withMessageSizeThreshold(workerConfig.s3MessageThreshold);
+            }
+
+            // Set bucket.
+            extendedClientConfiguration.withLargePayloadSupportEnabled(
+                s3Client,
+                workerConfig.s3Bucket
             );
+
+            // Create SQSClient.
+            final AmazonSQSClient sqsClient;
+            if (awsAccessKey.isEmpty()) {
+                sqsClient = new AmazonSQSClient();
+            } else {
+                sqsClient = new AmazonSQSClient(new BasicAWSCredentials(awsAccessKey, awsSecretKey));
+            }
+
+            // Set region.
+            sqsClient.setRegion(Region.getRegion(region));
+            s3Client.setRegion(Region.getRegion(region));
 
             WorkerActionProvider dedicated = null;
-            if (entry.getValue().size() > 1) {
-                entry.getValue().forEach($ ->
+            if (actionProviders.size() > 1) {
+                actionProviders.forEach($ ->
                     Preconditions.checkArgument(
                         !$.getWorkerAction().dedicated(),
                         "Queue [" +
-                            entry.getKey() +
+                            workerConfig.name +
                             "] with dedicated WorkerAction [" +
                             $.getActionClass().getCanonicalName() +
                             "] cannot have other WorkerActions mapped to it."
                     )
                 );
-            } else if (entry.getValue().size() == 1) {
-                dedicated = Iterators.get(entry.getValue().iterator(), 0);
+            } else if (actionProviders.size() == 1) {
+                dedicated = Iterators.get(actionProviders.iterator(), 0);
+                if (!dedicated.getWorkerAction().dedicated())
+                    dedicated = null;
             } else {
-                LOG.warn("Queue [" + entry.getKey() + "] is not mapped to any WorkerActions.");
+                LOG.warn("Queue [" + workerConfig.name + "] is not mapped to any WorkerActions.");
                 return;
             }
 
             // Get QueueURL from AWS.
-            final GetQueueUrlResult result = sqsClient.getQueueUrl(entry.getKey());
+            final GetQueueUrlResult result = sqsClient.getQueueUrl(workerConfig.sqsName);
             final String queueUrl = result.getQueueUrl();
 
             // Create producer.
@@ -196,24 +160,27 @@ public class SQSService extends AbstractIdleService implements WorkerService {
             producer.setSqsClient(sqsClient);
             producer.setConfig(workerConfig);
 
-            // Create a SQSConsumer to receive Worker Requests.
-            final SQSConsumer consumer = new SQSConsumer();
-            consumer.setQueueUrl(queueUrl);
-            consumer.setSqsClient(sqsClient);
-            consumer.setConfig(workerConfig);
+            final SQSConsumer consumer;
+            if (workerConfig.receiveThreads > 0) {
+                // Create a SQSConsumer to receive Worker Requests.
+                consumer = new SQSConsumer();
+                consumer.setQueueUrl(queueUrl);
+                consumer.setSqsClient(sqsClient);
+                consumer.setConfig(workerConfig);
 
-            // Set dedicated if necessary.
-            if (dedicated != null && dedicated.getWorkerAction().dedicated()) {
-                consumer.setDedicated(dedicated);
-            }
-
-            if (entry.getValue() != null) {
-                for (WorkerActionProvider actionProvider : entry.getValue()) {
-                    actionProvider.setProducer(producer);
+                // Set dedicated if necessary.
+                if (dedicated != null && dedicated.getWorkerAction().dedicated()) {
+                    consumer.setDedicated(dedicated);
                 }
+            } else {
+                consumer = null;
             }
 
-            queueMap.put(entry.getKey(), new QueueContext(producer, consumer));
+            for (WorkerActionProvider actionProvider : actionProviders) {
+                actionProvider.setProducer(producer);
+            }
+
+            queueMap.put(workerConfig.name, new QueueContext(producer, consumer, sqsClient));
         });
 
         queueMap.values().forEach(queueContext -> {
@@ -240,10 +207,12 @@ public class SQSService extends AbstractIdleService implements WorkerService {
     private final class QueueContext {
         final SQSProducer sender;
         final SQSConsumer receiver;
+        final AmazonSQSClient sqsClient;
 
-        public QueueContext(SQSProducer sender, SQSConsumer receiver) {
+        public QueueContext(SQSProducer sender, SQSConsumer receiver, AmazonSQSClient sqsClient) {
             this.sender = sender;
             this.receiver = receiver;
+            this.sqsClient = sqsClient;
         }
     }
 }

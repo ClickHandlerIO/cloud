@@ -118,7 +118,11 @@ public class SQSConsumer extends AbstractIdleService {
         // Init ActionQueues.
         actionMap = ActionManager.getWorkerActionMap().values().stream()
             .map(ActionContext::new)
-            .collect(Collectors.toMap(k -> k.actionProvider.getActionClass().getCanonicalName(), v -> v));
+            .collect(Collectors.toMap(
+                k -> k.actionProvider.getActionClass().getCanonicalName(),
+                v -> v,
+                (v1, v2) -> v2)
+            );
 
         // Start Delete threads.
         deleteThreads = new DeleteThread[config.deleteThreads];
@@ -278,12 +282,18 @@ public class SQSConsumer extends AbstractIdleService {
                             return;
                         }
 
-                        // Receive a batch of messages.
-                        result = sqsClient.receiveMessage(new ReceiveMessageRequest()
+                        final ReceiveMessageRequest request = new ReceiveMessageRequest()
                             .withQueueUrl(queueUrl)
                             .withWaitTimeSeconds(20)
                             .withVisibilityTimeout(minimumVisibility)
-                            .withMaxNumberOfMessages(batchSize));
+                            .withMaxNumberOfMessages(batchSize);
+
+                        if (dedicated == null) {
+                            request.withMessageAttributeNames(SQSService.ATTRIBUTE_NAME);
+                        }
+
+                        // Receive a batch of messages.
+                        result = sqsClient.receiveMessage(request);
                     } catch (Throwable e) {
                         buffered.release(batchSize);
                         Throwables.propagate(e);

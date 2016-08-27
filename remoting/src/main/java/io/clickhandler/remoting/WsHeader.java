@@ -15,8 +15,8 @@ public class WsHeader {
     public static final int PING = 5;
     public static final int PONG = 6;
 
-    public static final int PRS_GET = 20;
-    public static final int PRS_LEAVE = 21;
+    public static final int PRS_GET = 7;
+    public static final int PRS_LEAVE = 8;
 
     @JsonProperty("m")
     private int method;
