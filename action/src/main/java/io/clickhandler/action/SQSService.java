@@ -6,6 +6,7 @@ import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.regions.Region;
 import com.amazonaws.regions.Regions;
 import com.amazonaws.services.s3.AmazonS3Client;
+import com.amazonaws.services.sqs.AmazonSQS;
 import com.amazonaws.services.sqs.AmazonSQSClient;
 import com.amazonaws.services.sqs.model.GetQueueUrlResult;
 import com.google.common.base.Preconditions;
@@ -81,8 +82,6 @@ public class SQSService extends AbstractIdleService implements WorkerService {
                 "SQSWorkerConfig for Queue '" + workerConfig.name + "' does not have a region specified"
             );
 
-            AmazonSQSExtendedClient client;
-
             final Regions region = Regions.fromName(regionName);
             Preconditions.checkNotNull(region,
                 "SQSWorkerConfig for Queue '" +
@@ -92,10 +91,13 @@ public class SQSService extends AbstractIdleService implements WorkerService {
                     "' is not a valid AWS region name.");
 
             final AmazonS3Client s3Client;
+            final String s3Bucket = Strings.nullToEmpty(workerConfig.s3Bucket).trim();
             final String s3AwsAccessKey = Strings.nullToEmpty(workerConfig.s3AccessKey).trim();
             final String s3AwsSecretKey = Strings.nullToEmpty(workerConfig.s3SecretKey).trim();
 
-            if (s3AwsAccessKey.isEmpty()) {
+            if (s3Bucket.isEmpty()) {
+                s3Client = null;
+            } else if (s3AwsAccessKey.isEmpty()) {
                 s3Client = new AmazonS3Client();
             } else {
                 s3Client = new AmazonS3Client(new BasicAWSCredentials(s3AwsAccessKey, s3AwsSecretKey));
@@ -104,30 +106,42 @@ public class SQSService extends AbstractIdleService implements WorkerService {
             final String awsAccessKey = Strings.nullToEmpty(workerConfig.accessKey).trim();
             final String awsSecretKey = Strings.nullToEmpty(workerConfig.secretKey).trim();
 
-            final ExtendedClientConfiguration extendedClientConfiguration = new ExtendedClientConfiguration();
-            if (workerConfig.alwaysUseS3) {
-                extendedClientConfiguration.withAlwaysThroughS3(true);
-            } else if (workerConfig.s3MessageThreshold > 0) {
-                extendedClientConfiguration.withMessageSizeThreshold(workerConfig.s3MessageThreshold);
+            ExtendedClientConfiguration extendedClientConfiguration = null;
+
+            if (s3Client != null) {
+                extendedClientConfiguration = new ExtendedClientConfiguration();
+                if (workerConfig.alwaysUseS3) {
+                    extendedClientConfiguration.withAlwaysThroughS3(true);
+                } else if (workerConfig.s3MessageThreshold > 0) {
+                    extendedClientConfiguration.withMessageSizeThreshold(workerConfig.s3MessageThreshold);
+                }
+
+                // Set bucket.
+                extendedClientConfiguration.withLargePayloadSupportEnabled(
+                    s3Client,
+                    workerConfig.s3Bucket
+                );
             }
 
-            // Set bucket.
-            extendedClientConfiguration.withLargePayloadSupportEnabled(
-                s3Client,
-                workerConfig.s3Bucket
-            );
-
             // Create SQSClient.
-            final AmazonSQSClient sqsClient;
+            final AmazonSQS sqsClient;
             if (awsAccessKey.isEmpty()) {
-                sqsClient = new AmazonSQSClient();
+                sqsClient = s3Client == null ?
+                    new AmazonSQSClient() :
+                    new AmazonSQSExtendedClient(new AmazonSQSClient(), extendedClientConfiguration);
             } else {
-                sqsClient = new AmazonSQSClient(new BasicAWSCredentials(awsAccessKey, awsSecretKey));
+                sqsClient = s3Client == null ?
+                    new AmazonSQSClient(new BasicAWSCredentials(awsAccessKey, awsSecretKey)) :
+                    new AmazonSQSExtendedClient(
+                        new AmazonSQSClient(
+                            new BasicAWSCredentials(awsAccessKey, awsSecretKey)), extendedClientConfiguration);
             }
 
             // Set region.
             sqsClient.setRegion(Region.getRegion(region));
-            s3Client.setRegion(Region.getRegion(region));
+            if (s3Client != null) {
+                s3Client.setRegion(Region.getRegion(region));
+            }
 
             WorkerActionProvider dedicated = null;
             if (actionProviders.size() > 1) {
@@ -207,9 +221,9 @@ public class SQSService extends AbstractIdleService implements WorkerService {
     private final class QueueContext {
         final SQSProducer sender;
         final SQSConsumer receiver;
-        final AmazonSQSClient sqsClient;
+        final AmazonSQS sqsClient;
 
-        public QueueContext(SQSProducer sender, SQSConsumer receiver, AmazonSQSClient sqsClient) {
+        public QueueContext(SQSProducer sender, SQSConsumer receiver, AmazonSQS sqsClient) {
             this.sender = sender;
             this.receiver = receiver;
             this.sqsClient = sqsClient;
