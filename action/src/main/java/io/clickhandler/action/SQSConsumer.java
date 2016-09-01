@@ -1,5 +1,6 @@
 package io.clickhandler.action;
 
+import com.amazonaws.AmazonClientException;
 import com.amazonaws.services.sqs.AmazonSQS;
 import com.amazonaws.services.sqs.model.*;
 import com.google.common.base.Charsets;
@@ -15,6 +16,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.inject.Inject;
+import java.io.IOException;
+import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
@@ -34,7 +37,8 @@ import java.util.stream.Collectors;
 public class SQSConsumer extends AbstractIdleService {
     private static final Logger LOG = LoggerFactory.getLogger(SQSConsumer.class);
     private SQSWorkerConfig config;
-    private AmazonSQS sqsClient;
+    private AmazonSQS sqsDeleteClient;
+    private AmazonSQS sqsReceiveClient;
     private Semaphore buffered;
     private ReceiveThread[] receiveThreads;
     private DeleteThread[] deleteThreads;
@@ -99,11 +103,15 @@ public class SQSConsumer extends AbstractIdleService {
         this.queueUrl = queueUrl;
     }
 
+    void setSqsReceiveClient(AmazonSQS sqsReceiveClient) {
+        this.sqsReceiveClient = sqsReceiveClient;
+    }
+
     /**
-     * @param sqsClient
+     * @param sqsDeleteClient
      */
-    void setSqsClient(AmazonSQS sqsClient) {
-        this.sqsClient = sqsClient;
+    void setSqsDeleteClient(AmazonSQS sqsDeleteClient) {
+        this.sqsDeleteClient = sqsDeleteClient;
     }
 
     void setDedicated(WorkerActionProvider dedicated) {
@@ -141,30 +149,39 @@ public class SQSConsumer extends AbstractIdleService {
 
     @Override
     protected void shutDown() throws Exception {
+        Try.run(() -> sqsReceiveClient.shutdown());
+
         // Stop receiving messages.
         for (ReceiveThread thread : receiveThreads) {
-            Try.run(() -> thread.stopAsync().awaitTerminated());
+            Try.run(() -> thread.stopAsync().awaitTerminated(5, TimeUnit.SECONDS));
         }
 
-        // Wait for all actions to stop.
         buffered.acquire(config.bufferSize);
 
         // Delete any remaining messages.
         // Stop delete threads.
         for (DeleteThread thread : deleteThreads) {
-            Try.run(() -> thread.stopAsync().awaitTerminated());
+            Try.run(() -> thread.stopAsync().awaitTerminated(5, TimeUnit.SECONDS));
         }
+
+        // Delete client.
+        Try.run(() -> sqsDeleteClient.shutdown());
 
         // Clear threads.
         receiveThreads = null;
         deleteThreads = null;
     }
 
+    private DeleteMessageBatchResult deleteMessageBatch(DeleteMessageBatchRequest request)
+    throws InterruptedException, SocketException {
+        return sqsDeleteClient.deleteMessageBatch(request);
+    }
+
     /**
      * @param take
      * @return
      */
-    private boolean deleteRun(LinkedBlockingDeque<String> queue, boolean take) {
+    private boolean deleteRun(LinkedBlockingDeque<String> queue, boolean take) throws InterruptedException, IOException {
         try {
             final ArrayList<DeleteMessageBatchRequestEntry> batch = new ArrayList<>(batchSize);
             final ArrayList<String> takeBatch = new ArrayList<>(batchSize);
@@ -185,13 +202,19 @@ public class SQSConsumer extends AbstractIdleService {
             }
 
             if (!batch.isEmpty()) {
-                sqsClient.deleteMessageBatch(new DeleteMessageBatchRequest()
+                deleteMessageBatch(new DeleteMessageBatchRequest()
                     .withQueueUrl(queueUrl)
                     .withEntries(batch));
                 return true;
             } else {
                 return false;
             }
+        } catch (SocketException e) {
+            // Ignore.
+        } catch (AmazonClientException e) {
+            return false;
+        } catch (InterruptedException e) {
+            return false;
         } catch (Throwable e) {
             LOG.error("AmazonSQSClient.deleteMessageBatch() threw an exception", e);
         }
@@ -247,17 +270,36 @@ public class SQSConsumer extends AbstractIdleService {
      */
     private class DeleteThread extends AbstractExecutionThreadService {
         private final LinkedBlockingDeque<String> queue = new LinkedBlockingDeque<>();
+        private Thread thread;
+
+        @Override
+        protected String serviceName() {
+            return "worker-consumer-delete-" + config.name + "-SQS-" + config.sqsName;
+        }
+
+        @Override
+        protected void triggerShutdown() {
+            Try.run(() -> thread.interrupt());
+        }
 
         @Override
         protected void shutDown() throws Exception {
-            while (deleteRun(queue, false)) ;
+            try {
+                while (deleteRun(queue, false)) ;
+            } catch (InterruptedException e) {
+                // Ignore.
+            }
         }
 
         @Override
         protected void run() throws Exception {
+            thread = Thread.currentThread();
+
             while (isRunning()) {
                 try {
                     deleteRun(queue, true);
+                } catch (InterruptedException e) {
+                    return;
                 } catch (Throwable e) {
                     // Ignore.
                     LOG.error("DeleteThread.run threw an exception", e);
@@ -270,18 +312,42 @@ public class SQSConsumer extends AbstractIdleService {
      *
      */
     private class ReceiveThread extends AbstractExecutionThreadService {
+        private Thread thread;
+
+        @Override
+        protected String serviceName() {
+            return "worker-consumer-receive-" + config.name + "-SQS-" + config.sqsName;
+        }
+
+        @Override
+        protected void triggerShutdown() {
+            Try.run(() -> thread.interrupt());
+        }
+
+        protected ReceiveMessageResult receiveMessage(ReceiveMessageRequest request)
+            throws InterruptedException, SocketException {
+            return sqsReceiveClient.receiveMessage(request);
+        }
+
+        protected ChangeMessageVisibilityBatchResult changeVisibility(ChangeMessageVisibilityBatchRequest request)
+            throws InterruptedException, SocketException {
+            return sqsReceiveClient.changeMessageVisibilityBatch(request);
+        }
+
         @Override
         protected void run() throws Exception {
+            thread = Thread.currentThread();
+
             while (isRunning()) {
                 try {
                     ReceiveMessageResult result = null;
                     buffered.acquire(batchSize);
-                    try {
-                        if (!isRunning()) {
-                            buffered.release(batchSize);
-                            return;
-                        }
+                    if (!isRunning()) {
+                        buffered.release(batchSize);
+                        return;
+                    }
 
+                    try {
                         final ReceiveMessageRequest request = new ReceiveMessageRequest()
                             .withQueueUrl(queueUrl)
                             .withWaitTimeSeconds(20)
@@ -293,11 +359,26 @@ public class SQSConsumer extends AbstractIdleService {
                         }
 
                         // Receive a batch of messages.
-                        result = sqsClient.receiveMessage(request);
+                        result = receiveMessage(request);
+                    } catch (SocketException e) {
+                        buffered.release(batchSize);
+                    } catch (InterruptedException e) {
+                        buffered.release(batchSize);
+                        return;
+                    } catch (AmazonClientException e) {
+                        buffered.release(batchSize);
                     } catch (Throwable e) {
                         buffered.release(batchSize);
+
+                        if (!isRunning() && e instanceof SocketException) {
+                            return;
+                        }
+
                         Throwables.propagate(e);
                     }
+
+                    if (!isRunning())
+                        return;
 
                     // Were any messages received?
                     if (result == null || result.getMessages() == null || result.getMessages().isEmpty()) {
@@ -343,7 +424,11 @@ public class SQSConsumer extends AbstractIdleService {
                             }
                         } finally {
                             if (!request.queued) {
-                                actionContext.run(request);
+                                try {
+                                    actionContext.run(request);
+                                } catch (InterruptedException e) {
+                                    return;
+                                }
                             }
                         }
                     }
@@ -351,14 +436,20 @@ public class SQSConsumer extends AbstractIdleService {
                     if (changes != null) {
                         try {
                             final ChangeMessageVisibilityBatchResult visibilityBatchResult =
-                                sqsClient.changeMessageVisibilityBatch(new ChangeMessageVisibilityBatchRequest()
+                                changeVisibility(new ChangeMessageVisibilityBatchRequest()
                                     .withQueueUrl(queueUrl)
                                     .withEntries(changes)
                                 );
-                        } catch (Throwable e) {
-                            LOG.error("changeMessageVisibilityBatch threw an exception", e);
+                        } catch (InterruptedException e) {
+                            return;
                         }
                     }
+                } catch (SocketException e) {
+                    // Ignore.
+                } catch (AmazonClientException e) {
+                    // Ignore.
+                } catch (InterruptedException e) {
+                    return;
                 } catch (Throwable e) {
                     LOG.error("ReceiveThread.run() threw an exception", e);
                 }
@@ -446,7 +537,7 @@ public class SQSConsumer extends AbstractIdleService {
         /**
          * @param request
          */
-        private void run(ActionRequest request) {
+        private void run(ActionRequest request) throws InterruptedException {
             final long worstCaseTime = System.currentTimeMillis() + actionProvider.getTimeoutMillis();
 
             // Is there enough time leased to reliably run this Action?
@@ -496,7 +587,11 @@ public class SQSConsumer extends AbstractIdleService {
                 synchronized (this) {
                     final ActionRequest next = backlog.poll();
                     if (next != null) {
-                        run(next);
+                        try {
+                            run(next);
+                        } catch (InterruptedException e) {
+                            return;
+                        }
                     } else {
                         running.decrementAndGet();
                     }

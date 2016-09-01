@@ -1,5 +1,6 @@
 package io.clickhandler.action;
 
+import com.amazonaws.AmazonClientException;
 import com.amazonaws.services.sqs.AmazonSQS;
 import com.amazonaws.services.sqs.model.*;
 import com.google.common.base.Preconditions;
@@ -13,11 +14,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import rx.Observable;
 
+import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -96,8 +99,10 @@ public class SQSProducer extends AbstractIdleService implements WorkerProducer {
     @Override
     protected void shutDown() throws Exception {
         for (SendThread thread : sendThreads) {
-            Try.run(() -> thread.stopAsync().awaitTerminated());
+            Try.run(() -> thread.stopAsync().awaitTerminated(5, TimeUnit.SECONDS));
         }
+
+        Try.run(() -> sqsClient.shutdown());
     }
 
     /**
@@ -108,7 +113,7 @@ public class SQSProducer extends AbstractIdleService implements WorkerProducer {
             .map($ -> $.entry).collect(Collectors.toList());
 
         try {
-            final SendMessageBatchResult result = sqsClient.sendMessageBatch(
+            final SendMessageBatchResult result = doSend(
                 new SendMessageBatchRequest()
                     .withQueueUrl(queueUrl)
                     .withEntries(entries));
@@ -121,6 +126,12 @@ public class SQSProducer extends AbstractIdleService implements WorkerProducer {
                         entry.success = true;
                 });
             }
+        } catch (SocketException e) {
+            // Ignore.
+        } catch (AmazonClientException e) {
+            // Ignore.
+        } catch (InterruptedException e) {
+            // Ignore.
         } catch (Throwable e) {
             LOG.error("AmazonSQSClient.sendMessageBatch() threw an exception", e);
         }
@@ -147,6 +158,11 @@ public class SQSProducer extends AbstractIdleService implements WorkerProducer {
         });
     }
 
+    private SendMessageBatchResult doSend(SendMessageBatchRequest request)
+        throws InterruptedException, SocketException {
+        return sqsClient.sendMessageBatch(request);
+    }
+
     private static final class Entry {
         final WorkerRequest request;
         final SendMessageBatchRequestEntry entry;
@@ -162,8 +178,22 @@ public class SQSProducer extends AbstractIdleService implements WorkerProducer {
      *
      */
     private class SendThread extends AbstractExecutionThreadService {
+        private Thread thread;
+
+        @Override
+        protected String serviceName() {
+            return "worker-producer-" + config.name + "-SQS-" + config.sqsName;
+        }
+
+        @Override
+        protected void triggerShutdown() {
+            Try.run(() -> thread.interrupt());
+        }
+
         @Override
         protected void run() throws Exception {
+            thread = Thread.currentThread();
+
             while (isRunning()) {
                 try {
                     final HashMap<String, Entry> batch = new HashMap<>(batchSize);
@@ -213,6 +243,8 @@ public class SQSProducer extends AbstractIdleService implements WorkerProducer {
                             batch.clear();
                         }
                     }
+                } catch (InterruptedException e) {
+                    return;
                 } catch (Throwable e) {
                     // Ignore.
                     LOG.error("Unexpected exception thrown in SendThread.run()", e);

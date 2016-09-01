@@ -3,6 +3,7 @@ package io.clickhandler.action;
 import com.amazon.sqs.javamessaging.AmazonSQSExtendedClient;
 import com.amazon.sqs.javamessaging.ExtendedClientConfiguration;
 import com.amazonaws.auth.BasicAWSCredentials;
+import com.amazonaws.http.AmazonHttpClient;
 import com.amazonaws.regions.Region;
 import com.amazonaws.regions.Regions;
 import com.amazonaws.services.s3.AmazonS3Client;
@@ -16,11 +17,14 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Multimaps;
 import com.google.common.util.concurrent.AbstractIdleService;
 import io.vertx.rxjava.core.Vertx;
+import javaslang.control.Try;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.*;
 
 /**
@@ -52,6 +56,17 @@ public class SQSService extends AbstractIdleService implements WorkerService {
     @Override
     protected void startUp() throws Exception {
         Preconditions.checkNotNull(config, "config must be set.");
+
+        final Logger amazonClientLogger = LoggerFactory.getLogger(AmazonHttpClient.class);
+        Try.run(() -> {
+            final Class param = Class.forName("ch.qos.logback.classic.Level");
+            Field errorField = param.getDeclaredField("ERROR");
+            Method method = amazonClientLogger.getClass().getMethod("setLevel", param);
+            Object value = errorField.get(param);
+            if (method != null) {
+                method.invoke(amazonClientLogger, value);
+            }
+        });
 
         // Build Queue map.
         final Multimap<String, WorkerActionProvider> map = Multimaps.newSetMultimap(
@@ -124,23 +139,62 @@ public class SQSService extends AbstractIdleService implements WorkerService {
             }
 
             // Create SQSClient.
-            final AmazonSQS sqsClient;
+            final AmazonSQS sqsSendClient;
+            final AmazonSQS sqsDeleteClient;
+            final AmazonSQS sqsReceiveClient;
+
             if (awsAccessKey.isEmpty()) {
-                sqsClient = s3Client == null ?
+                sqsSendClient = s3Client == null ?
                     new AmazonSQSClient() :
                     new AmazonSQSExtendedClient(new AmazonSQSClient(), extendedClientConfiguration);
+
+                if (workerConfig.receiveThreads > 0) {
+                    sqsReceiveClient = s3Client == null ?
+                        new AmazonSQSClient() :
+                        new AmazonSQSExtendedClient(new AmazonSQSClient(), extendedClientConfiguration);
+
+                    sqsDeleteClient = s3Client == null ?
+                        new AmazonSQSClient() :
+                        new AmazonSQSExtendedClient(new AmazonSQSClient(), extendedClientConfiguration);
+                } else {
+                    sqsReceiveClient = null;
+                    sqsDeleteClient = null;
+                }
             } else {
-                sqsClient = s3Client == null ?
+                sqsSendClient = s3Client == null ?
                     new AmazonSQSClient(new BasicAWSCredentials(awsAccessKey, awsSecretKey)) :
                     new AmazonSQSExtendedClient(
                         new AmazonSQSClient(
                             new BasicAWSCredentials(awsAccessKey, awsSecretKey)), extendedClientConfiguration);
+
+                if (workerConfig.receiveThreads > 0) {
+                    sqsReceiveClient = s3Client == null ?
+                        new AmazonSQSClient(new BasicAWSCredentials(awsAccessKey, awsSecretKey)) :
+                        new AmazonSQSExtendedClient(
+                            new AmazonSQSClient(
+                                new BasicAWSCredentials(awsAccessKey, awsSecretKey)), extendedClientConfiguration);
+
+                    sqsDeleteClient = s3Client == null ?
+                        new AmazonSQSClient(new BasicAWSCredentials(awsAccessKey, awsSecretKey)) :
+                        new AmazonSQSExtendedClient(
+                            new AmazonSQSClient(
+                                new BasicAWSCredentials(awsAccessKey, awsSecretKey)), extendedClientConfiguration);
+                } else {
+                    sqsReceiveClient = null;
+                    sqsDeleteClient = null;
+                }
             }
 
             // Set region.
-            sqsClient.setRegion(Region.getRegion(region));
+            sqsSendClient.setRegion(Region.getRegion(region));
             if (s3Client != null) {
                 s3Client.setRegion(Region.getRegion(region));
+            }
+            if (sqsReceiveClient != null) {
+                sqsReceiveClient.setRegion(Region.getRegion(region));
+            }
+            if (sqsDeleteClient != null) {
+                sqsDeleteClient.setRegion(Region.getRegion(region));
             }
 
             WorkerActionProvider dedicated = null;
@@ -165,13 +219,13 @@ public class SQSService extends AbstractIdleService implements WorkerService {
             }
 
             // Get QueueURL from AWS.
-            final GetQueueUrlResult result = sqsClient.getQueueUrl(workerConfig.sqsName);
+            final GetQueueUrlResult result = sqsSendClient.getQueueUrl(workerConfig.sqsName);
             final String queueUrl = result.getQueueUrl();
 
             // Create producer.
             final SQSProducer producer = new SQSProducer(vertx);
             producer.setQueueUrl(queueUrl);
-            producer.setSqsClient(sqsClient);
+            producer.setSqsClient(sqsSendClient);
             producer.setConfig(workerConfig);
 
             final SQSConsumer consumer;
@@ -179,7 +233,8 @@ public class SQSService extends AbstractIdleService implements WorkerService {
                 // Create a SQSConsumer to receive Worker Requests.
                 consumer = new SQSConsumer();
                 consumer.setQueueUrl(queueUrl);
-                consumer.setSqsClient(sqsClient);
+                consumer.setSqsReceiveClient(sqsReceiveClient);
+                consumer.setSqsDeleteClient(sqsDeleteClient);
                 consumer.setConfig(workerConfig);
 
                 // Set dedicated if necessary.
@@ -194,7 +249,7 @@ public class SQSService extends AbstractIdleService implements WorkerService {
                 actionProvider.setProducer(producer);
             }
 
-            queueMap.put(workerConfig.name, new QueueContext(producer, consumer, sqsClient));
+            queueMap.put(workerConfig.name, new QueueContext(producer, consumer, sqsSendClient));
         });
 
         queueMap.values().forEach(queueContext -> {

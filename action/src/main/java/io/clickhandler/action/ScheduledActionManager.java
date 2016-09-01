@@ -1,6 +1,7 @@
 package io.clickhandler.action;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Throwables;
 import com.google.common.util.concurrent.AbstractExecutionThreadService;
 import com.google.common.util.concurrent.AbstractIdleService;
 import com.google.common.util.concurrent.AbstractScheduledService;
@@ -67,6 +68,7 @@ public class ScheduledActionManager extends AbstractIdleService {
     private class ClusterSingleton extends AbstractExecutionThreadService {
         private final ScheduledActionProvider provider;
         private final int intervalSeconds;
+        private Thread thread;
 
         public ClusterSingleton(ScheduledActionProvider provider) {
             this.provider = provider;
@@ -88,8 +90,14 @@ public class ScheduledActionManager extends AbstractIdleService {
         }
 
         @Override
+        protected void triggerShutdown() {
+            Try.run(() -> thread.interrupt());
+        }
+
+        @Override
         protected void run() throws Exception {
-            while (isRunning()) {
+            thread = Thread.currentThread();
+            while (isRunning() && !Thread.interrupted()) {
                 try {
                     if (hazelcastInstance == null) {
                         while (isRunning()) {
@@ -99,13 +107,17 @@ public class ScheduledActionManager extends AbstractIdleService {
                         final ILock lock = hazelcastInstance.getLock(provider.getActionClass().getCanonicalName());
                         lock.lockInterruptibly();
                         try {
-                            while (isRunning()) {
+                            while (isRunning() && !Thread.interrupted()) {
                                 doRun();
                             }
+                        } catch (InterruptedException e) {
+                            return;
                         } finally {
                             lock.unlock();
                         }
                     }
+                } catch (InterruptedException e) {
+                    LOG.warn(provider.getActionClass().getCanonicalName(), e);
                 } catch (Throwable e) {
                     // Ignore.
                     LOG.warn("Failed to get Cluster lock for " + provider.getActionClass().getCanonicalName(), e);
@@ -113,20 +125,20 @@ public class ScheduledActionManager extends AbstractIdleService {
             }
         }
 
-        private void doRun() {
+        private void doRun() throws InterruptedException {
             final long start = System.currentTimeMillis();
-            try {
-                provider.observe(null).toBlocking().first();
-            } catch (Throwable e) {
-                LOG.warn(provider.getActionClass().getCanonicalName(), e);
-            }
+            provider.observe(null).toBlocking().first();
 
             final long elapsed = System.currentTimeMillis() - start;
             final long sleepFor = TimeUnit.SECONDS.toMillis(intervalSeconds) - elapsed;
-            if (sleepFor > 0)
-                Try.run(() -> Thread.sleep(sleepFor));
-            else
-                Try.run(Thread::yield);
+
+            try {
+                if (sleepFor > 0)
+                    Thread.sleep(sleepFor);
+            } catch (InterruptedException e) {
+                // Do nothing.
+                throw e;
+            }
         }
     }
 
@@ -148,10 +160,17 @@ public class ScheduledActionManager extends AbstractIdleService {
         @Override
         protected void runOneIteration() throws Exception {
             try {
-                provider.observe(null).toBlocking().first();
+                run();
+            } catch (InterruptedException e) {
+                LOG.warn(provider.getActionClass().getCanonicalName(), e);
+                Throwables.propagate(e);
             } catch (Throwable e) {
                 LOG.warn(provider.getActionClass().getCanonicalName(), e);
             }
+        }
+
+        protected void run() throws InterruptedException {
+            provider.observe(null).toBlocking().first();
         }
 
         @Override
