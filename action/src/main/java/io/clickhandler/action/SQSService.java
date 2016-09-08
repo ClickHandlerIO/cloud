@@ -231,7 +231,7 @@ public class SQSService extends AbstractIdleService implements WorkerService {
             final SQSConsumer consumer;
             if (workerConfig.receiveThreads > 0) {
                 // Create a SQSConsumer to receive Worker Requests.
-                consumer = new SQSConsumer();
+                consumer = new SQSConsumer(vertx);
                 consumer.setQueueUrl(queueUrl);
                 consumer.setSqsReceiveClient(sqsReceiveClient);
                 consumer.setSqsDeleteClient(sqsDeleteClient);

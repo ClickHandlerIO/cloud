@@ -453,12 +453,12 @@ public class ActionProcessor extends AbstractProcessor {
                             }
                         }
 
-                        messager.printMessage(
-                            Diagnostic.Kind.WARNING,
-                            getFullPath() +
-                                " has a change, but it appears that it may save a full re-compile. " +
-                                "When in doubt \"clean\" and \"compile\""
-                        );
+//                        messager.printMessage(
+//                            Diagnostic.Kind.WARNING,
+//                            getFullPath() +
+//                                " has a change, but it appears that it may save a full re-compile. " +
+//                                "When in doubt \"clean\" and \"compile\""
+//                        );
 
                         // Generate child packages.
                         for (Pkg childPackage : children.values()) {
@@ -495,11 +495,11 @@ public class ActionProcessor extends AbstractProcessor {
                             }
                         }
 
-                        messager.printMessage(
-                            Diagnostic.Kind.WARNING,
-                            getFullPath() +
-                                " has a change, but it appears that it may save a full re-compile. " +
-                                "When in doubt \"clean\" and \"compile\"");
+//                        messager.printMessage(
+//                            Diagnostic.Kind.WARNING,
+//                            getFullPath() +
+//                                " has a change, but it appears that it may save a full re-compile. " +
+//                                "When in doubt \"clean\" and \"compile\"");
 
                         // Generate child packages.
                         for (Pkg childPackage : children.values()) {

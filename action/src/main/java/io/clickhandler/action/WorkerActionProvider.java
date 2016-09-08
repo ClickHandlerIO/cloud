@@ -92,7 +92,10 @@ public class WorkerActionProvider<A extends Action<IN, Boolean>, IN> extends Act
             producer,
             "WorkerProducer is null. Ensure ActionManager has been started and all actions have been registered."
         );
-        return producer.send(new WorkerRequest().actionProvider(this).request(request).delaySeconds(delaySeconds));
+        return producer.send(new WorkerRequest()
+            .actionProvider(this)
+            .request(request)
+            .delaySeconds(delaySeconds));
     }
 
     /**
@@ -105,6 +108,9 @@ public class WorkerActionProvider<A extends Action<IN, Boolean>, IN> extends Act
             producer,
             "WorkerProducer is null. Ensure ActionManager has been started and all actions have been registered."
         );
-        return producer.send(new WorkerRequest().actionProvider(this).request(request).delaySeconds(delaySeconds));
+        return producer.send(new WorkerRequest()
+            .actionProvider(this)
+            .request(request)
+            .delaySeconds(delaySeconds));
     }
 }

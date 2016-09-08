@@ -11,8 +11,13 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collector;
 
+/**
+ *
+ * @param <T>
+ * @param <K>
+ * @param <V>
+ */
 public class MultimapCollector<T, K, V> implements Collector<T, Multimap<K, V>, Multimap<K, V>> {
-
     private final Function<T, K> keyGetter;
     private final Function<T, V> valueGetter;
 

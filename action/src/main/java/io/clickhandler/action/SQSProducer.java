@@ -6,7 +6,6 @@ import com.amazonaws.services.sqs.model.*;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.AbstractExecutionThreadService;
 import com.google.common.util.concurrent.AbstractIdleService;
-import io.clickhandler.common.MicroMap;
 import io.clickhandler.common.WireFormat;
 import io.vertx.rxjava.core.Vertx;
 import javaslang.control.Try;
@@ -15,10 +14,7 @@ import org.slf4j.LoggerFactory;
 import rx.Observable;
 
 import java.net.SocketException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -213,7 +209,7 @@ public class SQSProducer extends AbstractIdleService implements WorkerProducer {
 
                         for (int i = 0; i < takeBatch.size(); i++) {
                             final WorkerRequest workerRequest = takeBatch.get(i);
-                            final Map<String, MessageAttributeValue> attributes = new MicroMap<>(
+                            final Map<String, MessageAttributeValue> attributes = Collections.singletonMap(
                                 SQSService.ATTRIBUTE_NAME,
                                 new MessageAttributeValue()
                                     .withDataType("String")

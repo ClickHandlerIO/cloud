@@ -18,6 +18,7 @@ import java.util.Map;
  *
  * @author Clay Molocznik
  */
+@SuppressWarnings("all")
 @Singleton
 public class ActionManager extends AbstractIdleService {
     private final static Logger LOG = LoggerFactory.getLogger(ActionManager.class);

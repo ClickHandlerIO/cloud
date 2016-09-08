@@ -46,7 +46,7 @@ import java.util.stream.Stream;
  * @author Clay Molocznik
  */
 public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
-    private static final int SANE_MAX = 2000;
+    private static final int SANE_MAX = 250;
     private static final int DEV_POOL_SIZE = 15;
     private static final int TEST_POOL_SIZE = 15;
     private static final int PROD_POOL_SIZE = 100;
@@ -226,7 +226,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             hikariConfig.setRegisterMbeans(true);
 
             hikariReadConfig.setReadOnly(true);
-            hikariReadConfig.setAutoCommit(false);
+            hikariReadConfig.setAutoCommit(true);
             hikariReadConfig.setRegisterMbeans(true);
 
             // Set the default maximum pool size.
@@ -305,13 +305,17 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 hikariConfig.setConnectionTestQuery("SELECT 1 FROM DUAL");
                 hikariReadConfig.setConnectionTestQuery("SELECT 1 FROM DUAL");
 
+                hikariConfig.setTransactionIsolation("TRANSACTION_SERIALIZABLE");
+                hikariReadConfig.setTransactionIsolation("TRANSACTION_SERIALIZABLE");
+
                 {
                     final Properties props = new Properties();
                     props.setProperty("url", jdbcUrl);
                     props.setProperty("user", jdbcUser);
                     props.setProperty("password", jdbcPassword);
                     props.setProperty("defaultSchema", config.getSchema());
-                    props.setProperty("isolation", "write_committed");
+                    props.setProperty("isolation", "consistent_read");
+//                    props.setProperty("isolation", "write_committed");
                     final com.nuodb.jdbc.DataSource dataSource = new com.nuodb.jdbc.DataSource(props);
                     hikariConfig.setDataSource(dataSource);
                 }
@@ -323,6 +327,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                     props.setProperty("password", jdbcReadPassword);
                     props.setProperty("defaultSchema", config.getSchema());
                     props.setProperty("isolation", "consistent_read");
+//                    props.setProperty("isolation", "consistent_read");
                     final com.nuodb.jdbc.DataSource dataSource = new com.nuodb.jdbc.DataSource(props);
                     hikariReadConfig.setDataSource(dataSource);
                 }

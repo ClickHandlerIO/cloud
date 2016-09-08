@@ -11,11 +11,12 @@ import com.google.common.hash.Hashing;
 import com.google.common.util.concurrent.AbstractExecutionThreadService;
 import com.google.common.util.concurrent.AbstractIdleService;
 import io.clickhandler.common.WireFormat;
+import io.vertx.rxjava.core.Context;
+import io.vertx.rxjava.core.Vertx;
 import javaslang.control.Try;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.inject.Inject;
 import java.io.IOException;
 import java.net.SocketException;
 import java.util.ArrayList;
@@ -36,6 +37,7 @@ import java.util.stream.Collectors;
  */
 public class SQSConsumer extends AbstractIdleService {
     private static final Logger LOG = LoggerFactory.getLogger(SQSConsumer.class);
+    private final Vertx vertx;
     private SQSWorkerConfig config;
     private AmazonSQS sqsDeleteClient;
     private AmazonSQS sqsReceiveClient;
@@ -46,12 +48,11 @@ public class SQSConsumer extends AbstractIdleService {
     private int minimumVisibility = 30;
     private int visibilityBufferMillis = 5_000;
     private String queueUrl;
-
     private Map<String, ActionContext> actionMap;
     private ActionContext dedicated;
 
-    @Inject
-    public SQSConsumer() {
+    public SQSConsumer(Vertx vertx) {
+        this.vertx = vertx;
     }
 
     /**
@@ -173,7 +174,7 @@ public class SQSConsumer extends AbstractIdleService {
     }
 
     private DeleteMessageBatchResult deleteMessageBatch(DeleteMessageBatchRequest request)
-    throws InterruptedException, SocketException {
+        throws InterruptedException, SocketException {
         return sqsDeleteClient.deleteMessageBatch(request);
     }
 
@@ -181,7 +182,8 @@ public class SQSConsumer extends AbstractIdleService {
      * @param take
      * @return
      */
-    private boolean deleteRun(LinkedBlockingDeque<String> queue, boolean take) throws InterruptedException, IOException {
+    private boolean deleteRun(LinkedBlockingDeque<String> queue, boolean take)
+        throws InterruptedException, IOException {
         try {
             final ArrayList<DeleteMessageBatchRequestEntry> batch = new ArrayList<>(batchSize);
             final ArrayList<String> takeBatch = new ArrayList<>(batchSize);
@@ -313,6 +315,7 @@ public class SQSConsumer extends AbstractIdleService {
      */
     private class ReceiveThread extends AbstractExecutionThreadService {
         private Thread thread;
+        private Context context;
 
         @Override
         protected String serviceName() {
@@ -337,6 +340,7 @@ public class SQSConsumer extends AbstractIdleService {
         @Override
         protected void run() throws Exception {
             thread = Thread.currentThread();
+            context = vertx.getOrCreateContext();
 
             while (isRunning()) {
                 try {
@@ -409,7 +413,11 @@ public class SQSConsumer extends AbstractIdleService {
                         );
 
                         // Create ActionRequest.
-                        final ActionRequest request = actionContext.createRequest(message.getReceiptHandle(), in);
+                        final ActionRequest request = actionContext.createRequest(
+                            context,
+                            message.getReceiptHandle(),
+                            in
+                        );
 
                         try {
                             // Do we need to extend the visibility timeout?
@@ -505,11 +513,12 @@ public class SQSConsumer extends AbstractIdleService {
         /**
          * @return
          */
-        private ActionRequest createRequest(final String receiptHandle, Object in) {
+        private ActionRequest createRequest(Context context, final String receiptHandle, Object in) {
             if (backlog != null) {
                 synchronized (this) {
                     if (maxConcurrentRequests > 0 && running.get() >= maxConcurrentRequests) {
                         final ActionRequest request = new ActionRequest(
+                            context,
                             receiptHandle,
                             in,
                             true,
@@ -526,6 +535,7 @@ public class SQSConsumer extends AbstractIdleService {
             }
 
             return new ActionRequest(
+                context,
                 receiptHandle,
                 in,
                 false,
@@ -550,36 +560,42 @@ public class SQSConsumer extends AbstractIdleService {
                 return;
             }
 
-            actionProvider.observe(request.in).subscribe(
+            request.context.runOnContext(a -> actionProvider.observe(request.in).subscribe(
                 r -> {
-                    try {
-                        // Do we need to remove from the Queue?
-                        if (r == Boolean.TRUE) {
-                            scheduleToDelete(request.receiptHandle);
-                        }
-                    } finally {
+                    request.context.runOnContext(a2 -> {
                         try {
-                            buffered.release();
+                            // Do we need to remove from the Queue?
+                            if (r == Boolean.TRUE) {
+                                scheduleToDelete(request.receiptHandle);
+                            }
                         } finally {
-                            dequeue();
+                            try {
+                                buffered.release();
+                            } finally {
+                                dequeue();
+                            }
                         }
-                    }
+                    });
                 },
                 e -> {
-                    try {
-                        LOG.warn(
-                            "Action [" + actionProvider.getName() + "] threw an exception. Placed back on the Queue.",
-                            e
-                        );
-                    } finally {
+                    request.context.runOnContext(a2 -> {
                         try {
-                            buffered.release();
+                            LOG.warn(
+                                "Action [" +
+                                    actionProvider.getName() +
+                                    "] threw an exception. Placed back on the Queue.",
+                                e
+                            );
                         } finally {
-                            dequeue();
+                            try {
+                                buffered.release();
+                            } finally {
+                                dequeue();
+                            }
                         }
-                    }
+                    });
                 }
-            );
+            ));
         }
 
         private void dequeue() {
@@ -607,22 +623,25 @@ public class SQSConsumer extends AbstractIdleService {
      */
     private final class ActionRequest {
         final long created = System.currentTimeMillis();
+        final Context context;
         final String receiptHandle;
         final Object in;
         final boolean queued;
         final int extendBySeconds;
         final long timeoutAt;
 
-        public ActionRequest(String receiptHandle,
+        public ActionRequest(Context context,
+                             String receiptHandle,
                              Object in,
                              boolean queued,
                              int extendBySeconds,
-                             long maxExecutionMillis) {
+                             long timeoutAt) {
+            this.context = context;
             this.receiptHandle = receiptHandle;
             this.in = in;
             this.queued = queued;
             this.extendBySeconds = extendBySeconds;
-            this.timeoutAt = created + maxExecutionMillis;
+            this.timeoutAt = timeoutAt;
         }
     }
 }
