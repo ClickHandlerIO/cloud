@@ -17,5 +17,5 @@ public @interface Push {
      *
      * @return address
      */
-    String value();
+    String value() default "";
 }

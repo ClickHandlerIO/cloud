@@ -285,7 +285,7 @@ public class CodeGenerator {
 
             if (ast.isPush(complexType)) {
                 final Push push = (Push) complexType.javaType().getAnnotation(Push.class);
-                final String address = push != null && !push.value().isEmpty() ? push.value() : complexType.javaType().getCanonicalName();
+                final String address = push != null && !push.value().isEmpty() ? push.value() : complexType.javaType().getSimpleName();
                 final ClassName subscribeName = ClassName.bestGuess(materializedType.canonicalName() + ".Subscribe");
 
                 TypeSpec.Builder subscription = TypeSpec.classBuilder("Subscribe");
