@@ -3,6 +3,7 @@ package io.clickhandler.sql;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import org.jooq.*;
+import org.jooq.conf.ParamType;
 import org.jooq.impl.DSL;
 import org.jooq.impl.DefaultDataType;
 import org.jooq.impl.SQLDataType;
@@ -61,7 +62,7 @@ public class MemSqlPlatform extends SqlPlatform {
             }
         }
 
-        String sql = createColumnStep.getSQL();
+        String sql = createColumnStep.getSQL(ParamType.INLINED);
 
         // Handle reference tables.
         if (mapping.tableAnnotation.reference()) {
@@ -125,7 +126,7 @@ public class MemSqlPlatform extends SqlPlatform {
 
         return create()
             .createIndex(name)
-            .on(mapping.getTableName(), index.columnNames).getSQL();
+            .on(mapping.getTableName(), index.columnNames).getSQL(ParamType.INLINED);
     }
 
     /**

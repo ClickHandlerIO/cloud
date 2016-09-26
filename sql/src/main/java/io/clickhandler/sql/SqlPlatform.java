@@ -1,6 +1,7 @@
 package io.clickhandler.sql;
 
 import org.jooq.*;
+import org.jooq.conf.ParamType;
 import org.jooq.conf.Settings;
 import org.jooq.impl.DSL;
 import org.jooq.impl.SQLDataType;
@@ -121,7 +122,7 @@ public class SqlPlatform {
      * @return
      */
     public String ddlDropTable(TableMapping mapping) {
-        return create().dropTable(mapping.getTableName()).getSQL();
+        return create().dropTable(mapping.getTableName()).getSQL(ParamType.INLINED);
     }
 
     /**
@@ -136,7 +137,7 @@ public class SqlPlatform {
         }
         createColumnStep.constraints(DSL.constraint("pk_" + mapping.getTableName())
             .primaryKey(columnNames(mapping.getPrimaryKeyProperties())));
-        return createColumnStep.getSQL();
+        return createColumnStep.getSQL(ParamType.INLINED);
     }
 
     /**
@@ -159,7 +160,8 @@ public class SqlPlatform {
     public String ddlDropColumn(TableMapping mapping, SqlSchema.DbColumn column) {
         return create()
             .alterTable(mapping.getTableName())
-            .dropColumn(column.name).getSQL();
+            .dropColumn(column.name)
+            .getSQL(ParamType.INLINED);
     }
 
     /**
@@ -170,7 +172,8 @@ public class SqlPlatform {
     public String ddlAddColumn(TableMapping mapping, TableMapping.Property property) {
         return create()
             .alterTable(mapping.getTableName())
-            .addColumn(property.getColumnName(), property.fieldDataType()).getSQL();
+            .addColumn(property.getColumnName(), property.fieldDataType())
+            .getSQL(ParamType.INLINED);
     }
 
     /**
@@ -181,7 +184,9 @@ public class SqlPlatform {
     public String ddlModifyColumn(TableMapping mapping, TableMapping.Property property) {
         return create()
             .alterTable(mapping.getTableName())
-            .alterColumn(property.getColumnName()).set(property.fieldDataType()).getSQL();
+            .alterColumn(property.getColumnName())
+            .set(property.fieldDataType())
+            .getSQL(ParamType.INLINED);
     }
 
     /**
@@ -195,12 +200,12 @@ public class SqlPlatform {
         if (index.unique) {
             return create()
                 .alterTable(mapping.getTableName())
-                .add(DSL.constraint(name).unique(index.columnNames)).getSQL();
+                .add(DSL.constraint(name).unique(index.columnNames)).getSQL(ParamType.INLINED);
         }
 
         return create()
             .createIndex(name)
-            .on(mapping.getTableName(), index.columnNames).getSQL();
+            .on(mapping.getTableName(), index.columnNames).getSQL(ParamType.INLINED);
     }
 
     /**
@@ -211,9 +216,10 @@ public class SqlPlatform {
         if (index.unique) {
             return create()
                 .alterTable(index.tableName)
-                .dropConstraint(index.name).getSQL();
+                .dropConstraint(index.name)
+                .getSQL(ParamType.INLINED);
         }
-        return create().dropIndex(index.name).getSQL();
+        return create().dropIndex(index.name).getSQL(ParamType.INLINED);
     }
 
     /**

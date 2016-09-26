@@ -3,6 +3,7 @@ package io.clickhandler.sql;
 import org.jooq.Configuration;
 import org.jooq.DataType;
 import org.jooq.SQLDialect;
+import org.jooq.conf.ParamType;
 import org.jooq.impl.PersistDSL;
 import org.jooq.util.h2.H2DataType;
 
@@ -24,10 +25,10 @@ public class H2Platform extends SqlPlatform {
 
         if (index.unique) {
             return PersistDSL.createUniqueIndex(getConfiguration(), name)
-                .on(mapping.getTableName(), index.columnNames).getSQL();
+                .on(mapping.getTableName(), index.columnNames).getSQL(ParamType.INLINED);
         }
 
-        return create().createIndex(name).on(mapping.getTableName(), index.columnNames).getSQL();
+        return create().createIndex(name).on(mapping.getTableName(), index.columnNames).getSQL(ParamType.INLINED);
     }
 
     public DataType fromJdbcType(int type) {

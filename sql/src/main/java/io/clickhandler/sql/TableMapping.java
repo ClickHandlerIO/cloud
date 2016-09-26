@@ -553,7 +553,11 @@ public class TableMapping {
             }
 
             final String getterName = getterName(field.getName(), field.getType());
-            final Method getter = methodMap.get(getterName);
+            Method getter = methodMap.get(getterName);
+
+            if (getter == null && getterName.startsWith("is")) {
+                getter = methodMap.get("get" + getterName.substring(2));
+            }
             if (getter == null) {
                 throw new PersistException("Entity Class [" + objectClass.getCanonicalName() + "] field [" + field.getName() + "] does not have a getter [" + getterName + "].");
             }
@@ -901,27 +905,27 @@ public class TableMapping {
                 final Class type = getType();
 
                 if (type == byte.class || type == Byte.class) {
-                    dataType.defaultValue((byte) 0);
+                    dataType = dataType.defaultValue((byte) 0);
                 } else if (type == boolean.class || type == Boolean.class) {
-                    dataType.defaultValue(false);
+                    dataType = dataType.defaultValue(false);
                 } else if (type == short.class || type == Short.class) {
-                    dataType.defaultValue((short) 0);
+                    dataType = dataType.defaultValue((short) 0);
                 } else if (type == int.class || type == Integer.class) {
-                    dataType.defaultValue(0);
+                    dataType = dataType.defaultValue(0);
                 } else if (type == long.class || type == Long.class) {
-                    dataType.defaultValue(0L);
+                    dataType = dataType.defaultValue(0L);
                 } else if (type == float.class || type == Float.class) {
-                    dataType.defaultValue(0.0f);
+                    dataType = dataType.defaultValue(0.0f);
                 } else if (type == double.class || type == Double.class) {
-                    dataType.defaultValue(0.0);
+                    dataType = dataType.defaultValue(0.0);
                 } else if (type == String.class) {
-                    dataType.defaultValue("");
+                    dataType = dataType.defaultValue("");
                 } else if (type == byte[].class) {
-                    dataType.defaultValue(new byte[0]);
+                    dataType = dataType.defaultValue(new byte[0]);
                 } else if (type == Date.class) {
-                    dataType.defaultValue(0L);
+                    dataType = dataType.defaultValue(0L);
                 } else if (type.isEnum()) {
-                    dataType.defaultValue("");
+                    dataType = dataType.defaultValue("");
                 }
             }
 
