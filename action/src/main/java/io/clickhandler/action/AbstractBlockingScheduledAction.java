@@ -3,9 +3,9 @@ package io.clickhandler.action;
 /**
  *
  */
-public abstract class AbstractBlockingScheduledAction extends AbstractBlockingAction<Void, Void> {
+public abstract class AbstractBlockingScheduledAction extends AbstractBlockingAction<Object, Object> {
     @Override
-    public Void handle(Void request) {
+    public Object handle(Object request) {
         run();
         return null;
     }

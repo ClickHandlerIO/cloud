@@ -1,9 +1,9 @@
 package io.clickhandler.action;
 
-import io.clickhandler.common.Func;
 import rx.Observable;
 
 import javax.inject.Inject;
+import java.util.function.Consumer;
 
 /**
  * ActionProvider for Remote Actions.
@@ -43,7 +43,7 @@ public class RemoteActionProvider<A extends Action<IN, OUT>, IN, OUT> extends Ac
      * @param callback
      * @return
      */
-    public Observable<OUT> observe(final Object context, final Func.Run1<IN> callback) {
+    public Observable<OUT> observe(final Object context, final Consumer<IN> callback) {
         return super.observe(context, callback);
     }
 
@@ -51,7 +51,7 @@ public class RemoteActionProvider<A extends Action<IN, OUT>, IN, OUT> extends Ac
      * @param callback
      * @return
      */
-    public Observable<OUT> observe(final Func.Run1<IN> callback) {
+    public Observable<OUT> observe(final Consumer<IN> callback) {
         return super.observe(callback);
     }
 

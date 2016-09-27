@@ -1,11 +1,11 @@
 package io.clickhandler.action;
 
 import com.google.common.base.Preconditions;
-import io.clickhandler.common.Func;
 import javaslang.control.Try;
 import rx.Observable;
 
 import javax.inject.Inject;
+import java.util.function.Consumer;
 
 /**
  *
@@ -58,7 +58,7 @@ public class WorkerActionProvider<A extends Action<IN, Boolean>, IN> extends Act
      * @param request
      * @param callback
      */
-    public void send(IN request, Func.Run1<Boolean> callback) {
+    public void send(IN request, Consumer<Boolean> callback) {
         send(request, 0, callback);
     }
 
@@ -67,10 +67,10 @@ public class WorkerActionProvider<A extends Action<IN, Boolean>, IN> extends Act
      * @param delaySeconds
      * @param callback
      */
-    public void send(IN request, int delaySeconds, Func.Run1<Boolean> callback) {
+    public void send(IN request, int delaySeconds, Consumer<Boolean> callback) {
         send(request, delaySeconds).subscribe(
-            r -> Try.run(() -> callback.run(r)),
-            e -> Try.run(() -> callback.run(false))
+            r -> Try.run(() -> callback.accept(r)),
+            e -> Try.run(() -> callback.accept(false))
         );
     }
 

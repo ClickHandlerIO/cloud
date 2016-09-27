@@ -28,7 +28,9 @@ import java.lang.reflect.Method;
 import java.util.*;
 
 /**
+ * Manages the lifecycle of all SQS Producers and Consumers.
  *
+ * @author Clay Molocznik
  */
 @Singleton
 public class SQSService extends AbstractIdleService implements WorkerService {

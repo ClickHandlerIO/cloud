@@ -22,6 +22,7 @@ public class SqlConfig {
     private int defaultQueryTimeoutInSeconds = 4;
     private String storageEngine = "InnoDB";
     private boolean memSQL;
+    private int leakDetectionThreshold = 0;
 
     private boolean dev;
     private boolean prod;
@@ -172,6 +173,14 @@ public class SqlConfig {
 
     public void setMemSQL(boolean memSQL) {
         this.memSQL = memSQL;
+    }
+
+    public int getLeakDetectionThreshold() {
+        return leakDetectionThreshold;
+    }
+
+    public void setLeakDetectionThreshold(int leakDetectionThreshold) {
+        this.leakDetectionThreshold = leakDetectionThreshold;
     }
 
     public boolean isDev() {

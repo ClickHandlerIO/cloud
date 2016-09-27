@@ -21,6 +21,8 @@ import java.util.stream.Collectors;
 
 /**
  * AmazonSQS Worker Request producer.
+ *
+ * @author Clay Molocznik
  */
 public class SQSProducer extends AbstractIdleService implements WorkerProducer {
     private static final Logger LOG = LoggerFactory.getLogger(SQSProducer.class);

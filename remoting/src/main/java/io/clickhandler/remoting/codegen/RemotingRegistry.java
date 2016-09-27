@@ -5,6 +5,7 @@ import com.google.common.base.Strings;
 import com.google.common.reflect.TypeToken;
 import io.clickhandler.action.Action;
 import io.clickhandler.action.RemoteActionProvider;
+import io.clickhandler.remoting.RemotingType;
 import io.clickhandler.remoting.Push;
 import javaslang.control.Try;
 import org.reflections.Reflections;
@@ -30,7 +31,7 @@ public class RemotingRegistry {
     private final Namespace root = new Namespace().name("").canonicalName("");
     private final TreeMap<String, Namespace> namespaceMap = new TreeMap<>();
     private final Set<ComplexType> pushTypes = new HashSet<>();
-    private String[] pushPackages = new String[]{"model", "io.clickhandler"};
+    private String[] searchPackages = new String[]{"model", "io.clickhandler"};
 
     /**
      * @param providerMap
@@ -83,12 +84,12 @@ public class RemotingRegistry {
         return namespaceMap;
     }
 
-    public String[] getPushPackages() {
-        return pushPackages;
+    public String[] getSearchPackages() {
+        return searchPackages;
     }
 
-    public void setPushPackages(String[] pushPackages) {
-        this.pushPackages = pushPackages;
+    public void setSearchPackages(String[] searchPackages) {
+        this.searchPackages = searchPackages;
     }
 
     public Set<ComplexType> getPushTypes() {
@@ -104,9 +105,13 @@ public class RemotingRegistry {
      */
     public void construct() {
         // Sniff out Pushes.
-        if (pushPackages != null) {
-            for (String pushPackage : pushPackages) {
-                loadPush(pushPackage);
+        if (searchPackages != null) {
+            for (String pkg : searchPackages) {
+                loadPush(pkg);
+            }
+
+            for (String pkg : searchPackages) {
+                loadExtraTypes(pkg);
             }
         }
 
@@ -176,8 +181,26 @@ public class RemotingRegistry {
             final StandardType type = buildType(c);
             if (type == null) return;
 
-            if (type instanceof ComplexType)
+            if (type instanceof ComplexType) {
                 pushTypes.add((ComplexType) type);
+                types.put(type.javaType(), type);
+            }
+        });
+    }
+
+    private void loadExtraTypes(String packageName) {
+        final Reflections reflections = new Reflections(packageName);
+        final Set<Class<?>> classes = reflections.getTypesAnnotatedWith(RemotingType.class);
+        if (classes == null || classes.isEmpty())
+            return;
+
+        classes.forEach(c -> {
+            final StandardType type = buildType(c);
+            if (type == null) return;
+
+            if (type instanceof ComplexType) {
+                types.put(type.javaType(), type);
+            }
         });
     }
 

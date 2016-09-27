@@ -51,8 +51,8 @@ http://www.w3.org/2001/XMLSchema-instance ">
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <java.version>1.8</java.version>
-        <dagger.version>2.6</dagger.version>
-        <maven-compiler-plugin.version>3.3</maven-compiler-plugin.version>
+        <dagger.version>2.7</dagger.version>
+        <maven-compiler-plugin.version>3.5.1</maven-compiler-plugin.version>
         <maven-source-plugin.version>3.0.0</maven-source-plugin.version>
         <maven-dependency-plugin.version>2.10</maven-dependency-plugin.version>
         <maven-resources-plugin.version>2.5</maven-resources-plugin.version>
@@ -61,27 +61,26 @@ http://www.w3.org/2001/XMLSchema-instance ">
 
         <auto-service.version>1.0-rc2</auto-service.version>
         <hazelcast.version>3.7.1</hazelcast.version>
-        <aws.version>1.11.22</aws.version>
+        <aws.version>1.11.37</aws.version>
         <cglib-nodep.version>3.2.1</cglib-nodep.version>
         <dropwizard-metrics.version>3.1.2</dropwizard-metrics.version>
         <guava.version>19.0</guava.version>
-        <hikaricp.version>2.4.7</hikaricp.version>
-        <hystrix.version>1.5.3</hystrix.version>
-        <jackson.version>2.8.1</jackson.version>
+        <hikaricp.version>2.5.1</hikaricp.version>
+        <hystrix.version>1.5.5</hystrix.version>
+        <jackson.version>2.8.3</jackson.version>
         <jackson-msgpack.version>0.8.9</jackson-msgpack.version>
         <javax-mail.version>1.5.5</javax-mail.version>
         <javapoet.version>1.7.0</javapoet.version>
-        <javaslang.version>2.0.2</javaslang.version>
+        <javaslang.version>2.0.3</javaslang.version>
         <jooq.version>3.8.4</jooq.version>
         <junit.version>4.12</junit.version>
-        <msgpack.version>0.8.9</msgpack.version>
+        <msgpack.version>0.8.10</msgpack.version>
         <mysql.version>5.1.39</mysql.version>
         <nuodb.version>2.5.4</nuodb.version>
-        <!--<netty.version>4.1.1.Final</netty.version>-->
         <reflections.version>0.9.10</reflections.version>
-        <slf4j.version>1.7.18</slf4j.version>
-        <vertx.version>3.3.2</vertx.version>
-        <rxjava.version>1.1.6</rxjava.version>
+        <slf4j.version>1.7.21</slf4j.version>
+        <vertx.version>3.3.3</vertx.version>
+        <rxjava.version>1.2.0</rxjava.version>
         <javax-validation-api.version>1.1.0.Final</javax-validation-api.version>
         <selenium.version>2.52.0</selenium.version>
     </properties>
@@ -183,6 +182,12 @@ http://www.w3.org/2001/XMLSchema-instance ">
                 <groupId>io.clickhandler</groupId>
                 <artifactId>cloud-remoting</artifactId>
                 <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.clickhandler</groupId>
+                <artifactId>clickhandler-web</artifactId>
+                <version>0.3.0-SNAPSHOT</version>
             </dependency>
 
             <dependency>

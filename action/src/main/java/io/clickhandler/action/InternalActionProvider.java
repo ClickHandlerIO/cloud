@@ -1,9 +1,9 @@
 package io.clickhandler.action;
 
-import io.clickhandler.common.Func;
 import rx.Observable;
 
 import javax.inject.Inject;
+import java.util.function.Consumer;
 
 /**
  *
@@ -27,11 +27,11 @@ public class InternalActionProvider<A extends Action<IN, OUT>, IN, OUT> extends 
         super.init();
     }
 
-    public Observable<OUT> observe(final Object context, final Func.Run1<IN> callback) {
+    public Observable<OUT> observe(final Object context, final Consumer<IN> callback) {
         return super.observe(context, callback);
     }
 
-    public Observable<OUT> observe(final Func.Run1<IN> callback) {
+    public Observable<OUT> observe(final Consumer<IN> callback) {
         return super.observe(callback);
     }
 

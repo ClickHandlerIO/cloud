@@ -24,6 +24,7 @@ import java.util.concurrent.TimeUnit;
  */
 @Singleton
 public class ScheduledActionManager extends AbstractIdleService {
+    private static final Object EMPTY = new Object();
     private static final Logger LOG = LoggerFactory.getLogger(ScheduledActionManager.class);
     private final List<ClusterSingleton> clusterSingletons = new ArrayList<>();
     private final List<NodeSingleton> nodeSingletons = new ArrayList<>();
@@ -66,11 +67,11 @@ public class ScheduledActionManager extends AbstractIdleService {
      *
      */
     private class ClusterSingleton extends AbstractExecutionThreadService {
-        private final ScheduledActionProvider provider;
+        private final ScheduledActionProvider<?> provider;
         private final int intervalSeconds;
         private Thread thread;
 
-        public ClusterSingleton(ScheduledActionProvider provider) {
+        public ClusterSingleton(ScheduledActionProvider<?> provider) {
             this.provider = provider;
             this.intervalSeconds = provider.getScheduledAction().intervalSeconds();
 
@@ -127,7 +128,7 @@ public class ScheduledActionManager extends AbstractIdleService {
 
         private void doRun() throws InterruptedException {
             final long start = System.currentTimeMillis();
-            provider.observe(null).toBlocking().first();
+            provider.observe(EMPTY).toBlocking().first();
 
             final long elapsed = System.currentTimeMillis() - start;
             final long sleepFor = TimeUnit.SECONDS.toMillis(intervalSeconds) - elapsed;
@@ -146,9 +147,9 @@ public class ScheduledActionManager extends AbstractIdleService {
      *
      */
     private class NodeSingleton extends AbstractScheduledService {
-        private final ScheduledActionProvider provider;
+        private final ScheduledActionProvider<?> provider;
 
-        public NodeSingleton(ScheduledActionProvider provider) {
+        public NodeSingleton(ScheduledActionProvider<?> provider) {
             this.provider = provider;
         }
 
@@ -170,7 +171,7 @@ public class ScheduledActionManager extends AbstractIdleService {
         }
 
         protected void run() throws InterruptedException {
-            provider.observe(null).toBlocking().first();
+            provider.observe(EMPTY).toBlocking().first();
         }
 
         @Override

@@ -67,6 +67,12 @@ public class Main {
         }
 
         @Provides
+        @Nullable
+        Object object() {
+            return new Object();
+        }
+
+        @Provides
         @Singleton
         Vertx vertx() {
             return vertx;

@@ -1,7 +1,6 @@
 package io.clickhandler.action;
 
 import com.netflix.hystrix.*;
-import io.clickhandler.common.Func;
 import io.vertx.core.Context;
 import io.vertx.rxjava.core.Vertx;
 import javaslang.control.Try;
@@ -10,6 +9,7 @@ import rx.Observable;
 import javax.annotation.Nullable;
 import javax.inject.Inject;
 import javax.inject.Provider;
+import java.util.function.Consumer;
 
 /**
  * Builds and invokes a single type of Action.
@@ -287,10 +287,10 @@ public class ActionProvider<A, IN, OUT> {
      * @param callback
      * @return
      */
-    protected Observable<OUT> observe(final Object context, final Func.Run1<IN> callback) {
+    protected Observable<OUT> observe(final Object context, final Consumer<IN> callback) {
         final IN in = inProvider.get();
         if (callback != null) {
-            callback.run(in);
+            callback.accept(in);
         }
         return observe(context, in);
     }
@@ -299,10 +299,10 @@ public class ActionProvider<A, IN, OUT> {
      * @param callback
      * @return
      */
-    protected Observable<OUT> observe(final Func.Run1<IN> callback) {
+    protected Observable<OUT> observe(final Consumer<IN> callback) {
         final IN in = inProvider.get();
         if (callback != null) {
-            callback.run(in);
+            callback.accept(in);
         }
         return observe(in);
     }

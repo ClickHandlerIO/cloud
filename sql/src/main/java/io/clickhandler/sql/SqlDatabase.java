@@ -229,6 +229,11 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             hikariReadConfig.setAutoCommit(true);
             hikariReadConfig.setRegisterMbeans(true);
 
+            if (config.getLeakDetectionThreshold() > 0) {
+                hikariConfig.setLeakDetectionThreshold(config.getLeakDetectionThreshold());
+                hikariReadConfig.setLeakDetectionThreshold(config.getLeakDetectionThreshold());
+            }
+
             // Set the default maximum pool size.
             if (config.isDev()) {
                 hikariConfig.setMaximumPoolSize(Runtime.getRuntime().availableProcessors());
@@ -308,29 +313,39 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 hikariConfig.setTransactionIsolation("TRANSACTION_SERIALIZABLE");
                 hikariReadConfig.setTransactionIsolation("TRANSACTION_SERIALIZABLE");
 
-                {
-                    final Properties props = new Properties();
-                    props.setProperty("url", jdbcUrl);
-                    props.setProperty("user", jdbcUser);
-                    props.setProperty("password", jdbcPassword);
-                    props.setProperty("defaultSchema", config.getSchema());
-                    props.setProperty("isolation", "consistent_read");
-//                    props.setProperty("isolation", "write_committed");
-                    final com.nuodb.jdbc.DataSource dataSource = new com.nuodb.jdbc.DataSource(props);
-                    hikariConfig.setDataSource(dataSource);
-                }
+                hikariConfig.setDriverClassName("com.nuodb.jdbc.Driver");
+                hikariConfig.setUsername(config.getUser());
+                hikariConfig.setPassword(config.getPassword());
+                hikariConfig.setJdbcUrl(config.getUrl());
 
-                if (!Strings.nullToEmpty(config.getReadUrl()).trim().isEmpty()) {
-                    final Properties props = new Properties();
-                    props.setProperty("url", jdbcReadUrl);
-                    props.setProperty("user", jdbcReadUser);
-                    props.setProperty("password", jdbcReadPassword);
-                    props.setProperty("defaultSchema", config.getSchema());
-                    props.setProperty("isolation", "consistent_read");
+                hikariReadConfig.setDriverClassName("com.nuodb.jdbc.Driver");
+                hikariReadConfig.setUsername(config.getReadUser());
+                hikariReadConfig.setPassword(config.getReadPassword());
+                hikariReadConfig.setJdbcUrl(config.getReadUrl());
+
+//                {
+//                    final Properties props = new Properties();
+//                    props.setProperty("url", jdbcUrl);
+//                    props.setProperty("user", jdbcUser);
+//                    props.setProperty("password", jdbcPassword);
+//                    props.setProperty("defaultSchema", config.getSchema());
 //                    props.setProperty("isolation", "consistent_read");
-                    final com.nuodb.jdbc.DataSource dataSource = new com.nuodb.jdbc.DataSource(props);
-                    hikariReadConfig.setDataSource(dataSource);
-                }
+////                    props.setProperty("isolation", "write_committed");
+//                    final com.nuodb.jdbc.DataSource dataSource = new com.nuodb.jdbc.DataSource(props);
+//                    hikariConfig.setDataSource(dataSource);
+//                }
+//
+//                if (!Strings.nullToEmpty(config.getReadUrl()).trim().isEmpty()) {
+//                    final Properties props = new Properties();
+//                    props.setProperty("url", jdbcReadUrl);
+//                    props.setProperty("user", jdbcReadUser);
+//                    props.setProperty("password", jdbcReadPassword);
+//                    props.setProperty("defaultSchema", config.getSchema());
+//                    props.setProperty("isolation", "consistent_read");
+////                    props.setProperty("isolation", "consistent_read");
+//                    final com.nuodb.jdbc.DataSource dataSource = new com.nuodb.jdbc.DataSource(props);
+//                    hikariReadConfig.setDataSource(dataSource);
+//                }
             } else {
                 configuration.set(dialect);
 

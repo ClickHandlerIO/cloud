@@ -1,11 +1,12 @@
 package io.clickhandler.action;
 
 import com.netflix.hystrix.HystrixObservableCommand;
-import io.clickhandler.common.Func;
 import io.vertx.core.Context;
 import io.vertx.core.Vertx;
 import rx.Observable;
 import rx.Subscriber;
+
+import java.util.function.Consumer;
 
 /**
  * @author Clay Molocznik
@@ -115,16 +116,16 @@ public abstract class AbstractObservableAction<IN, OUT>
     }
 
     protected <A extends Action<I, O>, I, O> Observable<O> pipe(ActionProvider<A, I, O> provider,
-                                                                Func.Run1<I> inCallback) {
+                                                                Consumer<I> inCallback) {
         final I in = provider.getInProvider().get();
-        if (inCallback != null) inCallback.run(in);
+        if (inCallback != null) inCallback.accept(in);
         return observe(provider, in);
     }
 
     protected <A extends Action<I, O>, I, O> Observable<O> observeWithSupplier(ActionProvider<A, I, O> provider,
-                                                                               Func.Run1<I> inCallback) {
+                                                                               Consumer<I> inCallback) {
         final I in = provider.getInProvider().get();
-        if (inCallback != null) inCallback.run(in);
+        if (inCallback != null) inCallback.accept(in);
         return observe(provider, in);
     }
 

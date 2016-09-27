@@ -6,6 +6,11 @@ import io.clickhandler.common.WireFormat;
  *
  */
 public class WsEncoding {
+    /**
+     *
+     * @param message
+     * @return
+     */
     public static WsMessage decode(String message) {
         if (message == null || message.isEmpty())
             return null;
@@ -41,6 +46,11 @@ public class WsEncoding {
         return new WsMessage(WireFormat.parse(WsHeader.class, headerJson), body);
     }
 
+    /**
+     *
+     * @param message
+     * @return
+     */
     public static String encode(WsMessage message) {
         if (message == null || message.header == null)
             return "";

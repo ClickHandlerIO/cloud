@@ -5,7 +5,7 @@ import javax.inject.Inject;
 /**
  *
  */
-public class ScheduledActionProvider<A extends Action<Void, Void>> extends ActionProvider<A, Void, Void> {
+public class ScheduledActionProvider<A extends Action<Object, Object>> extends ActionProvider<A, Object, Object> {
     private ScheduledAction scheduledAction;
 
     @Inject

@@ -2,6 +2,7 @@ package io.clickhandler.action;
 
 import com.netflix.hystrix.HystrixObservable;
 import rx.Observable;
+import rx.Single;
 
 /**
  * @author Clay Molocznik
@@ -35,7 +36,6 @@ public abstract class AbstractAction<IN, OUT> implements Action<IN, OUT> {
     }
 
     /**
-     *
      * @return
      */
     public IN request() {
@@ -50,10 +50,26 @@ public abstract class AbstractAction<IN, OUT> implements Action<IN, OUT> {
     }
 
     /**
+     *
+     * @return
+     */
+    public Single<OUT> single() {
+        return getCommand().observe().toSingle();
+    }
+
+    /**
      * @return
      */
     public Observable<OUT> toObservable() {
         return getCommand().toObservable();
+    }
+
+    /**
+     *
+     * @return
+     */
+    public Single<OUT> toSingle() {
+        return getCommand().toObservable().toSingle();
     }
 
     /**
