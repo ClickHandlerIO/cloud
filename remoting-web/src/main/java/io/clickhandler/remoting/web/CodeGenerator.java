@@ -1,11 +1,10 @@
 package io.clickhandler.remoting.web;
 
 import com.google.common.base.Charsets;
-import com.google.web.bindery.event.shared.HandlerRegistration;
 import com.squareup.javapoet.*;
 import com.squareup.javapoet.FieldSpec;
 import common.client.Bus;
-import common.client.EventCallback;
+import common.client.JSON;
 import common.client.Try;
 import io.clickhandler.action.RemoteAction;
 import io.clickhandler.remoting.Push;
@@ -15,7 +14,6 @@ import jsinterop.annotations.JsPackage;
 import jsinterop.annotations.JsProperty;
 import jsinterop.annotations.JsType;
 import moment.client.Moment;
-import remoting.client.PushSubscription;
 import remoting.client.ResponseEvent;
 import remoting.client.WsAction;
 import remoting.client.WsDispatcher;
@@ -242,108 +240,93 @@ public class CodeGenerator {
             ComplexType complexType = (ComplexType) materializedType;
             final ClassName name = ClassName.bestGuess(materializedType.canonicalName());
 
-            type = TypeSpec.classBuilder(materializedType.name());
-            type.addModifiers(Modifier.PUBLIC);
-            if (parent != null) {
-                type.addModifiers(Modifier.STATIC);
-            }
-
-            type.addAnnotation(AnnotationSpec
-                .builder(JsType.class)
-                .addMember("isNative", "true")
-                .addMember("namespace", "\"" + JsPackage.GLOBAL + "\"")
-                .addMember("name", "\"Object\"")
-                .build());
-
-            final StandardType[] ifaces = complexType.interfaces();
-            if (ifaces != null && ifaces.length > 0) {
-                for (StandardType iface : ifaces) {
-                    type.addSuperinterface(ClassName.bestGuess(iface.canonicalName()));
-//                    type.superclass(ClassName.bestGuess(iface.canonicalName()));
-                }
-            }
-            if (complexType.superType() != null && !Object.class.equals(complexType.superType().javaType())) {
-//                type.addSuperinterface(ClassName.bestGuess(complexType.superType().canonicalName()));
-                type.superclass(ClassName.bestGuess(complexType.superType().canonicalName()));
-            }
-
-            // Build Factory.
-            if (!materializedType.isAbstract() && !materializedType.isInterface()) {
-                TypeSpec.Builder eventBuilder = TypeSpec.classBuilder("Event").addModifiers(Modifier.PUBLIC, Modifier.STATIC);
-
-                eventBuilder.addField(FieldSpec.builder(
-                    ParameterizedTypeName.get(
-                        ClassName.get(Bus.TypeName.class), name
-                    ),
-                    "NAME",
-                    Modifier.PUBLIC, Modifier.STATIC, Modifier.FINAL).initializer(
-                    CodeBlock.builder().add("new $T<>()", Bus.TypeName.class).build()
-                ).build());
-
-                type.addType(eventBuilder.build());
-            }
-
             if (ast.isPush(complexType)) {
                 final Push push = (Push) complexType.javaType().getAnnotation(Push.class);
                 final String address = push != null && !push.value().isEmpty() ? push.value() : complexType.javaType().getSimpleName();
-                final ClassName subscribeName = ClassName.bestGuess(materializedType.canonicalName() + ".Subscribe");
 
-                TypeSpec.Builder subscription = TypeSpec.classBuilder("Subscribe");
-                subscription.addModifiers(Modifier.PUBLIC, Modifier.STATIC);
+                type = TypeSpec.classBuilder(complexType.name());
+                type.addModifiers(Modifier.PUBLIC);
 
-                initMethod.addStatement("$T.DISPATCHER = dispatcher", subscribeName);
+                final String canonicalName = complexType.canonicalName();
+                final ComplexType subType = complexType.convertToHolder("Message");
 
-                subscription.addField(FieldSpec.builder(
-                    String.class,
-                    "VALUE",
-                    Modifier.PUBLIC, Modifier.STATIC, Modifier.FINAL).initializer(
-                    CodeBlock.builder().add("$S", address).build()
-                ).build());
+                type.addField(
+                    FieldSpec.builder(
+                        ClassName.bestGuess(subType.canonicalName()),
+                        "message",
+                        Modifier.PUBLIC, Modifier.FINAL
+                    ).build()
+                );
 
-                subscription.addField(FieldSpec.builder(
-                    WsDispatcher.class,
-                    "DISPATCHER",
-                    Modifier.PUBLIC, Modifier.STATIC).build());
+                type.addMethod(
+                    MethodSpec.constructorBuilder()
+                        .addModifiers(Modifier.PUBLIC)
+                        .addParameter(
+                            ParameterSpec.builder(
+                                ClassName.bestGuess(subType.canonicalName()),
+                                "message",
+                                Modifier.FINAL
+                            ).build()
+                        ).addStatement("this.message = message")
+                        .build()
+                );
 
-                subscription.addMethod(MethodSpec.methodBuilder("on")
-                    .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
-                    .returns(HandlerRegistration.class)
-                    .addParameter(ParameterSpec.builder(ParameterizedTypeName.get(ClassName.get(EventCallback.class), name), "handler").build())
-                    .addStatement("return on(DISPATCHER, null, handler)")
+                initMethod.addStatement(
+                    "dispatcher.registerPush($S, $T.class, json -> new $T($T.parse(json)))",
+                    address,
+                    ClassName.bestGuess(canonicalName),
+                    ClassName.bestGuess(canonicalName),
+                    JSON.class
+                );
+
+                generate(type, subType);
+            } else {
+                type = TypeSpec.classBuilder(materializedType.name());
+                type.addModifiers(Modifier.PUBLIC);
+                if (parent != null) {
+                    type.addModifiers(Modifier.STATIC);
+                }
+
+                type.addAnnotation(AnnotationSpec
+                    .builder(JsType.class)
+                    .addMember("isNative", "true")
+                    .addMember("namespace", "\"" + JsPackage.GLOBAL + "\"")
+                    .addMember("name", "\"Object\"")
                     .build());
 
-                subscription.addMethod(MethodSpec.methodBuilder("on")
-                    .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
-                    .returns(HandlerRegistration.class)
-                    .addParameter(WsDispatcher.class, "dispatcher")
-                    .addParameter(ParameterSpec.builder(ParameterizedTypeName.get(ClassName.get(EventCallback.class), name), "handler").build())
-                    .addStatement("return on(dispatcher, null, handler)")
-                    .build());
+                final StandardType[] ifaces = complexType.interfaces();
+                if (ifaces != null && ifaces.length > 0) {
+                    for (StandardType iface : ifaces) {
+                        type.addSuperinterface(ClassName.bestGuess(iface.canonicalName()));
+//                    type.superclass(ClassName.bestGuess(iface.canonicalName()));
+                    }
+                }
+                if (complexType.superType() != null && !Object.class.equals(complexType.superType().javaType())) {
+//                type.addSuperinterface(ClassName.bestGuess(complexType.superType().canonicalName()));
+                    type.superclass(ClassName.bestGuess(complexType.superType().canonicalName()));
+                }
 
-                subscription.addMethod(MethodSpec.methodBuilder("on")
-                    .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
-                    .returns(HandlerRegistration.class)
-                    .addParameter(String.class, "id")
-                    .addParameter(ParameterSpec.builder(ParameterizedTypeName.get(ClassName.get(EventCallback.class), name), "handler").build())
-                    .addStatement("return on(DISPATCHER, id, handler)")
-                    .build());
+                // Build Factory.
+                if (!materializedType.isAbstract() && !materializedType.isInterface()) {
+                    TypeSpec.Builder eventBuilder = TypeSpec.classBuilder("Event").addModifiers(Modifier.PUBLIC, Modifier.STATIC);
 
-                subscription.addMethod(MethodSpec.methodBuilder("on")
-                    .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
-                    .returns(HandlerRegistration.class)
-                    .addParameter(WsDispatcher.class, "dispatcher")
-                    .addParameter(String.class, "id")
-                    .addParameter(ParameterSpec.builder(ParameterizedTypeName.get(ClassName.get(EventCallback.class), name), "handler").build())
-                    .addStatement("return dispatcher.subscribe(new $T<$T>(VALUE, Event.NAME, handler, id))", PushSubscription.class, name)
-                    .build());
+                    eventBuilder.addField(FieldSpec.builder(
+                        ParameterizedTypeName.get(
+                            ClassName.get(Bus.TypeName.class), name
+                        ),
+                        "NAME",
+                        Modifier.PUBLIC, Modifier.STATIC, Modifier.FINAL).initializer(
+                        CodeBlock.builder().add("new $T<>()", Bus.TypeName.class).build()
+                    ).build());
 
-                type.addType(subscription.build());
+                    type.addType(eventBuilder.build());
+                }
+
+                generateComplexType(type, (ComplexType) materializedType);
+
+                final TypeSpec.Builder t = type;
+                materializedType.children().forEach(child -> generate(t, child));
             }
-
-            generateComplexType(type, (ComplexType) materializedType);
-
-            final TypeSpec.Builder t = type;
-            materializedType.children().forEach(child -> generate(t, child));
         } else if (materializedType instanceof EnumType) {
             final EnumType enumType = (EnumType) materializedType;
 
@@ -366,7 +349,10 @@ public class CodeGenerator {
 
         if (parent == null) {
             try {
-                JavaFile.builder(materializedType.path(), type.build()).build().writeTo(outputDir);
+                JavaFile.builder(
+                    materializedType.path(),
+                    type.build()
+                ).build().writeTo(outputDir);
             } catch (IOException e) {
                 e.printStackTrace();
             }

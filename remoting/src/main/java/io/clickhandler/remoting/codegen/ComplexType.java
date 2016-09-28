@@ -13,6 +13,7 @@ public class ComplexType extends AbstractType implements MaterializedType {
     private StandardType superType;
     private StandardType[] interfaces;
     private String canonicalName;
+    private String name;
     private boolean processed;
 
     public ComplexType(Class typeClass) {
@@ -75,7 +76,7 @@ public class ComplexType extends AbstractType implements MaterializedType {
 
     @Override
     public String name() {
-        return javaType().getSimpleName();
+        return name != null ? name : javaType().getSimpleName();
     }
 
     public ComplexType canonicalName(final String canonicalName) {
@@ -100,5 +101,20 @@ public class ComplexType extends AbstractType implements MaterializedType {
 
     public List<FieldSpec> fields() {
         return fields;
+    }
+
+    public ComplexType convertToHolder(String name) {
+        final ComplexType complexType = new ComplexType(javaType());
+        complexType.canonicalName(canonicalName() + "." + name);
+        complexType.fields.addAll(fields);
+        fields.clear();
+        complexType.children.addAll(children);
+        children.clear();
+        complexType.namespace = namespace;
+        complexType.superType = superType;
+        complexType.interfaces = interfaces;
+        complexType.name = name;
+        superType = null;
+        return complexType;
     }
 }
