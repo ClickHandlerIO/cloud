@@ -5,6 +5,7 @@ import com.squareup.javapoet.*;
 import com.squareup.javapoet.FieldSpec;
 import common.client.Bus;
 import common.client.JSON;
+import common.client.MessageProvider;
 import common.client.Try;
 import io.clickhandler.action.RemoteAction;
 import io.clickhandler.remoting.Push;
@@ -250,6 +251,11 @@ public class CodeGenerator {
                 final String canonicalName = complexType.canonicalName();
                 final ComplexType subType = complexType.convertToHolder("Message");
 
+                type.addSuperinterface(ParameterizedTypeName.get(
+                    ClassName.get(MessageProvider.class),
+                    ClassName.bestGuess(subType.canonicalName())
+                ));
+
                 type.addField(
                     FieldSpec.builder(
                         ClassName.bestGuess(subType.canonicalName()),
@@ -268,6 +274,14 @@ public class CodeGenerator {
                                 Modifier.FINAL
                             ).build()
                         ).addStatement("this.message = message")
+                        .build()
+                );
+
+                type.addMethod(
+                    MethodSpec.methodBuilder("get")
+                        .addModifiers(Modifier.PUBLIC)
+                        .returns(ClassName.bestGuess(subType.canonicalName()))
+                        .addStatement("return message")
                         .build()
                 );
 

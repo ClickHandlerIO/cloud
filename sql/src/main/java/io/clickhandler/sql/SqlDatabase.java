@@ -317,11 +317,13 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 hikariConfig.setUsername(config.getUser());
                 hikariConfig.setPassword(config.getPassword());
                 hikariConfig.setJdbcUrl(config.getUrl());
+                hikariConfig.addDataSourceProperty("schema", config.getSchema());
 
                 hikariReadConfig.setDriverClassName("com.nuodb.jdbc.Driver");
                 hikariReadConfig.setUsername(config.getReadUser());
                 hikariReadConfig.setPassword(config.getReadPassword());
                 hikariReadConfig.setJdbcUrl(config.getReadUrl());
+                hikariReadConfig.addDataSourceProperty("schema", config.getSchema());
 
 //                {
 //                    final Properties props = new Properties();
