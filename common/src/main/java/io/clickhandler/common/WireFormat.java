@@ -41,6 +41,14 @@ public class WireFormat {
         System.out.println(WireFormat.stringify(new MyMessage()));
     }
 
+    public static <T> T clone(T value) {
+        if (value == null) {
+            return null;
+        }
+
+        return parse((Class<T>)value.getClass(), byteify(value));
+    }
+
     public static <T> T parse(Class<T> cls, String json) {
         if (json == null || json.isEmpty()) {
             return null;
