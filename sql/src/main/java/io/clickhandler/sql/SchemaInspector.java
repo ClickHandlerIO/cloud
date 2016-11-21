@@ -3,6 +3,8 @@ package io.clickhandler.sql;
 import com.google.common.base.Preconditions;
 import org.jooq.DataType;
 
+import java.io.File;
+import java.io.FileWriter;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
@@ -18,28 +20,58 @@ public class SchemaInspector {
     private final SqlPlatform platform;
     private final Map<Class, TableMapping> tableMappings;
     private final List<Change> changes = new ArrayList<>();
+    private final List<Change> advisors = new ArrayList<>();
     private final boolean indexes;
+    private final boolean dropColumns;
+    private final String advisorFile;
 
     private SchemaInspector(final SqlPlatform platform,
                             final Map<Class, TableMapping> tableMappings,
-                            final boolean indexes) {
+                            final boolean indexes,
+                            final boolean dropColumns,
+                            final String advisorFile) {
         Preconditions.checkNotNull(platform, "dbPlatform must be set.");
         Preconditions.checkNotNull(tableMappings, "tableMappings must be set.");
         this.platform = platform;
         this.tableMappings = tableMappings;
         this.indexes = indexes;
+        this.dropColumns = dropColumns;
+        this.advisorFile = advisorFile;
     }
 
     public static List<Change> inspect(final SqlPlatform platform,
                                        final Map<Class, TableMapping> tableMappings,
-                                       final boolean indexes) throws SQLException {
-        return new SchemaInspector(platform, tableMappings, indexes).inspect();
+                                       final boolean indexes,
+                                        final boolean dropColumns,
+                                       final String advisorFile) throws SQLException {
+        return new SchemaInspector(platform, tableMappings, indexes, dropColumns, advisorFile).inspect();
     }
 
-    private List<Change> inspect() {
+    private List<Change> inspect() throws SQLException {
         for (TableMapping mapping : tableMappings.values()) {
             checkTable(mapping);
         }
+
+        if(advisors != null && !advisors.isEmpty()){
+            FileWriter f = null;
+            try{
+                f = new FileWriter(new File(advisorFile));
+                for(Change change : advisors){
+                    f.write(change.ddl(platform));
+                    f.write("\n");
+                }
+            } catch (Exception e){
+               throw new SQLException("Could not write advisor file!");
+            } finally {
+                try{
+                    f.flush();
+                    f.close();
+                } catch (Exception ex){
+                    // Do nothing
+                }
+            }
+        }
+
         return changes;
     }
 
@@ -69,7 +101,11 @@ public class SchemaInspector {
                 TableMapping.Property property = mapping.getProperty(column.name);
 
                 if (property == null) {
-                    changes.add(new DropColumn(mapping, column));
+                    if(dropColumns) {
+                        changes.add(new DropColumn(mapping, column));
+                    } else {
+                        advisors.add(new DropColumn(mapping, column));
+                    }
                 }
             }
 

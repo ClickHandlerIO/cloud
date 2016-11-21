@@ -30,6 +30,8 @@ public class SqlConfig {
     private boolean evolutionEnabled = true;
     private boolean generateSchema;
     private boolean syncIndexes = false;
+    private boolean dropColumns = false;
+    private String advisorFile = "advisor.sql";
 
     public String getName() {
         return name;
@@ -229,5 +231,21 @@ public class SqlConfig {
 
     public void setSyncIndexes(boolean syncIndexes) {
         this.syncIndexes = syncIndexes;
+    }
+
+    public boolean isDropColumns() {
+        return dropColumns;
+    }
+
+    public void setDropColumns(boolean dropColumns) {
+        this.dropColumns = dropColumns;
+    }
+
+    public String getAdvisorFile() {
+        return advisorFile;
+    }
+
+    public void setAdvisorFile(String advisorFile) {
+        this.advisorFile = advisorFile;
     }
 }

@@ -687,7 +687,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         try (Connection connection = dataSource.getConnection()) {
             this.sqlSchema = new SqlSchema(connection, config.getCatalog(), config.getSchema(), config.isSyncIndexes());
             buildTableMappings();
-            return SchemaInspector.inspect(dbPlatform, tableMappingsByEntity, config.isSyncIndexes());
+            return SchemaInspector.inspect(dbPlatform, tableMappingsByEntity, config.isSyncIndexes(), config.isDropColumns(), config.getAdvisorFile());
         } catch (Exception e) {
             // Ignore.
             LOG.error("EvolutionChecker.inspect failed.", e);
