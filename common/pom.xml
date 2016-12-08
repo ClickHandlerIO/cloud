@@ -21,12 +21,6 @@
             <artifactId>dagger</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.google.dagger</groupId>
-            <artifactId>dagger-compiler</artifactId>
-            <scope>compile</scope>
-        </dependency>
-
-        <dependency>
             <groupId>io.javaslang</groupId>
             <artifactId>javaslang</artifactId>
         </dependency>
