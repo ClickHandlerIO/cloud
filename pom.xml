@@ -5,19 +5,19 @@
 http://www.w3.org/2001/XMLSchema-instance ">
 
     <modelVersion>4.0.0</modelVersion>
-    <groupId>io.clickhandler</groupId>
+    <groupId>io.moveplatform</groupId>
     <artifactId>cloud</artifactId>
-    <version>0.2.1-SNAPSHOT</version>
+    <version>0.4.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>Cloud</name>
-    <description>ClickHandler.io Cloud</description>
-    <url>http://www.clickhandler.io/</url>
+    <description>Move Cloud</description>
+    <url>http://www.moveplatform.io/</url>
     <inceptionYear>2016</inceptionYear>
 
     <organization>
-        <name>ClickHandlerIO LLC</name>
-        <url>http://www.clickhandler.io</url>
+        <name>Move Medical, Inc</name>
+        <url>http://www.moveplatform.io</url>
     </organization>
     <licenses>
         <license>
@@ -60,7 +60,7 @@ http://www.w3.org/2001/XMLSchema-instance ">
         <nexus-staging-maven-plugin.version>1.6.6</nexus-staging-maven-plugin.version>
 
         <auto-service.version>1.0-rc2</auto-service.version>
-        <hazelcast.version>3.7.3</hazelcast.version>
+        <hazelcast.version>3.8-EA</hazelcast.version>
         <aws.version>1.11.64</aws.version>
         <cglib-nodep.version>3.2.1</cglib-nodep.version>
         <dropwizard-metrics.version>3.1.2</dropwizard-metrics.version>
@@ -131,56 +131,26 @@ http://www.w3.org/2001/XMLSchema-instance ">
         <dependencies>
             <!-- Module Dependencies -->
             <dependency>
-                <groupId>io.clickhandler</groupId>
-                <artifactId>cloud-common</artifactId>
+                <groupId>io.moveplatform</groupId>
+                <artifactId>common</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <dependency>
-                <groupId>io.clickhandler</groupId>
-                <artifactId>cloud-sql</artifactId>
+                <groupId>io.moveplatform</groupId>
+                <artifactId>sql</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <dependency>
-                <groupId>io.clickhandler</groupId>
-                <artifactId>cloud-queue</artifactId>
+                <groupId>io.moveplatform</groupId>
+                <artifactId>action</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <dependency>
-                <groupId>io.clickhandler</groupId>
-                <artifactId>cloud-action</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>io.clickhandler</groupId>
-                <artifactId>cloud-files</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>io.clickhandler</groupId>
-                <artifactId>cloud-model</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>io.clickhandler</groupId>
-                <artifactId>cloud-schema</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>io.clickhandler</groupId>
-                <artifactId>cloud-email</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>io.clickhandler</groupId>
-                <artifactId>cloud-remoting</artifactId>
+                <groupId>io.moveplatform</groupId>
+                <artifactId>remoting</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
@@ -191,8 +161,8 @@ http://www.w3.org/2001/XMLSchema-instance ">
             </dependency>
 
             <dependency>
-                <groupId>io.clickhandler</groupId>
-                <artifactId>cloud-remoting-web</artifactId>
+                <groupId>io.moveplatform</groupId>
+                <artifactId>remoting-web</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

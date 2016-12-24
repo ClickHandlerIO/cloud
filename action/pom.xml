@@ -4,13 +4,13 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <parent>
         <artifactId>cloud</artifactId>
-        <groupId>io.clickhandler</groupId>
-        <version>0.2.1-SNAPSHOT</version>
+        <groupId>io.moveplatform</groupId>
+        <version>0.4.0-SNAPSHOT</version>
     </parent>
 
     <modelVersion>4.0.0</modelVersion>
-    <artifactId>cloud-action</artifactId>
-    <version>0.2.1-SNAPSHOT</version>
+    <artifactId>action</artifactId>
+    <version>0.4.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>Action</name>
@@ -27,8 +27,8 @@
             <artifactId>dagger</artifactId>
         </dependency>
         <dependency>
-            <groupId>io.clickhandler</groupId>
-            <artifactId>cloud-common</artifactId>
+            <groupId>io.moveplatform</groupId>
+            <artifactId>common</artifactId>
         </dependency>
         <dependency>
             <groupId>com.netflix.hystrix</groupId>
@@ -59,7 +59,7 @@
         <plugins>
             <plugin>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.1</version>
+                <version>3.5.1</version>
                 <dependencies>
                     <dependency>
                         <groupId>com.google.dagger</groupId>
