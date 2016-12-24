@@ -5,7 +5,7 @@
 http://www.w3.org/2001/XMLSchema-instance ">
 
     <modelVersion>4.0.0</modelVersion>
-    <groupId>io.moveplatform</groupId>
+    <groupId>io.clickhandler</groupId>
     <artifactId>cloud</artifactId>
     <version>0.4.0-SNAPSHOT</version>
     <packaging>pom</packaging>
@@ -131,25 +131,25 @@ http://www.w3.org/2001/XMLSchema-instance ">
         <dependencies>
             <!-- Module Dependencies -->
             <dependency>
-                <groupId>io.moveplatform</groupId>
+                <groupId>io.clickhandler</groupId>
                 <artifactId>common</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <dependency>
-                <groupId>io.moveplatform</groupId>
+                <groupId>io.clickhandler</groupId>
                 <artifactId>sql</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <dependency>
-                <groupId>io.moveplatform</groupId>
+                <groupId>io.clickhandler</groupId>
                 <artifactId>action</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <dependency>
-                <groupId>io.moveplatform</groupId>
+                <groupId>io.clickhandler</groupId>
                 <artifactId>remoting</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -161,7 +161,7 @@ http://www.w3.org/2001/XMLSchema-instance ">
             </dependency>
 
             <dependency>
-                <groupId>io.moveplatform</groupId>
+                <groupId>io.clickhandler</groupId>
                 <artifactId>remoting-web</artifactId>
                 <version>${project.version}</version>
             </dependency>
