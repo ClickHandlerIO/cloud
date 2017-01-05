@@ -31,7 +31,7 @@ public class RemotingRegistry {
     private final Namespace root = new Namespace().name("").canonicalName("");
     private final TreeMap<String, Namespace> namespaceMap = new TreeMap<>();
     private final Set<ComplexType> pushTypes = new HashSet<>();
-    private String[] searchPackages = new String[]{"model", "io.clickhandler"};
+    private String[] searchPackages = new String[]{"model", "move"};
 
     /**
      * @param providerMap

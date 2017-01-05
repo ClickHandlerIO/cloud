@@ -4,7 +4,6 @@ import org.jooq.Configuration;
 import org.jooq.DataType;
 import org.jooq.SQLDialect;
 import org.jooq.conf.ParamType;
-import org.jooq.impl.PersistDSL;
 import org.jooq.util.h2.H2DataType;
 
 /**
@@ -24,7 +23,7 @@ public class H2Platform extends SqlPlatform {
         final String name = index.name;
 
         if (index.unique) {
-            return PersistDSL.createUniqueIndex(getConfiguration(), name)
+            return create().createUniqueIndex(name)
                 .on(mapping.getTableName(), index.columnNames).getSQL(ParamType.INLINED);
         }
 
