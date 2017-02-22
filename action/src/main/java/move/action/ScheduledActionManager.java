@@ -117,8 +117,7 @@ public class ScheduledActionManager extends AbstractIdleService {
                             lock = hazelcastInstance.getLock(provider.getActionClass().getCanonicalName());
                             lock.lockInterruptibly();
                         } catch (Exception e1) {
-                            LOG.error("Failed to get cluster lock for Scheduled Action " + provider.getActionClass().getCanonicalName(), e1);
-                            lock.unlock();
+                            LOG.info("Failed to get cluster lock for Scheduled Action " + provider.getActionClass().getCanonicalName(), e1);
                         }
 
                         try {
@@ -127,12 +126,10 @@ public class ScheduledActionManager extends AbstractIdleService {
                                     doRun();
                                 } catch (Exception e1) {
                                     LOG.error("Error Running Hazelcast Scheduled Action " + provider.getActionClass().getCanonicalName(), e1);
-                                    return;
-                                } finally {
-                                    lock.unlock();
                                 }
                             }
                         } finally {
+                            assert lock != null;
                             lock.unlock();
                         }
                     }

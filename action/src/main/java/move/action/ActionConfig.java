@@ -39,7 +39,7 @@ public @interface ActionConfig {
     /**
      * @return
      */
-    int maxConcurrentRequests() default 250;
+    int maxConcurrentRequests() default 25;
 
     /**
      * @return
@@ -54,5 +54,5 @@ public @interface ActionConfig {
     /**
      * @return
      */
-    ExecutionIsolationStrategy isolationStrategy() default ExecutionIsolationStrategy.THREAD;
+    ExecutionIsolationStrategy isolationStrategy() default ExecutionIsolationStrategy.SEMAPHORE;
 }

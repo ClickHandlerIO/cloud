@@ -160,7 +160,7 @@ public class ActionProvider<A, IN, OUT> {
         // Default isolation strategy.
         final ExecutionIsolationStrategy isolationStrategy = actionConfig != null
             ? actionConfig.isolationStrategy()
-            : ExecutionIsolationStrategy.THREAD;
+            : ExecutionIsolationStrategy.BEST;
 
         if (ObservableAction.class.isAssignableFrom(actionClass)) {
             // Determine Hystrix isolation strategy.
@@ -168,12 +168,12 @@ public class ActionProvider<A, IN, OUT> {
             switch (isolationStrategy) {
                 // Default to THREAD
                 default:
-                case THREAD:
-                    hystrixIsolation = HystrixCommandProperties.ExecutionIsolationStrategy.THREAD;
-                    break;
                 case SEMAPHORE:
                 case BEST:
                     hystrixIsolation = HystrixCommandProperties.ExecutionIsolationStrategy.SEMAPHORE;
+                    break;
+                case THREAD:
+                    hystrixIsolation = HystrixCommandProperties.ExecutionIsolationStrategy.THREAD;
                     break;
             }
 
