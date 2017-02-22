@@ -7,9 +7,9 @@ import com.google.common.util.concurrent.AbstractIdleService;
 import com.google.common.util.concurrent.AbstractScheduledService;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.core.ILock;
-import move.cluster.HazelcastProvider;
 import io.vertx.rxjava.core.Vertx;
 import javaslang.control.Try;
+import move.cluster.HazelcastProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -101,27 +101,44 @@ public class ScheduledActionManager extends AbstractIdleService {
             while (isRunning() && !Thread.interrupted()) {
                 try {
                     if (hazelcastInstance == null) {
-                        while (isRunning()) {
-                            doRun();
-                        }
-                    } else {
-                        final ILock lock = hazelcastInstance.getLock(provider.getActionClass().getCanonicalName());
-                        lock.lockInterruptibly();
                         try {
-                            while (isRunning() && !Thread.interrupted()) {
+                            while (isRunning()) {
                                 doRun();
                             }
-                        } catch (InterruptedException e) {
+                        } catch (Exception e) {
+                            LOG.error("Error Running Standalone Scheduled Action  " + provider.getActionClass().getCanonicalName(), e);
                             return;
+                        }
+                    } else {
+
+                        ILock lock = null;
+
+                        try {
+                            lock = hazelcastInstance.getLock(provider.getActionClass().getCanonicalName());
+                            lock.lockInterruptibly();
+                        } catch (Exception e1) {
+                            LOG.error("Failed to get cluster lock for Scheduled Action " + provider.getActionClass().getCanonicalName(), e1);
+                            lock.unlock();
+                        }
+
+                        try {
+                            while (isRunning() && !Thread.interrupted()) {
+                                try {
+                                    doRun();
+                                } catch (Exception e1) {
+                                    LOG.error("Error Running Hazelcast Scheduled Action " + provider.getActionClass().getCanonicalName(), e1);
+                                    return;
+                                } finally {
+                                    lock.unlock();
+                                }
+                            }
                         } finally {
                             lock.unlock();
                         }
                     }
-                } catch (InterruptedException e) {
-                    LOG.warn(provider.getActionClass().getCanonicalName(), e);
                 } catch (Throwable e) {
                     // Ignore.
-                    LOG.warn("Failed to get Cluster lock for " + provider.getActionClass().getCanonicalName(), e);
+                    LOG.warn("Failed to run Scheduled Action " + provider.getActionClass().getCanonicalName(), e);
                 }
             }
         }
