@@ -54,5 +54,5 @@ public @interface ActionConfig {
     /**
      * @return
      */
-    ExecutionIsolationStrategy isolationStrategy() default ExecutionIsolationStrategy.SEMAPHORE;
+    ExecutionIsolationStrategy isolationStrategy() default ExecutionIsolationStrategy.THREAD;
 }
