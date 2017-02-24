@@ -39,7 +39,7 @@ public @interface ActionConfig {
     /**
      * @return
      */
-    int maxConcurrentRequests() default 250;
+    int maxConcurrentRequests() default 25;
 
     /**
      * @return

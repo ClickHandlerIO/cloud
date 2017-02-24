@@ -173,10 +173,10 @@ public class ActionProvider<A, IN, OUT> {
             // Determine Hystrix isolation strategy.
             HystrixCommandProperties.ExecutionIsolationStrategy hystrixIsolation;
             switch (isolationStrategy) {
-                // Default to SEMAPHORE
+                // Default to THREAD
                 default:
-                case SEMAPHORE:
                 case BEST:
+                case SEMAPHORE:
                     hystrixIsolation = HystrixCommandProperties.ExecutionIsolationStrategy.SEMAPHORE;
                     break;
                 case THREAD:
@@ -223,9 +223,11 @@ public class ActionProvider<A, IN, OUT> {
 
             // Build HystrixCommand.Setter default.
             final String groupKey = actionConfig != null ? actionConfig.groupKey() : "";
+            final String threadPoolKey = actionConfig != null ? actionConfig.threadPoolKey() : "";
             defaultSetter =
                 HystrixCommand.Setter
                     .withGroupKey(HystrixCommandGroupKey.Factory.asKey(groupKey))
+                    .andThreadPoolKey(HystrixThreadPoolKey.Factory.asKey(threadPoolKey))
                     .andCommandKey(HystrixCommandKey.Factory.asKey(commandKey(actionConfig, actionClass)))
                     .andCommandPropertiesDefaults(commandPropertiesDefaults);
 
