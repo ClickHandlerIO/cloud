@@ -13,6 +13,7 @@ import java.sql.Blob;
 import java.sql.Clob;
 import java.sql.Time;
 import java.sql.Timestamp;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -117,7 +118,8 @@ public class SqlUtils {
                 || type == String.class || type == BigDecimal.class || type == java.util.Date.class
                 || type == java.sql.Date.class || type == Time.class || type == Timestamp.class
                 || type == java.io.InputStream.class || type == java.io.Reader.class || type == Clob.class
-                || type == Blob.class || type == Object.class || type == java.time.LocalDateTime.class);
+                || type == Blob.class || type == Object.class || type == java.time.LocalDateTime.class
+                || type == ZonedDateTime.class);
     }
 
     /**

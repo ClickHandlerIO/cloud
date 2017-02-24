@@ -21,6 +21,8 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -248,6 +250,8 @@ public class TableMapping {
                                 record.setValue(property.jooqField, value.toString());
                             } else if (value != null && value instanceof LocalDateTime) {
                                 record.setValue(property.jooqField, Timestamp.valueOf((LocalDateTime) value));
+                            } else if (value != null && value instanceof ZonedDateTime) {
+                                record.setValue(property.jooqField, Timestamp.from(((ZonedDateTime) value).toInstant()));
                             } else {
                                 record.setValue(property.jooqField, value);
                             }
@@ -824,6 +828,9 @@ public class TableMapping {
                 setter.invoke(getParentInstance(obj), new Object[]{enumConstant});
             } else if (value != null && type == LocalDateTime.class && value instanceof Timestamp) {
                 setter.invoke(getParentInstance(obj), new Object[]{((Timestamp) value).toLocalDateTime()});
+            } else if (value != null && type == ZonedDateTime.class && value instanceof Timestamp) {
+                setter.invoke(getParentInstance(obj),
+                    new Object[]{ZonedDateTime.ofInstant(((Timestamp) value).toInstant(), ZoneId.systemDefault())});
             } else {
                 setter.invoke(getParentInstance(obj), new Object[]{value});
             }
