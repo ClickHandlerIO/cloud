@@ -14,7 +14,7 @@ public class MyScheduledAction extends AbstractBlockingScheduledAction {
 
     @Override
     protected void run() {
-        Main.WireUp.instance.actions().move().action().myWorker()
-            .send(new MyWorker.Request()).toBlocking().first();
+//        Main.WireUp.instance.actions().move().action().myWorker()
+//            .send(new MyWorker.Request()).toBlocking().first();
     }
 }

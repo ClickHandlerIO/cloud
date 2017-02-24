@@ -551,6 +551,7 @@ public class SQSConsumer extends AbstractIdleService {
         /**
          * @param request
          */
+        @SuppressWarnings("all")
         private void run(ActionRequest request) throws InterruptedException {
             final long worstCaseTime = System.currentTimeMillis() + actionProvider.getTimeoutMillis();
 
@@ -564,9 +565,9 @@ public class SQSConsumer extends AbstractIdleService {
                 return;
             }
 
-            request.context.runOnContext(a -> actionProvider.observe(request.in).subscribe(
-                r -> {
-                    request.context.runOnContext(a2 -> {
+            if (actionProvider.isBlocking()) {
+                actionProvider.observe(request.in).subscribe(
+                    r -> {
                         try {
                             // Do we need to remove from the Queue?
                             if (r == Boolean.TRUE) {
@@ -579,10 +580,8 @@ public class SQSConsumer extends AbstractIdleService {
                                 dequeue();
                             }
                         }
-                    });
-                },
-                e -> {
-                    request.context.runOnContext(a2 -> {
+                    },
+                    e -> {
                         try {
                             LOG.warn(
                                 "Action [" +
@@ -597,9 +596,42 @@ public class SQSConsumer extends AbstractIdleService {
                                 dequeue();
                             }
                         }
-                    });
-                }
-            ));
+                    }
+                );
+            } else {
+                request.context.runOnContext(a -> actionProvider.observe(request.in).subscribe(
+                    r -> {
+                        try {
+                            // Do we need to remove from the Queue?
+                            if (r == Boolean.TRUE) {
+                                scheduleToDelete(request.receiptHandle);
+                            }
+                        } finally {
+                            try {
+                                buffered.release();
+                            } finally {
+                                dequeue();
+                            }
+                        }
+                    },
+                    e -> {
+                        try {
+                            LOG.warn(
+                                "Action [" +
+                                    actionProvider.getName() +
+                                    "] threw an exception. Placed back on the Queue.",
+                                e
+                            );
+                        } finally {
+                            try {
+                                buffered.release();
+                            } finally {
+                                dequeue();
+                            }
+                        }
+                    }
+                ));
+            }
         }
 
         private void dequeue() {

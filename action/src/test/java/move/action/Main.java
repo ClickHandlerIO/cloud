@@ -27,6 +27,9 @@ public class Main {
 
         WireUp.instance.actionManager().startAsync().awaitRunning();
 
+        WireUp.instance.actions().move().action().allocateInventory2.observe("Hi").subscribe(r -> System.out.println(Thread.currentThread().getName()), e -> e.printStackTrace());
+
+
         Thread.sleep(5000000);
 
 //        actions().myAsyncAction()

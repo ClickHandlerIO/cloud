@@ -32,6 +32,7 @@ public class ActionProvider<A, IN, OUT> {
     private Class<A> actionClass;
     private Class<IN> inClass;
     private Class<OUT> outClass;
+    private boolean blocking;
     private boolean inited;
     private boolean executionTimeoutEnabled;
     private long timeoutMillis;
@@ -60,6 +61,10 @@ public class ActionProvider<A, IN, OUT> {
         if (inProvider != null && outProvider != null) {
             init();
         }
+    }
+
+    public boolean isBlocking() {
+        return blocking;
     }
 
     public boolean isExecutionTimeoutEnabled() {
@@ -161,6 +166,8 @@ public class ActionProvider<A, IN, OUT> {
         final ExecutionIsolationStrategy isolationStrategy = actionConfig != null
             ? actionConfig.isolationStrategy()
             : ExecutionIsolationStrategy.BEST;
+
+        blocking = AbstractBlockingAction.class.isAssignableFrom(actionClass);
 
         if (ObservableAction.class.isAssignableFrom(actionClass)) {
             // Determine Hystrix isolation strategy.
@@ -275,11 +282,15 @@ public class ActionProvider<A, IN, OUT> {
      * @return
      */
     protected OUT execute(final IN request) {
-        return Try.of(() -> observe(
-            null,
-            request,
-            create()
-        ).toBlocking().toFuture().get()).get();
+        try {
+            return observe(
+                null,
+                request,
+                create()
+            ).toBlocking().toFuture().get();
+        } catch (Throwable e) {
+            throw new RuntimeException(e);
+        }
     }
 
     /**
@@ -354,35 +365,37 @@ public class ActionProvider<A, IN, OUT> {
 
         // Build observable.
         final Observable<OUT> observable = abstractAction.toObservable();
-
         final Context ctx = vertxCore.getOrCreateContext();
 
-        return Observable.create(subscriber -> {
-            observable.subscribe(
-                r -> {
-                    if (subscriber.isUnsubscribed())
-                        return;
+        return
+            Observable.create(
+                subscriber -> {
+                    observable.subscribe(
+                        r -> {
+                            if (subscriber.isUnsubscribed())
+                                return;
 
-                    ctx.runOnContext(a -> {
-                        if (subscriber.isUnsubscribed())
-                            return;
+                            ctx.runOnContext(a -> {
+                                if (subscriber.isUnsubscribed())
+                                    return;
 
-                        subscriber.onNext(r);
-                        subscriber.onCompleted();
-                    });
-                },
-                e -> {
-                    if (subscriber.isUnsubscribed())
-                        return;
+                                subscriber.onNext(r);
+                                subscriber.onCompleted();
+                            });
+                        },
+                        e -> {
+                            if (subscriber.isUnsubscribed())
+                                return;
 
-                    ctx.runOnContext(a -> {
-                        if (subscriber.isUnsubscribed())
-                            return;
+                            ctx.runOnContext(a -> {
+                                if (subscriber.isUnsubscribed())
+                                    return;
 
-                        subscriber.onError(e);
-                    });
+                                subscriber.onError(e);
+                            });
+                        }
+                    );
                 }
             );
-        });
     }
 }
