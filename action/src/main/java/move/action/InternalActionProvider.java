@@ -1,5 +1,6 @@
 package move.action;
 
+import javaslang.control.Try;
 import rx.Observable;
 
 import javax.inject.Inject;
@@ -25,6 +26,16 @@ public class InternalActionProvider<A extends Action<IN, OUT>, IN, OUT> extends 
     protected void init() {
         internalAction = getActionClass().getAnnotation(InternalAction.class);
         super.init();
+    }
+
+    @Override
+    public OUT execute(Try.CheckedConsumer<IN> callable) {
+        return super.execute(callable);
+    }
+
+    @Override
+    public OUT execute(IN request) {
+        return super.execute(request);
     }
 
     public Observable<OUT> observe(final Object context, final Consumer<IN> callback) {
