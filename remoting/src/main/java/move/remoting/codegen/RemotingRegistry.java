@@ -3,11 +3,11 @@ package move.remoting.codegen;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.Strings;
 import com.google.common.reflect.TypeToken;
+import javaslang.control.Try;
 import move.action.Action;
 import move.action.RemoteActionProvider;
-import move.remoting.RemotingType;
 import move.remoting.Push;
-import javaslang.control.Try;
+import move.remoting.RemotingType;
 import org.reflections.Reflections;
 
 import java.lang.reflect.Field;
@@ -15,6 +15,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
 import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
 import java.util.*;
 
 /**
@@ -347,6 +348,8 @@ public class RemotingRegistry {
                     dataType = new DateType();
                 else if (type == LocalDateTime.class)
                     dataType = new DateTimeType();
+                else if (type == ZonedDateTime.class)
+                    dataType = new ZonedDateTimeType();
                 else if (type == String.class)
                     dataType = new StringType();
                 else if (type == Object.class)
