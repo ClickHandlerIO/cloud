@@ -541,19 +541,19 @@ public class CodeGenerator {
                     type.addMethod(MethodSpec.methodBuilder(field.name() + "AsMoment").addAnnotation(JsOverlay.class)
                         .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                         .returns(TypeName.get(Moment.class))
-                        .addStatement("return this.$L == null ? null : $T.moment(this.$L + \"Z\")", field.name(), Moment.class, field.name())
+                        .addStatement("return this.$L == null ? null : $T.moment(this.$L)", field.name(), Moment.class, field.name())
                         .build());
 
                     type.addMethod(MethodSpec.methodBuilder(field.name() + "AsDate").addAnnotation(JsOverlay.class)
                         .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                         .returns(TypeName.get(Date.class))
-                        .addStatement("return this.$L == null ? null : new $T((long)$T.moment(this.$L + \"Z\").unix() * 1000)", field.name(), Date.class, Moment.class, field.name())
+                        .addStatement("return this.$L == null ? null : new $T((long)$T.moment(this.$L).unix() * 1000)", field.name(), Date.class, Moment.class, field.name())
                         .build());
 
                     type.addMethod(MethodSpec.methodBuilder(field.name() + "AsUnix").addAnnotation(JsOverlay.class)
                         .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                         .returns(TypeName.get(Double.class))
-                        .addStatement("return this.$L == null ? null : $T.moment(this.$L + \"Z\").unix() * 1000", field.name(), Moment.class, field.name())
+                        .addStatement("return this.$L == null ? null : $T.moment(this.$L).unix() * 1000", field.name(), Moment.class, field.name())
                         .build());
                     break;
 

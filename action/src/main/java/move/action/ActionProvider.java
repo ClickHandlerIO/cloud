@@ -1,7 +1,6 @@
 package move.action;
 
 import com.netflix.hystrix.*;
-import io.vertx.core.Context;
 import io.vertx.rxjava.core.Vertx;
 import javaslang.control.Try;
 import rx.Observable;
@@ -259,7 +258,7 @@ public class ActionProvider<A, IN, OUT> {
     /**
      * @return
      */
-    protected OUT execute(final Try.CheckedConsumer<IN> callable) {
+    public OUT execute(final Try.CheckedConsumer<IN> callable) {
         final IN in = inProvider.get();
         Try.run(() -> callable.accept(in));
         return execute(in);
@@ -269,7 +268,7 @@ public class ActionProvider<A, IN, OUT> {
      * @param request
      * @return
      */
-    protected A create(
+    public A create(
         final IN request) {
         A action = create();
 
@@ -283,7 +282,7 @@ public class ActionProvider<A, IN, OUT> {
      * @param request
      * @return
      */
-    protected OUT execute(final IN request) {
+    public OUT execute(final IN request) {
         try {
             return observe(
                 null,
@@ -300,7 +299,7 @@ public class ActionProvider<A, IN, OUT> {
      * @param callback
      * @return
      */
-    protected Observable<OUT> observe(final Object context, final Consumer<IN> callback) {
+    public Observable<OUT> observe(final Object context, final Consumer<IN> callback) {
         final IN in = inProvider.get();
         if (callback != null) {
             callback.accept(in);
@@ -312,7 +311,7 @@ public class ActionProvider<A, IN, OUT> {
      * @param callback
      * @return
      */
-    protected Observable<OUT> observe(final Consumer<IN> callback) {
+    public Observable<OUT> observe(final Consumer<IN> callback) {
         final IN in = inProvider.get();
         if (callback != null) {
             callback.accept(in);
@@ -324,7 +323,7 @@ public class ActionProvider<A, IN, OUT> {
      * @param request
      * @return
      */
-    protected Observable<OUT> observe(
+    public Observable<OUT> observe(
         final IN request) {
         return observe(
             null,
@@ -338,7 +337,7 @@ public class ActionProvider<A, IN, OUT> {
      * @param request
      * @return
      */
-    protected Observable<OUT> observe(
+    public Observable<OUT> observe(
         final Object context,
         final IN request) {
         return observe(
@@ -367,7 +366,7 @@ public class ActionProvider<A, IN, OUT> {
 
         // Build observable.
         final Observable<OUT> observable = abstractAction.toObservable();
-        final Context ctx = vertxCore.getOrCreateContext();
+        final io.vertx.rxjava.core.Context ctx = Vertx.currentContext();//vertxCore.getOrCreateContext();
 
         return
             Observable.create(
@@ -377,24 +376,33 @@ public class ActionProvider<A, IN, OUT> {
                             if (subscriber.isUnsubscribed())
                                 return;
 
-                            ctx.runOnContext(a -> {
-                                if (subscriber.isUnsubscribed())
-                                    return;
+                            if (ctx != null) {
+                                ctx.runOnContext(a -> {
+                                    if (subscriber.isUnsubscribed())
+                                        return;
 
+                                    subscriber.onNext(r);
+                                    subscriber.onCompleted();
+                                });
+                            } else {
                                 subscriber.onNext(r);
                                 subscriber.onCompleted();
-                            });
+                            }
                         },
                         e -> {
                             if (subscriber.isUnsubscribed())
                                 return;
 
-                            ctx.runOnContext(a -> {
-                                if (subscriber.isUnsubscribed())
-                                    return;
+                            if (ctx != null) {
+                                ctx.runOnContext(a -> {
+                                    if (subscriber.isUnsubscribed())
+                                        return;
 
+                                    subscriber.onError(e);
+                                });
+                            } else {
                                 subscriber.onError(e);
-                            });
+                            }
                         }
                     );
                 }
