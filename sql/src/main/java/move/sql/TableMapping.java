@@ -991,6 +991,10 @@ public class TableMapping {
                 return DBTypes.TIMESTAMP;
             }
 
+            if (type == ZonedDateTime.class) {
+                return DBTypes.TIMESTAMP;
+            }
+
             if (type.isEnum()) {
                 return DBTypes.ENUM;
             }
