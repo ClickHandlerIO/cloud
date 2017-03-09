@@ -296,6 +296,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             // Init jOOQ Configuration.
             configuration = new DefaultConfiguration();
             configuration.set(new RecordMapperProviderImpl());
+
             configuration.set(settings);
 
             configuration.set(PrettyPrinter::new, TimeoutListener::new);
