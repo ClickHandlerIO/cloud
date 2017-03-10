@@ -78,7 +78,7 @@ public class MySqlPlatform extends SqlPlatform {
             case DBTypes.CLOB:
                 return MySQLDataType.TEXT;
             case DBTypes.DATE:
-                return MySQLDataType.DATETIME;
+                return MySQLDataType.DATE;
             case DBTypes.DECIMAL:
                 return MySQLDataType.DECIMAL;
             case DBTypes.DOUBLE:

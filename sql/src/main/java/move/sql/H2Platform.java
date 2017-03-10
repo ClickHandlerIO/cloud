@@ -43,7 +43,7 @@ public class H2Platform extends SqlPlatform {
             case DBTypes.TIMESTAMP:
                 return H2DataType.DATETIME;
             case DBTypes.TIME:
-                return H2DataType.DATETIME;
+                return H2DataType.TIME;
             case DBTypes.VARBINARY:
                 return H2DataType.VARBINARY;
             case DBTypes.BINARY:
@@ -55,7 +55,7 @@ public class H2Platform extends SqlPlatform {
             case DBTypes.CLOB:
                 return H2DataType.TEXT;
             case DBTypes.DATE:
-                return H2DataType.DATETIME;
+                return H2DataType.DATE;
             case DBTypes.DECIMAL:
                 return H2DataType.DECIMAL;
             case DBTypes.DOUBLE:

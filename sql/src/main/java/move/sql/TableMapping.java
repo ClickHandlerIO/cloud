@@ -20,9 +20,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.sql.Timestamp;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
+import java.time.*;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -984,7 +982,7 @@ public class TableMapping {
             }
 
             if (type == Date.class) {
-                return DBTypes.DATE;
+                return DBTypes.TIMESTAMP;
             }
 
             if (type == LocalDateTime.class) {
@@ -993,6 +991,14 @@ public class TableMapping {
 
             if (type == ZonedDateTime.class) {
                 return DBTypes.TIMESTAMP;
+            }
+
+            if (type == LocalDate.class) {
+                return DBTypes.DATE;
+            }
+
+            if (type == LocalTime.class) {
+                return DBTypes.TIME;
             }
 
             if (type.isEnum()) {

@@ -60,7 +60,7 @@ http://www.w3.org/2001/XMLSchema-instance ">
         <nexus-staging-maven-plugin.version>1.6.6</nexus-staging-maven-plugin.version>
 
         <auto-service.version>1.0-rc2</auto-service.version>
-        <hazelcast.version>3.8-EA</hazelcast.version>
+        <hazelcast.version>3.8</hazelcast.version>
         <aws.version>1.11.76</aws.version>
         <cglib-nodep.version>3.2.1</cglib-nodep.version>
         <dropwizard-metrics.version>3.1.2</dropwizard-metrics.version>

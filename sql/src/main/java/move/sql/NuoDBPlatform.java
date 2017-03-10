@@ -70,7 +70,7 @@ public class NuoDBPlatform extends SqlPlatform {
             case DBTypes.CLOB:
                 return NuoDBDataType.STRING;
             case DBTypes.DATE:
-                return NuoDBDataType.TIMESTAMP;
+                return NuoDBDataType.DATE;
             case DBTypes.DECIMAL:
                 return NuoDBDataType.DECIMAL;
             case DBTypes.DOUBLE:

@@ -2,7 +2,6 @@ package move.common;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -12,7 +11,6 @@ import javaslang.jackson.datatype.JavaslangModule;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.io.InputStream;
 
 /**
@@ -55,9 +53,10 @@ public class WireFormat {
         }
         try {
             return MAPPER.readValue(json, cls);
-        } catch (IOException e) {
+        } catch (Throwable e) {
             LOG.info("Failed to parse Json string", e);
-            throw new RuntimeException(e);
+//            throw new RuntimeException(e);
+            return null;
         }
     }
 
@@ -67,9 +66,10 @@ public class WireFormat {
         }
         try {
             return MAPPER.readValue(json, cls);
-        } catch (IOException e) {
+        } catch (Throwable e) {
             LOG.info("Failed to parse Json data", e);
-            throw new RuntimeException(e);
+//            throw new RuntimeException(e);
+            return null;
         }
     }
 
@@ -79,36 +79,40 @@ public class WireFormat {
         }
         try {
             return MAPPER.readValue(json, offset, length, cls);
-        } catch (IOException e) {
+        } catch (Throwable e) {
             LOG.info("Failed to parse Json data", e);
-            throw new RuntimeException(e);
+//            throw new RuntimeException(e);
+            return null;
         }
     }
 
     public static <T> T parse(Class<T> cls, InputStream json) {
         try {
             return MAPPER.readValue(json, cls);
-        } catch (IOException e) {
+        } catch (Throwable e) {
             LOG.info("Failed to parse Json data", e);
-            throw new RuntimeException(e);
+//            throw new RuntimeException(e);
+            return null;
         }
     }
 
     public static byte[] byteify(Object obj) {
         try {
             return MAPPER.writeValueAsBytes(obj);
-        } catch (JsonProcessingException e) {
+        } catch (Throwable e) {
             LOG.info("Failed to byteify Object", e);
-            throw new RuntimeException(e);
+//            throw new RuntimeException(e);
+            return null;
         }
     }
 
     public static String stringify(Object obj) {
         try {
             return MAPPER.writeValueAsString(obj);
-        } catch (JsonProcessingException e) {
+        } catch (Throwable e) {
             LOG.info("Failed to stringify Object", e);
-            throw new RuntimeException(e);
+//            throw new RuntimeException(e);
+            return null;
         }
     }
 
