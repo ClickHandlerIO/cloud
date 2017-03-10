@@ -13,6 +13,8 @@ import java.sql.Blob;
 import java.sql.Clob;
 import java.sql.Time;
 import java.sql.Timestamp;
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -56,7 +58,6 @@ public class SqlUtils {
     }
 
     /**
-     *
      * @param name
      * @return
      */
@@ -111,15 +112,18 @@ public class SqlUtils {
     public static boolean isNativeType(final Class type) {
         // To return an arbitrary object use Object.class.
         return (type == boolean.class || type == Boolean.class || type == byte.class || type == Byte.class
-                || type == short.class || type == Short.class || type == int.class || type == Integer.class
-                || type == long.class || type == Long.class || type == float.class || type == Float.class
-                || type == double.class || type == Double.class || type == char.class || type == Character.class
-                || type == byte[].class || type == Byte[].class || type == char[].class || type == Character[].class
-                || type == String.class || type == BigDecimal.class || type == java.util.Date.class
-                || type == java.sql.Date.class || type == Time.class || type == Timestamp.class
-                || type == java.io.InputStream.class || type == java.io.Reader.class || type == Clob.class
-                || type == Blob.class || type == Object.class || type == java.time.LocalDateTime.class
-                || type == ZonedDateTime.class);
+            || type == short.class || type == Short.class || type == int.class || type == Integer.class
+            || type == long.class || type == Long.class || type == float.class || type == Float.class
+            || type == double.class || type == Double.class || type == char.class || type == Character.class
+            || type == byte[].class || type == Byte[].class || type == char[].class || type == Character[].class
+            || type == String.class || type == BigDecimal.class || type == java.util.Date.class
+            || type == java.sql.Date.class || type == Time.class || type == Timestamp.class
+            || type == java.io.InputStream.class || type == java.io.Reader.class || type == Clob.class
+            || type == Blob.class || type == Object.class
+            || type == java.time.LocalDateTime.class
+            || type == LocalDate.class
+            || type == LocalTime.class
+            || type == ZonedDateTime.class);
     }
 
     /**

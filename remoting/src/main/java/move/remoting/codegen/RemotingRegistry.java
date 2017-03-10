@@ -14,7 +14,9 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZonedDateTime;
 import java.util.*;
 
@@ -348,8 +350,13 @@ public class RemotingRegistry {
                     dataType = new DateType();
                 else if (type == LocalDateTime.class)
                     dataType = new DateTimeType();
+                else if (type == LocalTime.class)
+                    dataType = new LocalTimeType();
                 else if (type == ZonedDateTime.class)
                     dataType = new ZonedDateTimeType();
+                else if (type == LocalDate.class)
+                    dataType = new LocalDateType();
+
                 else if (type == String.class)
                     dataType = new StringType();
                 else if (type == Object.class)

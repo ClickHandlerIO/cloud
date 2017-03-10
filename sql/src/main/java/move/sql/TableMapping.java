@@ -246,6 +246,10 @@ public class TableMapping {
                             // Handle enum types.
                             if (value != null && property.enumType) {
                                 record.setValue(property.jooqField, value.toString());
+                            } else if (value != null && value instanceof LocalDate) {
+                                record.setValue(property.jooqField, java.sql.Date.valueOf((LocalDate)value));
+                            } else if (value != null && value instanceof LocalTime) {
+                                record.setValue(property.jooqField, java.sql.Time.valueOf((LocalTime)value));
                             } else if (value != null && value instanceof LocalDateTime) {
                                 record.setValue(property.jooqField, Timestamp.valueOf((LocalDateTime) value));
                             } else if (value != null && value instanceof ZonedDateTime) {
@@ -826,6 +830,14 @@ public class TableMapping {
                 setter.invoke(getParentInstance(obj), new Object[]{enumConstant});
             } else if (value != null && type == LocalDateTime.class && value instanceof Timestamp) {
                 setter.invoke(getParentInstance(obj), new Object[]{((Timestamp) value).toLocalDateTime()});
+            } else if (value != null && type == LocalDate.class && value instanceof Timestamp) {
+                setter.invoke(getParentInstance(obj), new Object[]{((Timestamp) value).toLocalDateTime().toLocalDate()});
+            } else if (value != null && type == LocalDate.class && value instanceof java.sql.Date) {
+                setter.invoke(getParentInstance(obj), new Object[]{(((java.sql.Date)value).toLocalDate())});
+            } else if (value != null && type == LocalTime.class && value instanceof java.sql.Time) {
+                setter.invoke(getParentInstance(obj), new Object[]{(((java.sql.Time)value).toLocalTime())});
+            } else if (value != null && type == LocalTime.class && value instanceof java.sql.Timestamp) {
+                setter.invoke(getParentInstance(obj), new Object[]{(((java.sql.Timestamp)value).toLocalDateTime().toLocalTime())});
             } else if (value != null && type == ZonedDateTime.class && value instanceof Timestamp) {
                 setter.invoke(getParentInstance(obj),
                     new Object[]{ZonedDateTime.ofInstant(((Timestamp) value).toInstant(), ZoneId.systemDefault())});
