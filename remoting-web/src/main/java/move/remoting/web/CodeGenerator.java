@@ -476,6 +476,13 @@ public class CodeGenerator {
                         .addStatement("return this.$L == null ? null : $T.moment(this.$L)", field.name(), Moment.class, field.name())
                         .build());
 
+                type.addMethod(MethodSpec.methodBuilder(field.name()).addAnnotation(JsOverlay.class)
+                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                        .returns(ClassName.bestGuess(complexType.canonicalName()))
+                        .addParameter(ParameterSpec.builder(TypeName.get(Moment.class), "value", Modifier.FINAL).build())
+                        .addStatement("this.$L = value == null ? null : $T.moment(value.getTime()).toISOString()", field.name(), Moment.class)
+                        .addStatement("return this")
+                        .build());
             }
 
             switch (field.type().dataType()) {
