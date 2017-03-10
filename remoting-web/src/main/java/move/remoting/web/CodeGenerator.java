@@ -447,7 +447,7 @@ public class CodeGenerator {
             }
 
             boolean isZonedDate = false;
-            if (field.type().canonicalName().equals("ZonedDate")) {
+            if (field.type().canonicalName().equals("move.api.v1.common.ZonedDate")) {
                 isZonedDate = true;
                 typeName = TypeName.get(String.class);
             }
