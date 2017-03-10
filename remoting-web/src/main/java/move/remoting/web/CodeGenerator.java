@@ -504,6 +504,53 @@ public class CodeGenerator {
                     }
                     break;
 
+//                case DURATION:
+//                    type.addMethod(MethodSpec.methodBuilder(field.name()).addAnnotation(JsOverlay.class)
+//                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+//                        .returns(ClassName.bestGuess(complexType.canonicalName()))
+//                        .addParameter(ParameterSpec.builder(TypeName.get(Moment.class), "value", Modifier.FINAL).build())
+//                        .addStatement("this.$L = value == null ? null : value.toISOString()", field.name())
+//                        .addStatement("return this")
+//                        .build());
+//
+//                    type.addMethod(MethodSpec.methodBuilder(field.name()).addAnnotation(JsOverlay.class)
+//                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+//                        .returns(ClassName.bestGuess(complexType.canonicalName()))
+//                        .addParameter(ParameterSpec.builder(TypeName.get(Double.class), "value", Modifier.FINAL).build())
+//                        .addStatement("this.$L = value", field.name())
+//                        .addStatement("return this")
+//                        .build());
+//
+//                    type.addMethod(MethodSpec.methodBuilder(field.name()).addAnnotation(JsOverlay.class)
+//                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+//                        .returns(ClassName.bestGuess(complexType.canonicalName()))
+//                        .addParameter(ParameterSpec.builder(TypeName.get(double.class), "value", Modifier.FINAL).build())
+//                        .addStatement("this.$L = $T.moment(value).toISOString()", field.name(), Moment.class)
+//                        .addStatement("return this")
+//                        .build());
+//
+//                    type.addMethod(MethodSpec.methodBuilder(field.name()).addAnnotation(JsOverlay.class)
+//                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+//                        .returns(ClassName.bestGuess(complexType.canonicalName()))
+//                        .addParameter(ParameterSpec.builder(TypeName.get(Date.class), "value", Modifier.FINAL).build())
+//                        .addStatement("this.$L = value == null ? null : $T.moment(value.getTime()).toISOString()", field.name(), Moment.class)
+//                        .addStatement("return this")
+//                        .build());
+//
+//                    type.addMethod(MethodSpec.methodBuilder(field.name() + "AsMoment").addAnnotation(JsOverlay.class)
+//                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+//                        .returns(TypeName.get(Moment.class))
+//                        .addStatement("return this.$L == null ? null : $T.moment(this.$L)", field.name(), Moment.class, field.name())
+//                        .build());
+//
+//                    type.addMethod(MethodSpec.methodBuilder(field.name() + "AsDate").addAnnotation(JsOverlay.class)
+//                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+//                        .returns(TypeName.get(Date.class))
+//                        .addStatement("return this.$L == null ? null : new $T((long)$T.moment(this.$L).unix() * 1000)", field.name(), Date.class, Moment.class, field.name())
+//                        .build());
+//                    break;
+
+                case INSTANT:
                 case DATE:
                 case DATETIME:
                     type.addMethod(MethodSpec.methodBuilder(field.name()).addAnnotation(JsOverlay.class)

@@ -12,6 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.InputStream;
+import java.time.*;
 
 /**
  *
@@ -37,6 +38,7 @@ public class WireFormat {
 
     public static void main(String[] args) {
         System.out.println(WireFormat.stringify(new MyMessage()));
+
     }
 
     public static <T> T clone(T value) {
@@ -119,5 +121,18 @@ public class WireFormat {
     public static class MyMessage {
         @JsonProperty
         List<String> myList = List.of("1", "2", "3");
+        @JsonProperty
+        LocalDate localDate = LocalDate.now();
+        @JsonProperty
+        LocalTime localTime = LocalTime.now();
+        @JsonProperty
+        LocalDateTime localDateTime = LocalDateTime.now();
+        @JsonProperty
+        ZonedDateTime zonedDateTime = ZonedDateTime.now(ZoneId.of("PST", ZoneId.SHORT_IDS));
+
+        @JsonProperty
+        Duration duration = Duration.ofDays(2);
+        @JsonProperty
+        Instant instant = Instant.now(Clock.systemDefaultZone());
     }
 }

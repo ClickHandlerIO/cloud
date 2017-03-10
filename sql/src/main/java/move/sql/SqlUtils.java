@@ -13,9 +13,7 @@ import java.sql.Blob;
 import java.sql.Clob;
 import java.sql.Time;
 import java.sql.Timestamp;
-import java.time.LocalDate;
-import java.time.LocalTime;
-import java.time.ZonedDateTime;
+import java.time.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -123,6 +121,8 @@ public class SqlUtils {
             || type == java.time.LocalDateTime.class
             || type == LocalDate.class
             || type == LocalTime.class
+            || type == Duration.class
+            || type == Instant.class
             || type == ZonedDateTime.class);
     }
 

@@ -14,10 +14,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
-import java.time.ZonedDateTime;
+import java.time.*;
 import java.util.*;
 
 /**
@@ -356,6 +353,10 @@ public class RemotingRegistry {
                     dataType = new ZonedDateTimeType();
                 else if (type == LocalDate.class)
                     dataType = new LocalDateType();
+                else if (type == Duration.class)
+                    dataType = new DurationType();
+                else if (type == Instant.class)
+                    dataType = new InstantType();
 
                 else if (type == String.class)
                     dataType = new StringType();

@@ -20,6 +20,8 @@ public enum DataType {
     SET,
     MAP,
     ENUM,
+    DURATION,
+    INSTANT,
     WILDCARD,
     COMPLEX,;
 }
