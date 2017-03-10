@@ -13,6 +13,7 @@ import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Predicate;
 
 /**
  *
@@ -49,6 +50,11 @@ public class LocalAsyncMultiMap<K, V> implements AsyncMultiMap<K, V> {
         }
 
         completionHandler.handle(Future.succeededFuture());
+    }
+
+    @Override
+    public void removeAllMatching(Predicate<V> predicate, Handler<AsyncResult<Void>> handler) {
+
     }
 
     /**
