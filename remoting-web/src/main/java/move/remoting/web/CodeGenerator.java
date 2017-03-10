@@ -446,6 +446,10 @@ public class CodeGenerator {
                     break;
             }
 
+            if (field.type().canonicalName().equals("ZonedDate")) {
+                typeName = TypeName.get(String.class);
+            }
+
             final String getterName = "get" + upperFirst(field.name());
             final String setterName = "set" + upperFirst(field.name());
 
