@@ -446,7 +446,9 @@ public class CodeGenerator {
                     break;
             }
 
+            boolean isZonedDate = false;
             if (field.type().canonicalName().equals("ZonedDate")) {
+                isZonedDate = true;
                 typeName = TypeName.get(String.class);
             }
 
@@ -466,6 +468,15 @@ public class CodeGenerator {
                 .addParameter(ParameterSpec.builder(typeName, "value").build())
                 .addStatement("this.$L = value", field.name())
                 .addAnnotation(AnnotationSpec.builder(JsOverlay.class).build()).build());
+
+            if (isZonedDate) {
+                type.addMethod(MethodSpec.methodBuilder(field.name() + "AsMoment").addAnnotation(JsOverlay.class)
+                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                        .returns(TypeName.get(Moment.class))
+                        .addStatement("return this.$L == null ? null : $T.moment(this.$L)", field.name(), Moment.class, field.name())
+                        .build());
+
+            }
 
             switch (field.type().dataType()) {
                 case ARRAY:
