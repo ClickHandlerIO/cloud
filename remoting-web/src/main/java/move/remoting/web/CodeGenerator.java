@@ -7,14 +7,14 @@ import common.client.Bus;
 import common.client.JSON;
 import common.client.MessageProvider;
 import common.client.Try;
-import move.action.RemoteAction;
-import move.remoting.Push;
-import move.remoting.codegen.*;
 import jsinterop.annotations.JsOverlay;
 import jsinterop.annotations.JsPackage;
 import jsinterop.annotations.JsProperty;
 import jsinterop.annotations.JsType;
 import moment.client.Moment;
+import move.action.RemoteAction;
+import move.remoting.Push;
+import move.remoting.codegen.*;
 import remoting.client.ResponseEvent;
 import remoting.client.WsAction;
 import remoting.client.WsDispatcher;
@@ -26,7 +26,10 @@ import javax.inject.Singleton;
 import javax.lang.model.element.Modifier;
 import java.io.File;
 import java.io.IOException;
-import java.util.*;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * ClickHandler Web Remoting code generator.
@@ -76,25 +79,25 @@ public class CodeGenerator {
 
     public void generate() {
         initializerType =
-            TypeSpec.classBuilder("Starter")
-                .addModifiers(Modifier.PUBLIC)
-                .addAnnotation(Singleton.class)
-                .addField(FieldSpec.builder(WsDispatcher.class, "dispatcher")
-                    .addModifiers(Modifier.FINAL).build()
-                );
+                TypeSpec.classBuilder("Starter")
+                        .addModifiers(Modifier.PUBLIC)
+                        .addAnnotation(Singleton.class)
+                        .addField(FieldSpec.builder(WsDispatcher.class, "dispatcher")
+                                .addModifiers(Modifier.FINAL).build()
+                        );
 
         // Add @Generated annotation
         addGeneratorAnnotation(initializerType);
 
         initializerType.addMethod(MethodSpec.constructorBuilder()
-            .addAnnotation(Inject.class)
-            .addParameter(WsDispatcher.class, "dispatcher")
-            .addStatement("this.dispatcher = dispatcher")
-            .addStatement("start()")
-            .build());
+                .addAnnotation(Inject.class)
+                .addParameter(WsDispatcher.class, "dispatcher")
+                .addStatement("this.dispatcher = dispatcher")
+                .addStatement("start()")
+                .build());
 
         initMethod = MethodSpec.methodBuilder("start")
-            .addModifiers(Modifier.PUBLIC);
+                .addModifiers(Modifier.PUBLIC);
 
         // Generate Packages and Materialized Views.
         final Namespace root = ast.getRoot();
@@ -110,18 +113,18 @@ public class CodeGenerator {
         }
 
         final String gwtModuleFileContents = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
-            "\n" +
-            "<module>\n" +
-            "    <inherits name=\"com.google.gwt.user.User\"/>\n" +
-            "    <inherits name=\"com.google.gwt.resources.Resources\"/>\n" +
-            "    <inherits name=\"ClickHandlerCore\" />\n" +
-            "\n" +
-            "    <source path=\"\"/>\n" +
-            "</module>\n";
+                "\n" +
+                "<module>\n" +
+                "    <inherits name=\"com.google.gwt.user.User\"/>\n" +
+                "    <inherits name=\"com.google.gwt.resources.Resources\"/>\n" +
+                "    <inherits name=\"ClickHandlerCore\" />\n" +
+                "\n" +
+                "    <source path=\"\"/>\n" +
+                "</module>\n";
         try {
             com.google.common.io.Files.write(
-                gwtModuleFileContents.getBytes(Charsets.UTF_8),
-                new File(outputDir + File.separator + rootPackage.replace(".", File.separator) + File.separator + gwtModuleFileName)
+                    gwtModuleFileContents.getBytes(Charsets.UTF_8),
+                    new File(outputDir + File.separator + rootPackage.replace(".", File.separator) + File.separator + gwtModuleFileName)
             );
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -139,73 +142,73 @@ public class CodeGenerator {
                 final ActionSpec actionSpec = (ActionSpec) namespace;
 
                 type.addMethod(MethodSpec.constructorBuilder()
-                    .addModifiers(Modifier.PUBLIC).addAnnotation(Inject.class).build());
+                        .addModifiers(Modifier.PUBLIC).addAnnotation(Inject.class).build());
 
                 type.superclass(ParameterizedTypeName.get(
-                    ClassName.get(WsAction.class),
-                    ClassName.bestGuess(actionSpec.inSpec().canonicalName()),
-                    ClassName.bestGuess(actionSpec.outSpec().canonicalName())
+                        ClassName.get(WsAction.class),
+                        ClassName.bestGuess(actionSpec.inSpec().canonicalName()),
+                        ClassName.bestGuess(actionSpec.outSpec().canonicalName())
                 ));
 
                 final TypeName inType = ClassName.bestGuess(actionSpec.inSpec().canonicalName());
                 final TypeName outType = ClassName.bestGuess(actionSpec.outSpec().canonicalName());
 
                 type.addMethod(MethodSpec.methodBuilder("inTypeName")
-                    .addAnnotation(Override.class)
-                    .addModifiers(Modifier.PUBLIC)
-                    .returns(ParameterizedTypeName.get(
-                        ClassName.get(Bus.TypeName.class),
-                        inType
-                    ))
-                    .addCode(CodeBlock.builder().addStatement("return $T.Event.NAME", inType).build())
-                    .build()
+                        .addAnnotation(Override.class)
+                        .addModifiers(Modifier.PUBLIC)
+                        .returns(ParameterizedTypeName.get(
+                                ClassName.get(Bus.TypeName.class),
+                                inType
+                        ))
+                        .addCode(CodeBlock.builder().addStatement("return $T.Event.NAME", inType).build())
+                        .build()
                 );
 
                 type.addMethod(MethodSpec.methodBuilder("outTypeName")
-                    .addAnnotation(Override.class)
-                    .addModifiers(Modifier.PUBLIC)
-                    .returns(ParameterizedTypeName.get(
-                        ClassName.get(Bus.TypeName.class),
-                        outType
-                    ))
-                    .addCode(CodeBlock.builder().addStatement("return $T.Event.NAME", outType).build())
-                    .build()
+                        .addAnnotation(Override.class)
+                        .addModifiers(Modifier.PUBLIC)
+                        .returns(ParameterizedTypeName.get(
+                                ClassName.get(Bus.TypeName.class),
+                                outType
+                        ))
+                        .addCode(CodeBlock.builder().addStatement("return $T.Event.NAME", outType).build())
+                        .build()
                 );
 
                 final RemoteAction remoteAction =
-                    (RemoteAction) actionSpec.provider().getActionClass().getAnnotation(RemoteAction.class);
+                        (RemoteAction) actionSpec.provider().getActionClass().getAnnotation(RemoteAction.class);
 
                 final TypeName responseEventName = ClassName.bestGuess(actionSpec.canonicalName() + "." + RESPONSE_EVENT_NAME);
 
                 type.addMethod(MethodSpec.methodBuilder("path")
-                    .addAnnotation(Override.class)
-                    .addModifiers(Modifier.PROTECTED)
-                    .returns(String.class)
-                    .addStatement("return $S", remoteAction.path()).build());
+                        .addAnnotation(Override.class)
+                        .addModifiers(Modifier.PROTECTED)
+                        .returns(String.class)
+                        .addStatement("return $S", remoteAction.path()).build());
 
                 type.addMethod(MethodSpec.methodBuilder("timeoutMillis")
-                    .addAnnotation(Override.class)
-                    .addModifiers(Modifier.PUBLIC)
-                    .returns(int.class)
-                    .addStatement("return $L", 15000).build());
+                        .addAnnotation(Override.class)
+                        .addModifiers(Modifier.PUBLIC)
+                        .returns(int.class)
+                        .addStatement("return $L", 15000).build());
 
                 type.addMethod(MethodSpec.methodBuilder("responseEvent")
-                    .addAnnotation(Override.class)
-                    .addModifiers(Modifier.PROTECTED)
-                    .returns(responseEventName)
-                    .addParameter(inType, "in")
-                    .addParameter(outType, "out")
-                    .addStatement("return new $L(in, out)", RESPONSE_EVENT_NAME).build());
+                        .addAnnotation(Override.class)
+                        .addModifiers(Modifier.PROTECTED)
+                        .returns(responseEventName)
+                        .addParameter(inType, "in")
+                        .addParameter(outType, "out")
+                        .addStatement("return new $L(in, out)", RESPONSE_EVENT_NAME).build());
 
                 // Build ResponseEvent.
                 TypeSpec.Builder responseEventBuilder = TypeSpec.classBuilder(RESPONSE_EVENT_NAME);
                 responseEventBuilder.superclass(ParameterizedTypeName.get(ClassName.get(ResponseEvent.class), inType, outType));
                 responseEventBuilder.addModifiers(Modifier.PUBLIC, Modifier.STATIC);
                 responseEventBuilder.addMethod(MethodSpec
-                    .constructorBuilder()
-                    .addParameter(inType, "in")
-                    .addParameter(outType, "out")
-                    .addStatement("super(in, out)").build()
+                        .constructorBuilder()
+                        .addParameter(inType, "in")
+                        .addParameter(outType, "out")
+                        .addStatement("super(in, out)").build()
                 );
 
                 type.addType(responseEventBuilder.build());
@@ -252,45 +255,45 @@ public class CodeGenerator {
                 final ComplexType subType = complexType.convertToHolder("Message");
 
                 type.addSuperinterface(ParameterizedTypeName.get(
-                    ClassName.get(MessageProvider.class),
-                    ClassName.bestGuess(subType.canonicalName())
+                        ClassName.get(MessageProvider.class),
+                        ClassName.bestGuess(subType.canonicalName())
                 ));
 
                 type.addField(
-                    FieldSpec.builder(
-                        ClassName.bestGuess(subType.canonicalName()),
-                        "message",
-                        Modifier.PUBLIC, Modifier.FINAL
-                    ).build()
-                );
-
-                type.addMethod(
-                    MethodSpec.constructorBuilder()
-                        .addModifiers(Modifier.PUBLIC)
-                        .addParameter(
-                            ParameterSpec.builder(
+                        FieldSpec.builder(
                                 ClassName.bestGuess(subType.canonicalName()),
                                 "message",
-                                Modifier.FINAL
-                            ).build()
-                        ).addStatement("this.message = message")
-                        .build()
+                                Modifier.PUBLIC, Modifier.FINAL
+                        ).build()
                 );
 
                 type.addMethod(
-                    MethodSpec.methodBuilder("get")
-                        .addModifiers(Modifier.PUBLIC)
-                        .returns(ClassName.bestGuess(subType.canonicalName()))
-                        .addStatement("return message")
-                        .build()
+                        MethodSpec.constructorBuilder()
+                                .addModifiers(Modifier.PUBLIC)
+                                .addParameter(
+                                        ParameterSpec.builder(
+                                                ClassName.bestGuess(subType.canonicalName()),
+                                                "message",
+                                                Modifier.FINAL
+                                        ).build()
+                                ).addStatement("this.message = message")
+                                .build()
+                );
+
+                type.addMethod(
+                        MethodSpec.methodBuilder("get")
+                                .addModifiers(Modifier.PUBLIC)
+                                .returns(ClassName.bestGuess(subType.canonicalName()))
+                                .addStatement("return message")
+                                .build()
                 );
 
                 initMethod.addStatement(
-                    "dispatcher.registerPush($S, $T.class, json -> new $T($T.parse(json)))",
-                    address,
-                    ClassName.bestGuess(canonicalName),
-                    ClassName.bestGuess(canonicalName),
-                    JSON.class
+                        "dispatcher.registerPush($S, $T.class, json -> new $T($T.parse(json)))",
+                        address,
+                        ClassName.bestGuess(canonicalName),
+                        ClassName.bestGuess(canonicalName),
+                        JSON.class
                 );
 
                 generate(type, subType);
@@ -302,11 +305,11 @@ public class CodeGenerator {
                 }
 
                 type.addAnnotation(AnnotationSpec
-                    .builder(JsType.class)
-                    .addMember("isNative", "true")
-                    .addMember("namespace", "\"" + JsPackage.GLOBAL + "\"")
-                    .addMember("name", "\"Object\"")
-                    .build());
+                        .builder(JsType.class)
+                        .addMember("isNative", "true")
+                        .addMember("namespace", "\"" + JsPackage.GLOBAL + "\"")
+                        .addMember("name", "\"Object\"")
+                        .build());
 
                 final StandardType[] ifaces = complexType.interfaces();
                 if (ifaces != null && ifaces.length > 0) {
@@ -325,12 +328,12 @@ public class CodeGenerator {
                     TypeSpec.Builder eventBuilder = TypeSpec.classBuilder("Event").addModifiers(Modifier.PUBLIC, Modifier.STATIC);
 
                     eventBuilder.addField(FieldSpec.builder(
-                        ParameterizedTypeName.get(
-                            ClassName.get(Bus.TypeName.class), name
-                        ),
-                        "NAME",
-                        Modifier.PUBLIC, Modifier.STATIC, Modifier.FINAL).initializer(
-                        CodeBlock.builder().add("new $T<>()", Bus.TypeName.class).build()
+                            ParameterizedTypeName.get(
+                                    ClassName.get(Bus.TypeName.class), name
+                            ),
+                            "NAME",
+                            Modifier.PUBLIC, Modifier.STATIC, Modifier.FINAL).initializer(
+                            CodeBlock.builder().add("new $T<>()", Bus.TypeName.class).build()
                     ).build());
 
                     type.addType(eventBuilder.build());
@@ -354,18 +357,21 @@ public class CodeGenerator {
             }
         }
 
-        if (type == null)
+        if (type == null) {
             return;
+        }
 
         if (parent == null)
-            // Add @Generated annotation
+        // Add @Generated annotation
+        {
             addGeneratorAnnotation(type);
+        }
 
         if (parent == null) {
             try {
                 JavaFile.builder(
-                    materializedType.path(),
-                    type.build()
+                        materializedType.path(),
+                        type.build()
                 ).build().writeTo(outputDir);
             } catch (IOException e) {
                 e.printStackTrace();
@@ -422,17 +428,17 @@ public class CodeGenerator {
                 case SET:
                     SetType setType = (SetType) field.type();
                     typeName = ParameterizedTypeName.get(
-                        ClassName.get(Set.class),
-                        ClassName.bestGuess(setType.componentType().canonicalName())
+                            ClassName.get(Set.class),
+                            ClassName.bestGuess(setType.componentType().canonicalName())
                     );
                     break;
 
                 case MAP:
                     MapType mapType = (MapType) field.type();
                     typeName = ParameterizedTypeName.get(
-                        ClassName.get(Set.class),
-                        ClassName.bestGuess(mapType.keyType().canonicalName()),
-                        ClassName.bestGuess(mapType.valueType().canonicalName())
+                            ClassName.get(Set.class),
+                            ClassName.bestGuess(mapType.keyType().canonicalName()),
+                            ClassName.bestGuess(mapType.valueType().canonicalName())
                     );
                     break;
 
@@ -456,18 +462,18 @@ public class CodeGenerator {
             final String setterName = "set" + upperFirst(field.name());
 
             type.addField(FieldSpec.builder(typeName, field.name(), Modifier.PUBLIC)
-                .addAnnotation(AnnotationSpec.builder(JsProperty.class)
-                    .addMember("name", "$S", field.jsonName()).build()).build());
+                    .addAnnotation(AnnotationSpec.builder(JsProperty.class)
+                            .addMember("name", "$S", field.jsonName()).build()).build());
 
             type.addMethod(MethodSpec.methodBuilder(getterName).addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-                .returns(typeName)
-                .addStatement("return $L", field.name())
-                .addAnnotation(AnnotationSpec.builder(JsOverlay.class).build()).build());
+                    .returns(typeName)
+                    .addStatement("return $L", field.name())
+                    .addAnnotation(AnnotationSpec.builder(JsOverlay.class).build()).build());
 
             type.addMethod(MethodSpec.methodBuilder(setterName).addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-                .addParameter(ParameterSpec.builder(typeName, "value").build())
-                .addStatement("this.$L = value", field.name())
-                .addAnnotation(AnnotationSpec.builder(JsOverlay.class).build()).build());
+                    .addParameter(ParameterSpec.builder(typeName, "value").build())
+                    .addStatement("this.$L = value", field.name())
+                    .addAnnotation(AnnotationSpec.builder(JsOverlay.class).build()).build());
 
             if (isZonedDate) {
                 type.addMethod(MethodSpec.methodBuilder(field.name() + "AsMoment").addAnnotation(JsOverlay.class)
@@ -480,7 +486,7 @@ public class CodeGenerator {
                         .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                         .returns(ClassName.bestGuess(complexType.canonicalName()))
                         .addParameter(ParameterSpec.builder(TypeName.get(Moment.class), "value", Modifier.FINAL).build())
-                        .addStatement("this.$L = value == null ? null : value.toISOString()", field.name(), Moment.class)
+                        .addStatement("this.$L = value == null ? null : value.toISOString()", field.name())
                         .addStatement("return this")
                         .build());
             }
@@ -490,35 +496,35 @@ public class CodeGenerator {
                 case LIST:
                     ArrayType arrayType = (ArrayType) field.type();
                     type.addMethod(MethodSpec.methodBuilder(field.name()).addAnnotation(JsOverlay.class)
-                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-                        .returns(ClassName.bestGuess(complexType.canonicalName()))
-                        .addParameter(ParameterSpec.builder(typeName, "value", Modifier.FINAL).build())
-                        .addStatement("this.$L = value", field.name())
-                        .addStatement("return this")
-                        .build());
+                            .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                            .returns(ClassName.bestGuess(complexType.canonicalName()))
+                            .addParameter(ParameterSpec.builder(typeName, "value", Modifier.FINAL).build())
+                            .addStatement("this.$L = value", field.name())
+                            .addStatement("return this")
+                            .build());
 
                     if (!arrayType.componentType().javaType().isPrimitive()) {
                         try {
                             // List accessors
                             type.addMethod(MethodSpec.methodBuilder(field.name() + "AsList").addAnnotation(JsOverlay.class)
-                                .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-                                .returns(ParameterizedTypeName.get(ClassName.get(List.class), valueTypeName))
-                                .addStatement("return this.$L != null ? $T.asList(this.$L) : new java.util.ArrayList<>()", field.name(), Arrays.class, field.name())
-                                .build());
+                                    .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                                    .returns(ParameterizedTypeName.get(ClassName.get(List.class), valueTypeName))
+                                    .addStatement("return this.$L != null ? $T.asList(this.$L) : new java.util.ArrayList<>()", field.name(), Arrays.class, field.name())
+                                    .build());
                             type.addMethod(MethodSpec.methodBuilder(field.name()).addAnnotation(JsOverlay.class)
-                                .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-                                .returns(ClassName.bestGuess(complexType.canonicalName()))
-                                .addParameter(ParameterSpec.builder(
-                                    ParameterizedTypeName.get(
-                                        ClassName.get(List.class),
-                                        valueTypeName
-                                    ),
-                                    "value",
-                                    Modifier.FINAL
-                                ).build())
-                                .addStatement("this.$L = value != null ? value.toArray(new $T[value.size()]) : null", field.name(), valueTypeName)
-                                .addStatement("return this")
-                                .build());
+                                    .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                                    .returns(ClassName.bestGuess(complexType.canonicalName()))
+                                    .addParameter(ParameterSpec.builder(
+                                            ParameterizedTypeName.get(
+                                                    ClassName.get(List.class),
+                                                    valueTypeName
+                                            ),
+                                            "value",
+                                            Modifier.FINAL
+                                    ).build())
+                                    .addStatement("this.$L = value != null ? value.toArray(new $T[value.size()]) : null", field.name(), valueTypeName)
+                                    .addStatement("return this")
+                                    .build());
                         } catch (Throwable e) {
                             String name = valueTypeName.toString();
                             e.printStackTrace();
@@ -576,54 +582,54 @@ public class CodeGenerator {
                 case DATE:
                 case DATETIME:
                     type.addMethod(MethodSpec.methodBuilder(field.name()).addAnnotation(JsOverlay.class)
-                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-                        .returns(ClassName.bestGuess(complexType.canonicalName()))
-                        .addParameter(ParameterSpec.builder(TypeName.get(Moment.class), "value", Modifier.FINAL).build())
-                        .addStatement("this.$L = value == null ? null : value.toISOString()", field.name())
-                        .addStatement("return this")
-                        .build());
+                            .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                            .returns(ClassName.bestGuess(complexType.canonicalName()))
+                            .addParameter(ParameterSpec.builder(TypeName.get(Moment.class), "value", Modifier.FINAL).build())
+                            .addStatement("this.$L = value == null ? null : value.toISOString()", field.name())
+                            .addStatement("return this")
+                            .build());
 
-                    type.addMethod(MethodSpec.methodBuilder(field.name()).addAnnotation(JsOverlay.class)
-                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-                        .returns(ClassName.bestGuess(complexType.canonicalName()))
-                        .addParameter(ParameterSpec.builder(TypeName.get(String.class), "value", Modifier.FINAL).build())
-                        .addStatement("this.$L = value", field.name())
-                        .addStatement("return this")
-                        .build());
-
-                    type.addMethod(MethodSpec.methodBuilder(field.name()).addAnnotation(JsOverlay.class)
-                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-                        .returns(ClassName.bestGuess(complexType.canonicalName()))
-                        .addParameter(ParameterSpec.builder(TypeName.get(double.class), "value", Modifier.FINAL).build())
-                        .addStatement("this.$L = $T.moment(value).toISOString()", field.name(), Moment.class)
-                        .addStatement("return this")
-                        .build());
-
-                    type.addMethod(MethodSpec.methodBuilder(field.name()).addAnnotation(JsOverlay.class)
-                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-                        .returns(ClassName.bestGuess(complexType.canonicalName()))
-                        .addParameter(ParameterSpec.builder(TypeName.get(Date.class), "value", Modifier.FINAL).build())
-                        .addStatement("this.$L = value == null ? null : $T.moment(value.getTime()).toISOString()", field.name(), Moment.class)
-                        .addStatement("return this")
-                        .build());
+//                    type.addMethod(MethodSpec.methodBuilder(field.name()).addAnnotation(JsOverlay.class)
+//                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+//                        .returns(ClassName.bestGuess(complexType.canonicalName()))
+//                        .addParameter(ParameterSpec.builder(TypeName.get(String.class), "value", Modifier.FINAL).build())
+//                        .addStatement("this.$L = value", field.name())
+//                        .addStatement("return this")
+//                        .build());
+//
+//                    type.addMethod(MethodSpec.methodBuilder(field.name()).addAnnotation(JsOverlay.class)
+//                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+//                        .returns(ClassName.bestGuess(complexType.canonicalName()))
+//                        .addParameter(ParameterSpec.builder(TypeName.get(double.class), "value", Modifier.FINAL).build())
+//                        .addStatement("this.$L = $T.moment(value).toISOString()", field.name(), Moment.class)
+//                        .addStatement("return this")
+//                        .build());
+//
+//                    type.addMethod(MethodSpec.methodBuilder(field.name()).addAnnotation(JsOverlay.class)
+//                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+//                        .returns(ClassName.bestGuess(complexType.canonicalName()))
+//                        .addParameter(ParameterSpec.builder(TypeName.get(Date.class), "value", Modifier.FINAL).build())
+//                        .addStatement("this.$L = value == null ? null : $T.moment(value.getTime()).toISOString()", field.name(), Moment.class)
+//                        .addStatement("return this")
+//                        .build());
 
                     type.addMethod(MethodSpec.methodBuilder(field.name() + "AsMoment").addAnnotation(JsOverlay.class)
-                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-                        .returns(TypeName.get(Moment.class))
-                        .addStatement("return this.$L == null ? null : $T.moment(this.$L)", field.name(), Moment.class, field.name())
-                        .build());
+                            .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                            .returns(TypeName.get(Moment.class))
+                            .addStatement("return this.$L == null ? null : $T.moment(this.$L)", field.name(), Moment.class, field.name())
+                            .build());
 
-                    type.addMethod(MethodSpec.methodBuilder(field.name() + "AsDate").addAnnotation(JsOverlay.class)
-                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-                        .returns(TypeName.get(Date.class))
-                        .addStatement("return this.$L == null ? null : new $T((long)$T.moment(this.$L).unix() * 1000)", field.name(), Date.class, Moment.class, field.name())
-                        .build());
-
-                    type.addMethod(MethodSpec.methodBuilder(field.name() + "AsUnix").addAnnotation(JsOverlay.class)
-                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-                        .returns(TypeName.get(Double.class))
-                        .addStatement("return this.$L == null ? null : $T.moment(this.$L).unix() * 1000", field.name(), Moment.class, field.name())
-                        .build());
+//                    type.addMethod(MethodSpec.methodBuilder(field.name() + "AsDate").addAnnotation(JsOverlay.class)
+//                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+//                        .returns(TypeName.get(Date.class))
+//                        .addStatement("return this.$L == null ? null : new $T((long)$T.moment(this.$L).unix() * 1000)", field.name(), Date.class, Moment.class, field.name())
+//                        .build());
+//
+//                    type.addMethod(MethodSpec.methodBuilder(field.name() + "AsUnix").addAnnotation(JsOverlay.class)
+//                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+//                        .returns(TypeName.get(Double.class))
+//                        .addStatement("return this.$L == null ? null : $T.moment(this.$L).unix() * 1000", field.name(), Moment.class, field.name())
+//                        .build());
                     break;
 
                 case BOOLEAN:
@@ -631,54 +637,54 @@ public class CodeGenerator {
 
                 default:
                     type.addMethod(MethodSpec.methodBuilder(field.name()).addAnnotation(JsOverlay.class)
-                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-                        .returns(ClassName.bestGuess(complexType.canonicalName()))
-                        .addParameter(ParameterSpec.builder(typeName, "value", Modifier.FINAL).build())
-                        .addStatement("this.$L = value", field.name())
-                        .addStatement("return this")
-                        .build());
+                            .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                            .returns(ClassName.bestGuess(complexType.canonicalName()))
+                            .addParameter(ParameterSpec.builder(typeName, "value", Modifier.FINAL).build())
+                            .addStatement("this.$L = value", field.name())
+                            .addStatement("return this")
+                            .build());
                     break;
                 case SET:
                     type.addMethod(MethodSpec.methodBuilder(field.name()).addAnnotation(JsOverlay.class)
-                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-                        .returns(ClassName.bestGuess(complexType.canonicalName()))
-                        .addParameter(ParameterSpec.builder(typeName, "value", Modifier.FINAL).build())
-                        .addStatement("this.$L = value", field.name())
-                        .addStatement("return this")
-                        .build());
+                            .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                            .returns(ClassName.bestGuess(complexType.canonicalName()))
+                            .addParameter(ParameterSpec.builder(typeName, "value", Modifier.FINAL).build())
+                            .addStatement("this.$L = value", field.name())
+                            .addStatement("return this")
+                            .build());
                     break;
                 case MAP:
                     type.addMethod(MethodSpec.methodBuilder(field.name()).addAnnotation(JsOverlay.class)
-                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-                        .returns(ClassName.bestGuess(complexType.canonicalName()))
-                        .addParameter(ParameterSpec.builder(typeName, "value", Modifier.FINAL).build())
-                        .addStatement("this.$L = value", field.name())
-                        .addStatement("return this")
-                        .build());
+                            .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                            .returns(ClassName.bestGuess(complexType.canonicalName()))
+                            .addParameter(ParameterSpec.builder(typeName, "value", Modifier.FINAL).build())
+                            .addStatement("this.$L = value", field.name())
+                            .addStatement("return this")
+                            .build());
                     break;
                 case ENUM:
                     TypeName enumType = ClassName.bestGuess(field.type().canonicalName());
 
                     type.addMethod(MethodSpec.methodBuilder(field.name()).addAnnotation(JsOverlay.class)
-                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-                        .returns(enumType)
-                        .addCode(CodeBlock.builder()
-                            .beginControlFlow("try")
-                            .addStatement("return $T.valueOf(this.$L)", enumType, field.name())
-                            .endControlFlow()
-                            .beginControlFlow("catch ($T e)", Throwable.class)
-                            .addStatement("this.$L = null", field.name())
-                            .addStatement("return null")
-                            .endControlFlow().build()
-                        )
-                        .build());
+                            .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                            .returns(enumType)
+                            .addCode(CodeBlock.builder()
+                                    .beginControlFlow("try")
+                                    .addStatement("return $T.valueOf(this.$L)", enumType, field.name())
+                                    .endControlFlow()
+                                    .beginControlFlow("catch ($T e)", Throwable.class)
+                                    .addStatement("this.$L = null", field.name())
+                                    .addStatement("return null")
+                                    .endControlFlow().build()
+                            )
+                            .build());
                     type.addMethod(MethodSpec.methodBuilder(field.name()).addAnnotation(JsOverlay.class)
-                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-                        .returns(ClassName.bestGuess(complexType.canonicalName()))
-                        .addParameter(ParameterSpec.builder(enumType, "value", Modifier.FINAL).build())
-                        .addStatement("this.$L = value != null ? value.toString() : null", field.name())
-                        .addStatement("return this")
-                        .build());
+                            .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                            .returns(ClassName.bestGuess(complexType.canonicalName()))
+                            .addParameter(ParameterSpec.builder(enumType, "value", Modifier.FINAL).build())
+                            .addStatement("this.$L = value != null ? value.toString() : null", field.name())
+                            .addStatement("return this")
+                            .build());
                     break;
             }
         });
@@ -706,21 +712,21 @@ public class CodeGenerator {
             case LIST:
                 ListType listType = (ListType) type;
                 return ParameterizedTypeName.get(
-                    ClassName.get(List.class),
-                    ClassName.bestGuess(listType.componentType().canonicalName())
+                        ClassName.get(List.class),
+                        ClassName.bestGuess(listType.componentType().canonicalName())
                 );
             case SET:
                 SetType setType = (SetType) type;
                 return ParameterizedTypeName.get(
-                    ClassName.get(Set.class),
-                    ClassName.bestGuess(setType.componentType().canonicalName())
+                        ClassName.get(Set.class),
+                        ClassName.bestGuess(setType.componentType().canonicalName())
                 );
             case MAP:
                 MapType mapType = (MapType) type;
                 return ParameterizedTypeName.get(
-                    ClassName.get(Map.class),
-                    ClassName.bestGuess(mapType.keyType().canonicalName()),
-                    ClassName.bestGuess(mapType.valueType().canonicalName())
+                        ClassName.get(Map.class),
+                        ClassName.bestGuess(mapType.keyType().canonicalName()),
+                        ClassName.bestGuess(mapType.valueType().canonicalName())
                 );
             case ENUM:
                 // Enums are serialized to Strings.
@@ -761,34 +767,34 @@ public class CodeGenerator {
                 final ClassName className = ClassName.bestGuess(actionSpec.canonicalName());
                 final String fieldName = lowercaseFirst(value.name());
                 final TypeName typeName = ParameterizedTypeName.get(
-                    ClassName.get(Provider.class),
-                    className
+                        ClassName.get(Provider.class),
+                        className
                 );
 
                 type.addField(FieldSpec.builder(
-                    typeName,
-                    fieldName
+                        typeName,
+                        fieldName
                 ).addAnnotation(Inject.class).build());
 
                 type.addMethod(MethodSpec.methodBuilder(value.name())
-                    .addModifiers(Modifier.PUBLIC)
-                    .returns(typeName)
-                    .addStatement("return $L", fieldName)
-                    .build());
+                        .addModifiers(Modifier.PUBLIC)
+                        .returns(typeName)
+                        .addStatement("return $L", fieldName)
+                        .build());
             } else if (value.hasActions()) {
                 final ClassName className = ClassName.bestGuess(value.canonicalName() + ACTION_LOCATOR_SUFFIX);
                 final String fieldName = lowercaseFirst(value.name());
 
                 type.addField(FieldSpec.builder(
-                    className,
-                    fieldName
+                        className,
+                        fieldName
                 ).addAnnotation(Inject.class).build());
 
                 type.addMethod(MethodSpec.methodBuilder(value.name())
-                    .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-                    .returns(className)
-                    .addStatement("return $L", fieldName)
-                    .build());
+                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                        .returns(className)
+                        .addStatement("return $L", fieldName)
+                        .build());
 
                 generateLocators(value);
             }
@@ -805,7 +811,7 @@ public class CodeGenerator {
 
     protected void addGeneratorAnnotation(TypeSpec.Builder type) {
         type.addAnnotation(AnnotationSpec.builder(Generated.class)
-            .addMember("value", "$S", CodeGenerator.class.getCanonicalName())
-            .build());
+                .addMember("value", "$S", CodeGenerator.class.getCanonicalName())
+                .build());
     }
 }
