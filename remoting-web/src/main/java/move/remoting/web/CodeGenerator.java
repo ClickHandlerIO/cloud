@@ -546,7 +546,7 @@ public class CodeGenerator {
                                 .addStatement("return this")
                                 .build());
 
-                        type.addMethod(MethodSpec.methodBuilder(field.name() + "AsMoment").addAnnotation(JsOverlay.class)
+                        type.addMethod(MethodSpec.methodBuilder(field.name()).addAnnotation(JsOverlay.class)
                                 .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                                 .returns(TypeName.get(Moment.class))
                                 .addStatement("return this.$L == null ? null : $T.moment(this.$L)", field.name(), Moment.class, field.name())
