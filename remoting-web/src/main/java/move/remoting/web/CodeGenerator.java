@@ -1,5 +1,6 @@
 package move.remoting.web;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.google.common.base.Charsets;
 import com.squareup.javapoet.*;
 import com.squareup.javapoet.FieldSpec;
@@ -396,6 +397,10 @@ public class CodeGenerator {
                 return;
             }
 
+            if (field.field().getAnnotation(JsonIgnore.class) != null) {
+                return;
+            }
+
             TypeName typeName = null;
             TypeName valueTypeName = null;
 
@@ -452,11 +457,11 @@ public class CodeGenerator {
                     break;
             }
 
-            boolean isZonedDate = false;
-            if (field.type().canonicalName().equals("move.api.v1.common.ZonedDate")) {
-                isZonedDate = true;
-                typeName = TypeName.get(String.class);
-            }
+//            boolean isZonedDate = false;
+//            if (field.type().canonicalName().equals("move.api.v1.common.ZonedDate")) {
+//                isZonedDate = true;
+//                typeName = TypeName.get(String.class);
+//            }
 
             final String getterName = "get" + upperFirst(field.name());
             final String setterName = "set" + upperFirst(field.name());
@@ -475,21 +480,21 @@ public class CodeGenerator {
                     .addStatement("this.$L = value", field.name())
                     .addAnnotation(AnnotationSpec.builder(JsOverlay.class).build()).build());
 
-            if (isZonedDate) {
-                type.addMethod(MethodSpec.methodBuilder(field.name() + "AsMoment").addAnnotation(JsOverlay.class)
-                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-                        .returns(TypeName.get(Moment.class))
-                        .addStatement("return this.$L == null ? null : $T.moment(this.$L)", field.name(), Moment.class, field.name())
-                        .build());
-
-                type.addMethod(MethodSpec.methodBuilder(field.name()).addAnnotation(JsOverlay.class)
-                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-                        .returns(ClassName.bestGuess(complexType.canonicalName()))
-                        .addParameter(ParameterSpec.builder(TypeName.get(Moment.class), "value", Modifier.FINAL).build())
-                        .addStatement("this.$L = value == null ? null : value.toISOString()", field.name())
-                        .addStatement("return this")
-                        .build());
-            }
+//            if (isZonedDate) {
+//                type.addMethod(MethodSpec.methodBuilder(field.name() + "AsMoment").addAnnotation(JsOverlay.class)
+//                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+//                        .returns(TypeName.get(Moment.class))
+//                        .addStatement("return this.$L == null ? null : $T.moment(this.$L)", field.name(), Moment.class, field.name())
+//                        .build());
+//
+//                type.addMethod(MethodSpec.methodBuilder(field.name()).addAnnotation(JsOverlay.class)
+//                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+//                        .returns(ClassName.bestGuess(complexType.canonicalName()))
+//                        .addParameter(ParameterSpec.builder(TypeName.get(Moment.class), "value", Modifier.FINAL).build())
+//                        .addStatement("this.$L = value == null ? null : value.toISOString()", field.name())
+//                        .addStatement("return this")
+//                        .build());
+//            }
 
             switch (field.type().dataType()) {
                 case ARRAY:
