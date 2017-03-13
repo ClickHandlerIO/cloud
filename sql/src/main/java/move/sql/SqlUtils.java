@@ -267,6 +267,13 @@ public class SqlUtils {
             return prefix;
         }
 
+        if(column != null && column.embeddedName()){
+            if(prefix.endsWith("_"))
+                return prefix.substring(0,prefix.length()-1);
+
+            return prefix;
+        }
+
         if (!annotatedName.isEmpty()) {
             return prefix + annotatedName;
         }

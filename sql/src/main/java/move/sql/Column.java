@@ -49,4 +49,9 @@ public @interface Column {
      * @return
      */
     int length() default 0;
+
+    /**
+     *
+     */
+    boolean embeddedName() default false;
 }
