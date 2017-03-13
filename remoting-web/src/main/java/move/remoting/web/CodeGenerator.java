@@ -4,10 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.google.common.base.Charsets;
 import com.squareup.javapoet.*;
 import com.squareup.javapoet.FieldSpec;
-import common.client.Bus;
-import common.client.JSON;
-import common.client.MessageProvider;
-import common.client.Try;
+import common.client.*;
 import jsinterop.annotations.JsOverlay;
 import jsinterop.annotations.JsPackage;
 import jsinterop.annotations.JsProperty;
@@ -471,14 +468,15 @@ public class CodeGenerator {
                 type.addMethod(MethodSpec.methodBuilder(field.name() + "AsMoment").addAnnotation(JsOverlay.class)
                         .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                         .returns(TypeName.get(Moment.class))
-                        .addStatement("return this.$L == null ? null : MomentExtension.moment(this.$L)", field.name(), field.name())
+                        .addStatement("return this.$L == null ? null : Moment.tz(this.$L.date, this.$L.zone)", field.name(), field.name(), field.name())
                         .build());
 
                 type.addMethod(MethodSpec.methodBuilder(field.name()).addAnnotation(JsOverlay.class)
                         .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                         .returns(ClassName.bestGuess(complexType.canonicalName()))
                         .addParameter(ParameterSpec.builder(TypeName.get(Moment.class), "value", Modifier.FINAL).build())
-                        .addStatement("this.$L = value == null ? null : MomentExtension.toZonedDate(value)", field.name())
+//                        .addStatement("if (value == null) { this.$L = null; } else { ZonedDate zonedDate = $T.create(); zonedDate.date = value.toISOString(); zonedDate.zone = value.tz(); this.$L = zonedDate; }", field.name(), Jso.class, field.name())
+                        .addCode(CodeBlock.of("if (value == null) { this.$L = null; } else { ZonedDate zonedDate = $T.create(); zonedDate.date = value.toISOString(); zonedDate.zone = value.tz(); this.$L = zonedDate; }", field.name(), Jso.class, field.name()))
                         .addStatement("return this")
                         .build());
                 return;
