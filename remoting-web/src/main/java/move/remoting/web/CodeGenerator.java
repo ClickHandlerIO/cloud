@@ -454,18 +454,9 @@ public class CodeGenerator {
                     break;
             }
 
-            final String getterName = "get" + upperFirst(field.name());
-            final String setterName = "set" + upperFirst(field.name());
-
-            type.addField(FieldSpec.builder(typeName, field.name(), Modifier.PUBLIC)
-                    .addAnnotation(AnnotationSpec.builder(JsProperty.class)
-                            .addMember("name", "$S", field.jsonName()).build()).build());
-
             // Zoned Date
-            boolean isZonedDate = false;
             if (field.type().canonicalName().equals("move.api.v1.common.ZonedDate")) {
-                isZonedDate = true;
-                type.addMethod(MethodSpec.methodBuilder(field.name() + "AsMoment").addAnnotation(JsOverlay.class)
+                type.addMethod(MethodSpec.methodBuilder(field.name()).addAnnotation(JsOverlay.class)
                         .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                         .returns(TypeName.get(Moment.class))
                         .addStatement("return this.$L == null ? null : Moment.tz(this.$L.date, this.$L.zone)", field.name(), field.name(), field.name())
@@ -478,8 +469,19 @@ public class CodeGenerator {
                         .addCode(CodeBlock.of("if (value == null) { this.$L = null; } else { ZonedDate zonedDate = $T.create(); zonedDate.date = value.toISOString(); zonedDate.zone = value.tz(); this.$L = zonedDate; } ", field.name(), Jso.class, field.name()))
                         .addStatement("return this")
                         .build());
+
+                type.addField(FieldSpec.builder(typeName, field.name(), Modifier.PRIVATE)
+                        .addAnnotation(AnnotationSpec.builder(JsProperty.class)
+                                .addMember("name", "$S", field.jsonName()).build()).build());
                 return;
             }
+
+            final String getterName = "get" + upperFirst(field.name());
+            final String setterName = "set" + upperFirst(field.name());
+
+            type.addField(FieldSpec.builder(typeName, field.name(), Modifier.PUBLIC)
+                    .addAnnotation(AnnotationSpec.builder(JsProperty.class)
+                            .addMember("name", "$S", field.jsonName()).build()).build());
 
             type.addMethod(MethodSpec.methodBuilder(getterName).addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                     .returns(typeName)
