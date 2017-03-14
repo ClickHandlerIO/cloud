@@ -459,7 +459,7 @@ public class CodeGenerator {
                 type.addMethod(MethodSpec.methodBuilder(field.name()).addAnnotation(JsOverlay.class)
                         .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                         .returns(TypeName.get(Moment.class))
-                        .addStatement("return this.$L == null ? null : Moment.tz(this.$L, App.getSession().getTimeZone())", field.name(), field.name())
+                        .addStatement("return this.$L == null ? null : Moment.moment(this.$L)", field.name(), field.name())
                         .build());
 
                 type.addMethod(MethodSpec.methodBuilder(field.name()).addAnnotation(JsOverlay.class)
