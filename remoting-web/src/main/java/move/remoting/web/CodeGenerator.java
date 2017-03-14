@@ -459,18 +459,18 @@ public class CodeGenerator {
                 type.addMethod(MethodSpec.methodBuilder(field.name()).addAnnotation(JsOverlay.class)
                         .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                         .returns(TypeName.get(Moment.class))
-                        .addStatement("return this.$L == null ? null : Moment.tz(this.$L.date, this.$L.zone)", field.name(), field.name(), field.name())
+                        .addStatement("return this.$L == null ? null : Moment.tz(this.$L, App.getSession().getTimeZone())", field.name(), field.name())
                         .build());
 
                 type.addMethod(MethodSpec.methodBuilder(field.name()).addAnnotation(JsOverlay.class)
                         .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                         .returns(ClassName.bestGuess(complexType.canonicalName()))
                         .addParameter(ParameterSpec.builder(TypeName.get(Moment.class), "value", Modifier.FINAL).build())
-                        .addCode(CodeBlock.of("if (value == null) { this.$L = null; } else { ZonedDate zonedDate = $T.create(); zonedDate.date = Moment.moment(value).tz(\"UTC\").toISOString(); zonedDate.zone = value.tz(); this.$L = zonedDate; } ", field.name(), Jso.class, field.name()))
+                        .addStatement("this.$L = value == null ? null : value.tz(\"UTC\").toISOString()", field.name())
                         .addStatement("return this")
                         .build());
 
-                type.addField(FieldSpec.builder(typeName, field.name(), Modifier.PRIVATE)
+                type.addField(FieldSpec.builder(TypeName.get(String.class), field.name(), Modifier.PRIVATE)
                         .addAnnotation(AnnotationSpec.builder(JsProperty.class)
                                 .addMember("name", "$S", field.jsonName()).build()).build());
                 return;
@@ -537,7 +537,7 @@ public class CodeGenerator {
                 case INSTANT:
                 case DATE:
                 case DATETIME:
-                    if (!complexType.canonicalName().equals("move.api.v1.common.ZonedDate")) {
+//                    if (!complexType.canonicalName().equals("move.api.v1.common.ZonedDate")) {
                         type.addMethod(MethodSpec.methodBuilder(field.name()).addAnnotation(JsOverlay.class)
                                 .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                                 .returns(ClassName.bestGuess(complexType.canonicalName()))
@@ -551,7 +551,7 @@ public class CodeGenerator {
                                 .returns(TypeName.get(Moment.class))
                                 .addStatement("return this.$L == null ? null : $T.moment(this.$L)", field.name(), Moment.class, field.name())
                                 .build());
-                    }
+//                    }
                     break;
 
                 case BOOLEAN:
