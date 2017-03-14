@@ -466,7 +466,7 @@ public class CodeGenerator {
                         .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                         .returns(ClassName.bestGuess(complexType.canonicalName()))
                         .addParameter(ParameterSpec.builder(TypeName.get(Moment.class), "value", Modifier.FINAL).build())
-                        .addCode(CodeBlock.of("if (value == null) { this.$L = null; } else { ZonedDate zonedDate = $T.create(); zonedDate.date = Moment.moment(value).tz(\"UTC\")..toISOString(); zonedDate.zone = value.tz(); this.$L = zonedDate; } ", field.name(), Jso.class, field.name()))
+                        .addCode(CodeBlock.of("if (value == null) { this.$L = null; } else { ZonedDate zonedDate = $T.create(); zonedDate.date = Moment.moment(value).tz(\"UTC\").toISOString(); zonedDate.zone = value.tz(); this.$L = zonedDate; } ", field.name(), Jso.class, field.name()))
                         .addStatement("return this")
                         .build());
 
