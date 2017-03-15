@@ -15,7 +15,7 @@ public class ZonedDate {
 
    @Column(embeddedName = true)
    @JsonIgnore
-   private LocalDateTime date;
+   private LocalDateTime utc;
 
    @NoColumn
    @JsonIgnore
@@ -23,50 +23,64 @@ public class ZonedDate {
 
    @NoColumn
    @JsonIgnore
-   private ZonedDateTime value;
+   private ZonedDateTime local;
 
-   // Constructors
+   /**
+    * New ZonedDate in UTC
+    */
    public ZonedDate() {
-      this.date = ZonedDateTime.now(ZoneId.of("UTC")).toLocalDateTime();
+      this.utc = ZonedDateTime.now(ZoneId.of("UTC")).toLocalDateTime();
       this.zone = "UTC";
       update();
    }
 
+   /**
+    * New ZonedDate in the zone specified.
+    * @param zone
+    */
    public ZonedDate(String zone) {
-      this.date = ZonedDateTime.now(ZoneId.of(zone)).toLocalDateTime();
+      this.utc = ZonedDateTime.now(ZoneId.of(zone)).toLocalDateTime();
       this.zone = zone;
       update();
    }
 
-   public ZonedDate(ZonedDateTime date) {
-      this.zone = date.getZone().getId();
-      this.date = date.toLocalDateTime();
-      update();
-   }
-
-   public ZonedDate(LocalDateTime date) {
-      this.date = date;
+   /**
+    * New ZonedDate from a java LocalDateTime.  Value passed in is assumed to be in UTC.
+    * @param utc
+    */
+   public ZonedDate(LocalDateTime utc) {
+      this.utc = utc;
       this.zone = "UTC";
       update();
    }
 
+   /**
+    * New ZonedDate with supplied date, time and zone details.
+    * @param year
+    * @param monthOfYear
+    * @param dayOfMonth
+    * @param hourOfDay
+    * @param minuteOfHour
+    * @param zone
+    */
    public ZonedDate(int year, int monthOfYear, int dayOfMonth, int hourOfDay, int minuteOfHour, String zone) {
-      this.date = LocalDateTime.of(year, monthOfYear, dayOfMonth, hourOfDay, minuteOfHour, 0, 0);
+      this.utc = LocalDateTime.of(year, monthOfYear, dayOfMonth, hourOfDay, minuteOfHour, 0, 0);
       this.zone = zone;
       update();
    }
+
 
    // Getters & Setters
-   public LocalDateTime getDate() {
-      return date;
+   public LocalDateTime getUtc() {
+      return utc;
    }
 
-   public void setDate(LocalDateTime date) throws Exception {
-      if (this.date != null && !zone.equalsIgnoreCase("UTC")) {
+   public void setUtc(LocalDateTime utc) throws Exception {
+      if (this.utc != null && !zone.equalsIgnoreCase("UTC")) {
          throw new Exception("Cannot set date after it has been set as something other than UTC");
       }
 
-      this.date = date;
+      this.utc = utc;
       update();
    }
 
@@ -81,35 +95,22 @@ public class ZonedDate {
       return this;
    }
 
-   public ZonedDateTime getValue() {
-      return value;
-   }
-
-   public void setValue(ZonedDateTime value) throws Exception {
-      if (this.value != null) {
-         throw new Exception("Value Cannot Be Changed Once Set!");
-      }
-
-      this.value = value;
-      update();
-   }
-
 
    // Converters to the timezone
    public ZonedDateTime asZonedDateTime() {
-      return value;
+      return local;
    }
 
    public LocalDateTime asLocalDateTime() {
-      return value.toLocalDateTime();
+      return local.toLocalDateTime();
    }
 
    public LocalDate asLocalDate() {
-      return value.toLocalDate();
+      return local.toLocalDate();
    }
 
    public LocalTime asLocalTime() {
-      return value.toLocalTime();
+      return local.toLocalTime();
    }
 
 
@@ -123,84 +124,84 @@ public class ZonedDate {
    }
 
    public ZonedDate max() {
-      this.date = (LocalDateTime.MAX.atZone(ZoneId.of(zone)).toLocalDateTime());
+      this.utc = (LocalDateTime.MAX.atZone(ZoneId.of(zone)).toLocalDateTime());
       update();
 
       return this;
    }
 
    public ZonedDate min() {
-      this.date = (LocalDateTime.MIN.atZone(ZoneId.of(zone)).toLocalDateTime());
+      this.utc = (LocalDateTime.MIN.atZone(ZoneId.of(zone)).toLocalDateTime());
       update();
 
       return this;
    }
 
    public ZonedDate plusMonths(int months) {
-      this.date = this.date.plusMonths(months);
+      this.utc = this.utc.plusMonths(months);
       update();
 
       return this;
    }
 
    public ZonedDate minusMonths(int months) {
-      this.date = this.date.minusMonths(months);
+      this.utc = this.utc.minusMonths(months);
       update();
 
       return this;
    }
 
    public ZonedDate plusDays(int days) {
-      this.date = this.date.plusDays(days);
+      this.utc = this.utc.plusDays(days);
       update();
 
       return this;
    }
 
    public ZonedDate minusDays(int days) {
-      this.date = this.date.minusDays(days);
+      this.utc = this.utc.minusDays(days);
       update();
 
       return this;
    }
 
    public ZonedDate plusHours(long hours) {
-      this.date = this.date.plusHours(hours);
+      this.utc = this.utc.plusHours(hours);
       update();
 
       return this;
    }
 
    public ZonedDate minusHours(int hours) {
-      this.date = this.date.minusHours(hours);
+      this.utc = this.utc.minusHours(hours);
       update();
 
       return this;
    }
 
    public ZonedDate plusMinutes(long minutes) {
-      this.date = this.date.plusMinutes(minutes);
+      this.utc = this.utc.plusMinutes(minutes);
       update();
 
       return this;
    }
 
    public ZonedDate minusMinutes(long minutes) {
-      this.date = this.date.minusMinutes(minutes);
+      this.utc = this.utc.minusMinutes(minutes);
       update();
 
       return this;
    }
 
    public ZonedDate plusSeconds(long seconds) {
-      this.date = this.date.plusSeconds(seconds);
+      this.utc = this.utc.plusSeconds(seconds);
       update();
 
       return this;
    }
 
    public ZonedDate minusSeconds(long seconds) {
-      this.date = this.date.minusSeconds(seconds);
+      this.utc = this.utc.minusSeconds(seconds);
       update();
 
       return this;
@@ -208,7 +209,7 @@ public class ZonedDate {
 
    public ZonedDate plusMillis(long millis) {
       long nanos = millis * 1000000;
-      this.date = this.date.plusNanos(nanos);
+      this.utc = this.utc.plusNanos(nanos);
       update();
 
       return this;
@@ -216,7 +217,7 @@ public class ZonedDate {
 
    public ZonedDate minusMillis(long millis) {
       long nanos = millis * 1000000;
-      this.date = this.date.minusNanos(nanos);
+      this.utc = this.utc.minusNanos(nanos);
       update();
 
       return this;
@@ -227,56 +228,58 @@ public class ZonedDate {
    }
 
    public ZonedDate withHour(int hour) {
-      LocalDateTime atHour = this.value.toLocalDateTime().withHour(hour).withMinute(0).withSecond(0).withNano(0);
-      value = atHour.atZone(ZoneId.of(this.zone));
-      this.date = value.withZoneSameInstant(ZoneId.of("UTC")).toLocalDateTime();
+      LocalDateTime atHour = this.local.toLocalDateTime().withHour(hour).withMinute(0).withSecond(0).withNano(0);
+      local = atHour.atZone(ZoneId.of(this.zone));
+      this.utc = local.withZoneSameInstant(ZoneId.of("UTC")).toLocalDateTime();
 
       return this;
    }
 
    public ZonedDate withMinute(int minute) {
-      LocalDateTime atHour = value.toLocalDateTime().withMinute(minute).withSecond(0).withNano(0);
-      value = atHour.atZone(ZoneId.of(this.zone));
-      this.date = value.withZoneSameInstant(ZoneId.of("UTC")).toLocalDateTime();
+      LocalDateTime atHour = local.toLocalDateTime().withMinute(minute).withSecond(0).withNano(0);
+      local = atHour.atZone(ZoneId.of(this.zone));
+      this.utc = local.withZoneSameInstant(ZoneId.of("UTC")).toLocalDateTime();
 
       return this;
    }
 
    public ZonedDate withSecond(int second) {
-      LocalDateTime atHour = value.toLocalDateTime().withSecond(second).withNano(0);
-      value = atHour.atZone(ZoneId.of(this.zone));
-      this.date = value.withZoneSameInstant(ZoneId.of("UTC")).toLocalDateTime();
+      LocalDateTime atHour = local.toLocalDateTime().withSecond(second).withNano(0);
+      local = atHour.atZone(ZoneId.of(this.zone));
+      this.utc = local.withZoneSameInstant(ZoneId.of("UTC")).toLocalDateTime();
 
       return this;
    }
 
    public ZonedDate withNano(int nano) {
-      LocalDateTime atHour = value.toLocalDateTime().withNano(nano);
-      value = atHour.atZone(ZoneId.of(this.zone));
-      this.date = value.withZoneSameInstant(ZoneId.of("UTC")).toLocalDateTime();
+      LocalDateTime atHour = local.toLocalDateTime().withNano(nano);
+      local = atHour.atZone(ZoneId.of(this.zone));
+      this.utc = local.withZoneSameInstant(ZoneId.of("UTC")).toLocalDateTime();
 
       return this;
    }
 
    public boolean isBefore(ZonedDate checkDate) {
-      return this.getDate().isBefore(checkDate.getDate());
+      return this.getUtc().isBefore(checkDate.getUtc());
    }
 
    public boolean isAfter(ZonedDate checkDate) {
-      return this.getDate().isAfter(checkDate.getDate());
+      return this.getUtc().isAfter(checkDate.getUtc());
    }
 
    public boolean isSameDay(ZonedDate checkDate) {
-      return this.getDate().toLocalDate().isEqual(checkDate.getDate().toLocalDate());
+      return this.getUtc().toLocalDate().isEqual(checkDate.getUtc().toLocalDate());
    }
 
    public ZonedDate copy() {
-      return new ZonedDate(this.asZonedDateTime());
+      ZonedDate newDate = new ZonedDate(this.getUtc());
+      newDate.setZone(this.zone);
+      return newDate;
    }
 
    private synchronized void update() {
-      if (date == null) {
-         value = null;
+      if (utc == null) {
+         local = null;
          return;
       }
 
@@ -286,13 +289,13 @@ public class ZonedDate {
 
       if (!inited) {
          // This is first time.
-         value = ZonedDateTime.of(date, ZoneId.of(zone));
-         date = value.withZoneSameInstant(ZoneId.of("UTC")).toLocalDateTime();
+         local = ZonedDateTime.of(utc, ZoneId.of(zone));
+         utc = local.withZoneSameInstant(ZoneId.of("UTC")).toLocalDateTime();
          inited = true;
       } else {
-         ZonedDateTime from = ZonedDateTime.of(date, ZoneId.of("UTC"));
-         value = from.withZoneSameInstant(ZoneId.of(zone));
-         date = value.withZoneSameInstant(ZoneId.of("UTC")).toLocalDateTime();
+         ZonedDateTime from = ZonedDateTime.of(utc, ZoneId.of("UTC"));
+         local = from.withZoneSameInstant(ZoneId.of(zone));
+         utc = local.withZoneSameInstant(ZoneId.of("UTC")).toLocalDateTime();
       }
    }
 }

@@ -10,6 +10,6 @@ import java.io.IOException;
 public class ZonedDateSerializer extends JsonSerializer<ZonedDate> {
    @Override
    public void serialize(ZonedDate zonedDate, JsonGenerator jsonGenerator, SerializerProvider serializerProvider) throws IOException, JsonProcessingException {
-      jsonGenerator.writeString(zonedDate.getDate() == null ? null : zonedDate.getDate().toString() + "Z");
+      jsonGenerator.writeString(zonedDate.getUtc() == null ? null : zonedDate.getUtc().toString() + "Z");
    }
 }

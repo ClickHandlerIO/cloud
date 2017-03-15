@@ -224,7 +224,7 @@ public class TableMapping {
                         if (value != null && property.enumType && value instanceof String) {
                             property.set(entity, property.enumConstantMap.get((String) value));
                         } else if (value != null && value instanceof ZonedDate){
-                            property.set(entity, ((ZonedDate) value).getDate());
+                            property.set(entity, ((ZonedDate) value).getUtc());
                         } else {
                             property.set(entity, value);
                         }
