@@ -14,17 +14,22 @@ public class ZonedDateDeserializer extends JsonDeserializer<ZonedDate> {
         String dateText = jsonParser.getText();
 
         // Only accept dates in ISO format.  TODO: add better validation based on format here maybe?
-        if (dateText.length() != 19 && dateText.length() != 20 && dateText.length() != 23 && dateText.length() != 24) {
+        if (dateText.length() != 16
+            && dateText.length() != 17
+           && dateText.length() != 19
+           & dateText.length() != 20
+           && dateText.length() != 23
+           && dateText.length() != 24) {
             throw new IOException("Dates must be properly formed to ISO standard yyyy-MM-dd'T'HH:mm:ss'Z'");
         }
 
         // If date includes a timezone it must be UTC
-        if ((dateText.length() == 20 || dateText.length() == 24) && !dateText.endsWith("Z")) {
+        if ((dateText.length() == 17 || dateText.length() == 20 || dateText.length() == 24) && !dateText.endsWith("Z")) {
             throw new IOException("Dates must be confirmed in UTC");
         }
 
         // Take off the Z
-        if (dateText.length() == 20) {
+        if (dateText.length() == 17 || dateText.length() == 20) {
             dateText = dateText.substring(0, dateText.length() - 1);
         }
 
