@@ -271,6 +271,10 @@ public class ZonedDate {
       return this.getUtc().toLocalDate().isEqual(checkDate.getUtc().toLocalDate());
    }
 
+   public boolean isNull(){
+      return this.getUtc() == null;
+   }
+
    public ZonedDate copy() {
       ZonedDate newDate = new ZonedDate(this.getUtc());
       newDate.setZone(this.zone);

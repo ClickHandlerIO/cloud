@@ -11,7 +11,7 @@ public class TimestampZonedDateConverter implements org.jooq.Converter<Timestamp
 
    @Override
    public Timestamp to(ZonedDate zonedDate) {
-      return zonedDate == null ? null : Timestamp.valueOf(zonedDate.getUtc());
+      return zonedDate == null || zonedDate.getUtc() == null ? null : Timestamp.valueOf(zonedDate.getUtc());
    }
 
    @Override
