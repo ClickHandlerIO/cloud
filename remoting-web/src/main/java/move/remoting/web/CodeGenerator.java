@@ -466,7 +466,7 @@ public class CodeGenerator {
                         .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                         .returns(ClassName.bestGuess(complexType.canonicalName()))
                         .addParameter(ParameterSpec.builder(TypeName.get(Moment.class), "value", Modifier.FINAL).build())
-                        .addStatement("this.$L = value == null ? null : value.tz(\"UTC\").toISOString()", field.name())
+                        .addStatement("this.$L = value == null ? null : Moment.moment(value).tz(\"UTC\").toISOString()", field.name())
                         .addStatement("return this")
                         .build());
 
