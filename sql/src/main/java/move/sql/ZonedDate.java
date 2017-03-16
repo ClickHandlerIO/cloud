@@ -124,14 +124,14 @@ public class ZonedDate {
    }
 
    public ZonedDate max() {
-      this.utc = (LocalDateTime.MAX.atZone(ZoneId.of(zone)).toLocalDateTime());
+      this.utc = (LocalDateTime.now().atZone(ZoneId.of(zone)).plusYears(1000).toLocalDateTime());
       update();
 
       return this;
    }
 
    public ZonedDate min() {
-      this.utc = (LocalDateTime.MIN.atZone(ZoneId.of(zone)).toLocalDateTime());
+      this.utc = (LocalDateTime.now().atZone(ZoneId.of(zone)).minusYears(1000).toLocalDateTime());
       update();
 
       return this;
