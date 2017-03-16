@@ -4,6 +4,7 @@ import com.netflix.hystrix.*;
 import io.vertx.rxjava.core.Vertx;
 import javaslang.control.Try;
 import rx.Observable;
+import rx.Single;
 
 import javax.annotation.Nullable;
 import javax.inject.Inject;
@@ -175,6 +176,8 @@ public class ActionProvider<A, IN, OUT> {
                 // Default to THREAD
                 default:
                 case BEST:
+                    hystrixIsolation = best();
+                    break;
                 case SEMAPHORE:
                     hystrixIsolation = HystrixCommandProperties.ExecutionIsolationStrategy.SEMAPHORE;
                     break;
@@ -203,7 +206,7 @@ public class ActionProvider<A, IN, OUT> {
             }
         }
 
-        // Is it a blocking action.
+        // Is it a blocking action?
         else if (AbstractBlockingAction.class.isAssignableFrom(actionClass)) {
             HystrixCommandProperties.ExecutionIsolationStrategy hystrixIsolation;
             switch (isolationStrategy) {
@@ -212,6 +215,8 @@ public class ActionProvider<A, IN, OUT> {
                     break;
                 default:
                 case BEST:
+                    hystrixIsolation = best();
+                    break;
                 case THREAD:
                     hystrixIsolation = HystrixCommandProperties.ExecutionIsolationStrategy.THREAD;
                     break;
@@ -230,6 +235,24 @@ public class ActionProvider<A, IN, OUT> {
                     .andCommandKey(HystrixCommandKey.Factory.asKey(commandKey(actionConfig, actionClass)))
                     .andCommandPropertiesDefaults(commandPropertiesDefaults);
 
+        }
+    }
+
+    protected HystrixCommandProperties.ExecutionIsolationStrategy best() {
+        // Default Scheduled Actions to run on the calling thread.
+        if (AbstractScheduledAction.class.isAssignableFrom(actionClass)
+            || AbstractBlockingScheduledAction.class.isAssignableFrom(actionClass)) {
+            return HystrixCommandProperties.ExecutionIsolationStrategy.SEMAPHORE;
+        }
+
+        // Default Blocking Actions to run on a Thread Pool.
+        else if (AbstractBlockingAction.class.isAssignableFrom(actionClass)) {
+            return HystrixCommandProperties.ExecutionIsolationStrategy.THREAD;
+        }
+
+        // Default non-blocking Actions to run on the calling thread.
+        else {
+            return HystrixCommandProperties.ExecutionIsolationStrategy.SEMAPHORE;
         }
     }
 
@@ -369,7 +392,7 @@ public class ActionProvider<A, IN, OUT> {
         final io.vertx.rxjava.core.Context ctx = Vertx.currentContext();//vertxCore.getOrCreateContext();
 
         return
-            Observable.create(
+            Single.<OUT>create(
                 subscriber -> {
                     observable.subscribe(
                         r -> {
@@ -381,12 +404,10 @@ public class ActionProvider<A, IN, OUT> {
                                     if (subscriber.isUnsubscribed())
                                         return;
 
-                                    subscriber.onNext(r);
-                                    subscriber.onCompleted();
+                                    subscriber.onSuccess(r);
                                 });
                             } else {
-                                subscriber.onNext(r);
-                                subscriber.onCompleted();
+                                subscriber.onSuccess(r);
                             }
                         },
                         e -> {
@@ -406,6 +427,6 @@ public class ActionProvider<A, IN, OUT> {
                         }
                     );
                 }
-            );
+            ).toObservable();
     }
 }

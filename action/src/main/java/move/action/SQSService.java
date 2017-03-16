@@ -2,10 +2,11 @@ package move.action;
 
 import com.amazon.sqs.javamessaging.AmazonSQSExtendedClient;
 import com.amazon.sqs.javamessaging.ExtendedClientConfiguration;
+import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.http.AmazonHttpClient;
-import com.amazonaws.regions.Region;
 import com.amazonaws.regions.Regions;
+import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.sqs.AmazonSQS;
 import com.amazonaws.services.sqs.AmazonSQSClient;
@@ -107,7 +108,7 @@ public class SQSService extends AbstractIdleService implements WorkerService {
                     regionName +
                     "' is not a valid AWS region name.");
 
-            final AmazonS3Client s3Client;
+            final AmazonS3 s3Client;
             final String s3Bucket = Strings.nullToEmpty(workerConfig.s3Bucket).trim();
             final String s3AwsAccessKey = Strings.nullToEmpty(workerConfig.s3AccessKey).trim();
             final String s3AwsSecretKey = Strings.nullToEmpty(workerConfig.s3SecretKey).trim();
@@ -115,9 +116,16 @@ public class SQSService extends AbstractIdleService implements WorkerService {
             if (s3Bucket.isEmpty()) {
                 s3Client = null;
             } else if (s3AwsAccessKey.isEmpty()) {
-                s3Client = new AmazonS3Client();
+                s3Client = AmazonS3Client.builder()
+                    .withRegion(region)
+                    .build();
             } else {
-                s3Client = new AmazonS3Client(new BasicAWSCredentials(s3AwsAccessKey, s3AwsSecretKey));
+                s3Client = AmazonS3Client.builder()
+                    .withRegion(region)
+                    .withCredentials(
+                        new AWSStaticCredentialsProvider(
+                            new BasicAWSCredentials(s3AwsAccessKey, s3AwsSecretKey)))
+                    .build();
             }
 
             final String awsAccessKey = Strings.nullToEmpty(workerConfig.accessKey).trim();
@@ -147,56 +155,82 @@ public class SQSService extends AbstractIdleService implements WorkerService {
 
             if (awsAccessKey.isEmpty()) {
                 sqsSendClient = s3Client == null ?
-                    new AmazonSQSClient() :
-                    new AmazonSQSExtendedClient(new AmazonSQSClient(), extendedClientConfiguration);
+                    AmazonSQSClient.builder().withRegion(region).build() :
+                    new AmazonSQSExtendedClient(
+                        AmazonSQSClient.builder().withRegion(region).build(),
+                        extendedClientConfiguration
+                    );
 
                 if (workerConfig.receiveThreads > 0) {
                     sqsReceiveClient = s3Client == null ?
-                        new AmazonSQSClient() :
-                        new AmazonSQSExtendedClient(new AmazonSQSClient(), extendedClientConfiguration);
+                        AmazonSQSClient.builder().withRegion(region).build() :
+                        new AmazonSQSExtendedClient(
+                            AmazonSQSClient.builder().withRegion(region).build(),
+                            extendedClientConfiguration
+                        );
 
                     sqsDeleteClient = s3Client == null ?
-                        new AmazonSQSClient() :
-                        new AmazonSQSExtendedClient(new AmazonSQSClient(), extendedClientConfiguration);
+                        AmazonSQSClient.builder().withRegion(region).build() :
+                        new AmazonSQSExtendedClient(
+                            AmazonSQSClient.builder().withRegion(region).build(),
+                            extendedClientConfiguration
+                        );
                 } else {
                     sqsReceiveClient = null;
                     sqsDeleteClient = null;
                 }
             } else {
                 sqsSendClient = s3Client == null ?
-                    new AmazonSQSClient(new BasicAWSCredentials(awsAccessKey, awsSecretKey)) :
+                    AmazonSQSClient.builder()
+                        .withRegion(region)
+                        .withCredentials(
+                            new AWSStaticCredentialsProvider(
+                                new BasicAWSCredentials(awsAccessKey, awsSecretKey)))
+                        .build() :
                     new AmazonSQSExtendedClient(
-                        new AmazonSQSClient(
-                            new BasicAWSCredentials(awsAccessKey, awsSecretKey)), extendedClientConfiguration);
+                        AmazonSQSClient.builder()
+                            .withRegion(region)
+                            .withCredentials(
+                                new AWSStaticCredentialsProvider(
+                                    new BasicAWSCredentials(awsAccessKey, awsSecretKey)))
+                            .build(),
+                        extendedClientConfiguration
+                    );
 
                 if (workerConfig.receiveThreads > 0) {
                     sqsReceiveClient = s3Client == null ?
-                        new AmazonSQSClient(new BasicAWSCredentials(awsAccessKey, awsSecretKey)) :
+                        AmazonSQSClient.builder()
+                            .withRegion(region)
+                            .withCredentials(
+                                new AWSStaticCredentialsProvider(
+                                    new BasicAWSCredentials(awsAccessKey, awsSecretKey)))
+                            .build() :
                         new AmazonSQSExtendedClient(
-                            new AmazonSQSClient(
-                                new BasicAWSCredentials(awsAccessKey, awsSecretKey)), extendedClientConfiguration);
+                            AmazonSQSClient.builder()
+                                .withRegion(region)
+                                .withCredentials(
+                                    new AWSStaticCredentialsProvider(
+                                        new BasicAWSCredentials(awsAccessKey, awsSecretKey)))
+                                .build(), extendedClientConfiguration);
 
                     sqsDeleteClient = s3Client == null ?
-                        new AmazonSQSClient(new BasicAWSCredentials(awsAccessKey, awsSecretKey)) :
+                        AmazonSQSClient.builder()
+                            .withRegion(region)
+                            .withCredentials(
+                                new AWSStaticCredentialsProvider(
+                                    new BasicAWSCredentials(awsAccessKey, awsSecretKey)))
+                            .build() :
                         new AmazonSQSExtendedClient(
-                            new AmazonSQSClient(
-                                new BasicAWSCredentials(awsAccessKey, awsSecretKey)), extendedClientConfiguration);
+                            AmazonSQSClient.builder()
+                                .withRegion(region)
+                                .withCredentials(
+                                    new AWSStaticCredentialsProvider(
+                                        new BasicAWSCredentials(awsAccessKey, awsSecretKey)))
+                                .build(), extendedClientConfiguration);
                 } else {
                     sqsReceiveClient = null;
                     sqsDeleteClient = null;
                 }
-            }
-
-            // Set region.
-            sqsSendClient.setRegion(Region.getRegion(region));
-            if (s3Client != null) {
-                s3Client.setRegion(Region.getRegion(region));
-            }
-            if (sqsReceiveClient != null) {
-                sqsReceiveClient.setRegion(Region.getRegion(region));
-            }
-            if (sqsDeleteClient != null) {
-                sqsDeleteClient.setRegion(Region.getRegion(region));
             }
 
             WorkerActionProvider dedicated = null;

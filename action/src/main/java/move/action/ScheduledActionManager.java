@@ -1,7 +1,6 @@
 package move.action;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Throwables;
 import com.google.common.util.concurrent.AbstractExecutionThreadService;
 import com.google.common.util.concurrent.AbstractIdleService;
 import com.google.common.util.concurrent.AbstractScheduledService;
@@ -105,17 +104,20 @@ public class ScheduledActionManager extends AbstractIdleService {
                             while (isRunning()) {
                                 doRun();
                             }
+                        } catch (InterruptedException e) {
+                            return;
                         } catch (Exception e) {
                             LOG.error("Error Running Standalone Scheduled Action  " + provider.getActionClass().getCanonicalName(), e);
                             return;
                         }
                     } else {
-
                         ILock lock = null;
 
                         try {
                             lock = hazelcastInstance.getLock(provider.getActionClass().getCanonicalName());
                             lock.lockInterruptibly();
+                        } catch (InterruptedException e) {
+                            return;
                         } catch (Exception e1) {
                             LOG.info("Failed to get cluster lock for Scheduled Action " + provider.getActionClass().getCanonicalName(), e1);
                         }
@@ -124,6 +126,8 @@ public class ScheduledActionManager extends AbstractIdleService {
                             while (isRunning() && !Thread.interrupted()) {
                                 try {
                                     doRun();
+                                } catch (InterruptedException e) {
+                                    return;
                                 } catch (Exception e1) {
                                     LOG.error("Error Running Hazelcast Scheduled Action " + provider.getActionClass().getCanonicalName(), e1);
                                 }
@@ -178,7 +182,7 @@ public class ScheduledActionManager extends AbstractIdleService {
                 run();
             } catch (InterruptedException e) {
                 LOG.warn(provider.getActionClass().getCanonicalName(), e);
-                Throwables.propagate(e);
+                throw e;
             } catch (Throwable e) {
                 LOG.warn(provider.getActionClass().getCanonicalName(), e);
             }
