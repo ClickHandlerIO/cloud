@@ -120,7 +120,11 @@ public class ZonedDate {
    }
 
    public ZonedDate endOfDay() {
-      return this.withHour(23).withMinute(59).withSecond(59).withNano(999999999);
+      return startOfTomorrow().minusNanos(1);
+   }
+
+   public ZonedDate startOfTomorrow() {
+      return startOfDay().plusDays(1);
    }
 
    public ZonedDate max() {
@@ -222,6 +226,20 @@ public class ZonedDate {
 
       return this;
    }
+
+   public ZonedDate plusNanos(long nanos) {
+        this.utc = this.utc.plusNanos(nanos);
+        update();
+
+        return this;
+     }
+
+   public ZonedDate minusNanos(long nanos) {
+        this.utc = this.utc.minusNanos(nanos);
+        update();
+
+        return this;
+     }
 
    public ZonedDate withTime(int hour, int min, int second) {
       return this.withHour(hour).withMinute(min).withSecond(second);
