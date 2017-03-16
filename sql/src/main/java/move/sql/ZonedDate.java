@@ -29,13 +29,11 @@ public class ZonedDate {
     * New ZonedDate in UTC
     */
    public ZonedDate() {
-      this.utc = ZonedDateTime.now(ZoneId.of("UTC")).toLocalDateTime();
-      this.zone = "UTC";
-      update();
    }
 
    /**
     * New ZonedDate in the zone specified.
+    *
     * @param zone
     */
    public ZonedDate(String zone) {
@@ -46,6 +44,7 @@ public class ZonedDate {
 
    /**
     * New ZonedDate from a java LocalDateTime.  Value passed in is assumed to be in UTC.
+    *
     * @param utc
     */
    public ZonedDate(LocalDateTime utc) {
@@ -56,6 +55,7 @@ public class ZonedDate {
 
    /**
     * New ZonedDate with supplied date, time and zone details.
+    *
     * @param year
     * @param monthOfYear
     * @param dayOfMonth
@@ -271,8 +271,20 @@ public class ZonedDate {
       return this.getUtc().toLocalDate().isEqual(checkDate.getUtc().toLocalDate());
    }
 
-   public boolean isNull(){
+   public boolean isNull() {
       return this.getUtc() == null;
+   }
+
+   public ZonedDate now() {
+      this.utc = ZonedDateTime.now(ZoneId.of("UTC")).toLocalDateTime();
+
+      if(this.zone == null){
+         this.zone = "UTC";
+      }
+
+      update();
+
+      return this;
    }
 
    public ZonedDate copy() {
