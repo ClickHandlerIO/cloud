@@ -242,7 +242,7 @@ public class ActionProvider<A, IN, OUT> {
         // Default Scheduled Actions to run on the calling thread.
         if (AbstractScheduledAction.class.isAssignableFrom(actionClass)
             || AbstractBlockingScheduledAction.class.isAssignableFrom(actionClass)) {
-            return HystrixCommandProperties.ExecutionIsolationStrategy.SEMAPHORE;
+            return HystrixCommandProperties.ExecutionIsolationStrategy.THREAD;
         }
 
         // Default Blocking Actions to run on a Thread Pool.
