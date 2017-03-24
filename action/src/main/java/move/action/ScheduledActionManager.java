@@ -69,6 +69,7 @@ public class ScheduledActionManager extends AbstractIdleService {
         private final ScheduledActionProvider<?> provider;
         private final int intervalSeconds;
         private Thread thread;
+        private boolean startup = true;
 
         public ClusterSingleton(ScheduledActionProvider<?> provider) {
             this.provider = provider;
@@ -146,7 +147,11 @@ public class ScheduledActionManager extends AbstractIdleService {
 
         private void doRun() throws InterruptedException {
             final long start = System.currentTimeMillis();
-            provider.observe(EMPTY).toBlocking().first();
+
+            if(startup)
+                startup = false;
+            else
+                provider.observe(EMPTY).toBlocking().first();
 
             final long elapsed = System.currentTimeMillis() - start;
             final long sleepFor = TimeUnit.SECONDS.toMillis(intervalSeconds) - elapsed;
@@ -166,6 +171,7 @@ public class ScheduledActionManager extends AbstractIdleService {
      */
     private class NodeSingleton extends AbstractScheduledService {
         private final ScheduledActionProvider<?> provider;
+        private boolean startup = true;
 
         public NodeSingleton(ScheduledActionProvider<?> provider) {
             this.provider = provider;
@@ -189,7 +195,10 @@ public class ScheduledActionManager extends AbstractIdleService {
         }
 
         protected void run() throws InterruptedException {
-            provider.observe(EMPTY).toBlocking().first();
+            if(startup)
+                startup = false;
+            else
+                provider.observe(EMPTY).toBlocking().first();
         }
 
         @Override
