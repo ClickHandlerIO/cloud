@@ -32,4 +32,10 @@ public @interface WorkerAction {
      * @return
      */
     boolean dedicated() default false;
+
+   /**
+    *
+    * @return
+    */
+    String messageGroupId();
 }

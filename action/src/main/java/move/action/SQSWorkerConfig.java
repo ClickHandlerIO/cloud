@@ -17,6 +17,10 @@ public class SQSWorkerConfig {
    @JsonProperty
    public String sqsName;
    /**
+    * Indicates FIFO queue rules to be used.
+    */
+   public boolean fifo;
+   /**
     * AWS region
     */
    @JsonProperty

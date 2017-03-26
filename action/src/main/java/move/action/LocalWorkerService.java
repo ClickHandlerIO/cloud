@@ -11,6 +11,7 @@ import rx.Observable;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.TimeUnit;
 
 /**
  *
@@ -42,7 +43,13 @@ public class LocalWorkerService extends AbstractIdleService implements WorkerSer
    @Override
    public Observable<Boolean> send(WorkerRequest request) {
       return Observable.create(subscriber -> {
-         queue.add(request);
+         if (request.delaySeconds > 0) {
+            vertx.setTimer(TimeUnit.SECONDS.toMillis(request.delaySeconds), event -> {
+               queue.add(request);
+            });
+         } else {
+            queue.add(request);
+         }
 
          subscriber.onNext(true);
          subscriber.onCompleted();
