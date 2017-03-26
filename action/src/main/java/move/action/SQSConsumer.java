@@ -349,7 +349,7 @@ public class SQSConsumer extends AbstractIdleService {
             try {
                // Does this server need more messages.
                if (inflight.get() >= maxInflight) {
-                  LOG.warn("Max inflight reached, will check again in 2500ms");
+                  LOG.warn("Max inflight reached, will check again in 2000ms");
                   try {
                      Thread.sleep(2_000);
                      continue;
