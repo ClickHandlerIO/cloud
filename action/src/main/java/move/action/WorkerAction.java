@@ -37,5 +37,5 @@ public @interface WorkerAction {
     *
     * @return
     */
-    String messageGroupId();
+    String messageGroupId() default "";
 }

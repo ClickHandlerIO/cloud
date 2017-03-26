@@ -287,7 +287,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             settings.setRenderKeywordStyle(RenderKeywordStyle.UPPER);
             settings.setReflectionCaching(true);
             settings.setParamType(ParamType.INDEXED);
-            settings.setAttachRecords(true);
+            settings.setAttachRecords(false);
             settings.setUpdatablePrimaryKeys(false);
             settings.setQueryTimeout(config.getDefaultQueryTimeoutInSeconds());
             settings.setBackslashEscaping(BackslashEscaping.DEFAULT);

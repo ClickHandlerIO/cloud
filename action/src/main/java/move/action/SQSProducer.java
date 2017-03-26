@@ -221,12 +221,19 @@ public class SQSProducer extends AbstractIdleService implements WorkerProducer {
                      final String id = Integer.toString(i);
 
                      if (config.fifo) {
+                        String groupId = config.name;
+
+                        if(!workerRequest.actionProvider.getMessageGroupId().isEmpty())
+                           groupId = workerRequest.actionProvider.getMessageGroupId();
+
+                        if(workerRequest.groupId != null && !workerRequest.groupId.isEmpty())
+                           groupId = workerRequest.groupId;
+
                         batch.put(id, new Entry(
                            workerRequest,
                            new SendMessageBatchRequestEntry()
                               .withId(id)
-                              .withMessageGroupId(workerRequest.actionProvider.getMessageGroupId() == null
-                                 ? config.name : workerRequest.actionProvider.getMessageGroupId())
+                              .withMessageGroupId(groupId)
                               .withMessageAttributes(attributes)
                               .withMessageBody(WireFormat.stringify(workerRequest.request))
                         ));

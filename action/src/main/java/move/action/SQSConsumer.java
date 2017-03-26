@@ -6,7 +6,6 @@ import com.amazonaws.services.sqs.model.*;
 import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.google.common.base.Throwables;
 import com.google.common.hash.Hashing;
 import com.google.common.util.concurrent.AbstractExecutionThreadService;
 import com.google.common.util.concurrent.AbstractIdleService;
@@ -348,18 +347,19 @@ public class SQSConsumer extends AbstractIdleService {
 
          while (isRunning()) {
             try {
+               // Does this server need more messages.
                if (inflight.get() >= maxInflight) {
                   LOG.warn("Max inflight reached, will check again in 2500ms");
-                  Thread.sleep(2500);
-                  continue;
+                  try {
+                     Thread.sleep(2_000);
+                     continue;
+                  } catch (Exception e) {
+                     LOG.warn("Error sleeping message consumer thread.", e);
+                     continue;
+                  }
                }
 
                ReceiveMessageResult result = null;
-
-               if (!isRunning()) {
-                  LOG.warn("Consumer not running.");
-                  return;
-               }
 
                try {
                   final ReceiveMessageRequest request = new ReceiveMessageRequest()
@@ -375,33 +375,8 @@ public class SQSConsumer extends AbstractIdleService {
                   // Receive a batch of messages.
                   LOG.info("Trying to get messages");
                   result = receiveMessage(request);
-               } catch (SocketException e) {
-                  LOG.error("SQS Consumer Socket Exception", e);
-
-                  if (!isRunning()) {
-                     LOG.warn("Consumer not running.");
-                     return;
-                  }
-               } catch (InterruptedException e) {
-                  LOG.warn("SQS Consumer Interrupted Exception", e);
-                  return;
-               } catch (AmazonClientException e) {
-                  LOG.warn("SQS Consumer Client Exception", e);
-               } catch (Throwable e) {
-                  LOG.warn("SQS Consumer Throwable Exception", e);
-
-                  if (!isRunning()) {
-                     LOG.warn("Consumer not running.");
-
-                     return;
-                  }
-
-                  Throwables.propagate(e);
-               }
-
-               if (!isRunning()) {
-                  LOG.warn("Consumer not running when checked.");
-                  return;
+               } catch (Exception e) {
+                  LOG.warn("SQS Consumer Exception", e);
                }
 
                // Were any messages received?
@@ -409,74 +384,78 @@ public class SQSConsumer extends AbstractIdleService {
                   continue;
                }
 
+               // Are we still running.
+               if (!isRunning()) {
+                  LOG.warn("Consumer not running when checked.");
+                  return;
+               }
+
+               // Go through the messages.
                List<ChangeMessageVisibilityBatchRequestEntry> changes = null;
                for (Message message : result.getMessages()) {
-                  // Find ActionContext
-                  final ActionContext actionContext = getActionContext(message);
-                  if (actionContext == null) {
-                     LOG.warn("No action context.");
-                     scheduleToDelete(message.getReceiptHandle());
-                     continue;
-                  }
-
-                  // Parse request.
-                  final String body = Strings.nullToEmpty(message.getBody());
-                  final Object in = body.isEmpty() ? null : WireFormat.parse(
-                     actionContext.actionProvider.getInClass(),
-                     body
-                  );
-
-                  // Create ActionRequest.
-                  final ActionRequest request = actionContext.createRequest(
-                     context,
-                     message.getReceiptHandle(),
-                     in
-                  );
-
                   try {
-                     // Do we need to extend the visibility timeout?
-                     if (request.extendBySeconds > 0) {
-                        if (changes == null) {
-                           changes = new ArrayList<>(batchSize);
-                        }
-                        changes.add(new ChangeMessageVisibilityBatchRequestEntry(
-                           Integer.toString(changes.size()),
-                           message.getReceiptHandle()
-                        ));
+                     // Find ActionContext
+                     final ActionContext actionContext = getActionContext(message);
+                     if (actionContext == null) {
+                        LOG.warn("No action context.");
+                        scheduleToDelete(message.getReceiptHandle());
+                        continue;
                      }
-                  } finally {
-                     if (!request.queued) {
-                        try {
-                           LOG.info("Trying to dispatch action");
-                           actionContext.run(request);
-                        } catch (InterruptedException e) {
-                           LOG.warn("Interrupted error trying to run action.", e);
-                        } catch (Exception ex) {
-                           LOG.warn("Exception trying to run action.", ex);
+
+                     // Parse request.
+                     final String body = Strings.nullToEmpty(message.getBody());
+                     final Object in = body.isEmpty() ? null : WireFormat.parse(
+                        actionContext.actionProvider.getInClass(),
+                        body
+                     );
+
+                     // Create ActionRequest.
+                     final ActionRequest request = actionContext.createRequest(
+                        context,
+                        message.getReceiptHandle(),
+                        in
+                     );
+
+                     try {
+                        // Do we need to extend the visibility timeout?
+                        if (request.extendBySeconds > 0) {
+                           if (changes == null) {
+                              changes = new ArrayList<>(batchSize);
+                           }
+                           changes.add(new ChangeMessageVisibilityBatchRequestEntry(
+                              Integer.toString(changes.size()),
+                              message.getReceiptHandle()
+                           ));
+                        }
+                     } catch (Exception e) {
+                        LOG.warn("Exception checking for extend.", e);
+                     } finally {
+                        if (!request.queued) {
+                           try {
+                              LOG.info("Trying to dispatch action");
+                              actionContext.run(request);
+                           } catch (Exception ex) {
+                              LOG.warn("Exception trying to run action.", ex);
+                           }
                         }
                      }
+                  } catch (Exception ex) {
+                     LOG.error("Error processing message.", ex);
                   }
                }
 
-               if (changes != null) {
-                  try {
+               try {
+                  if (changes != null && !changes.isEmpty()) {
                      final ChangeMessageVisibilityBatchResult visibilityBatchResult =
                         changeVisibility(new ChangeMessageVisibilityBatchRequest()
                            .withQueueUrl(queueUrl)
                            .withEntries(changes)
                         );
-                  } catch (InterruptedException e) {
-                     LOG.warn("Change visbilitiy interrupted exception.");
-                     return;
                   }
+               } catch (Exception ex) {
+                  LOG.warn("Socket error trying to extend.", ex);
                }
-            } catch (SocketException e) {
-               // Ignore.
-               LOG.error("ReceiveThread.run() threw a Socket exception", e);
-            } catch (AmazonClientException e) {
-               // Ignore.
-               LOG.error("ReceiveThread.run() threw an AWS Client exception", e);
-            } catch (Throwable e) {
+            } catch (Exception e) {
                // Ignore.
                LOG.error("ReceiveThread.run() threw an exception", e);
             }

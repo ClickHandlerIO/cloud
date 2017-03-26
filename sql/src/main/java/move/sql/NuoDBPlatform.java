@@ -32,12 +32,6 @@ public class NuoDBPlatform extends SqlPlatform {
         sql = sql.trim();
 
         return sql;
-
-//        if (sql.endsWith(";")) {
-//            sql = sql.substring(0, sql.length() - 2);
-//        }
-//
-//        return sql + ");";
     }
 
     /**

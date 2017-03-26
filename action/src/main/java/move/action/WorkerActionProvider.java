@@ -36,7 +36,7 @@ public class WorkerActionProvider<A extends Action<IN, Boolean>, IN> extends Act
    /**
     * @return
     */
-   public String getMessageGroupId(){
+   public String getMessageGroupId() {
       return workerAction != null ? workerAction.messageGroupId() : null;
    }
 
@@ -83,6 +83,18 @@ public class WorkerActionProvider<A extends Action<IN, Boolean>, IN> extends Act
 
    /**
     * @param request
+    * @param groupId
+    * @param callback
+    */
+   public void send(IN request, String groupId, Consumer<Boolean> callback) {
+      send(request, groupId).subscribe(
+         r -> Try.run(() -> callback.accept(r)),
+         e -> Try.run(() -> callback.accept(false))
+      );
+   }
+
+   /**
+    * @param request
     * @return
     */
    public Observable<Boolean> send(IN request) {
@@ -107,10 +119,10 @@ public class WorkerActionProvider<A extends Action<IN, Boolean>, IN> extends Act
 
    /**
     * @param request
-    * @param delaySeconds
+    * @param groupId
     * @return
     */
-   public Observable<Boolean> send(IN request, String throttleKey, int delaySeconds) {
+   public Observable<Boolean> send(IN request, String groupId) {
       Preconditions.checkNotNull(
          producer,
          "WorkerProducer is null. Ensure ActionManager has been started and all actions have been registered."
@@ -118,6 +130,22 @@ public class WorkerActionProvider<A extends Action<IN, Boolean>, IN> extends Act
       return producer.send(new WorkerRequest()
          .actionProvider(this)
          .request(request)
-         .delaySeconds(delaySeconds));
+         .groupId(groupId));
    }
+
+//   /**
+//    * @param request
+//    * @param delaySeconds
+//    * @return
+//    */
+//   public Observable<Boolean> send(IN request, String throttleKey, int delaySeconds) {
+//      Preconditions.checkNotNull(
+//         producer,
+//         "WorkerProducer is null. Ensure ActionManager has been started and all actions have been registered."
+//      );
+//      return producer.send(new WorkerRequest()
+//         .actionProvider(this)
+//         .request(request)
+//         .delaySeconds(delaySeconds));
+//   }
 }
