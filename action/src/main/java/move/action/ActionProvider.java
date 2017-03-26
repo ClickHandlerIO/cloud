@@ -226,9 +226,12 @@ public class ActionProvider<A, IN, OUT> {
 
          // Set Hystrix isolation strategy.
          commandPropertiesDefaults.withExecutionIsolationStrategy(hystrixIsolation)
-            .withCircuitBreakerEnabled(false).withCircuitBreakerRequestVolumeThreshold(50);
+            .withCircuitBreakerEnabled(true)
+            .withFallbackEnabled(false);
 
-         threadPoolPropertiesDefaults.withCoreSize(10).withMaximumSize(25).withMaxQueueSize(500);
+         threadPoolPropertiesDefaults.withCoreSize(10)
+            .withAllowMaximumSizeToDivergeFromCoreSize(true)
+            .withMaximumSize(25);
 
          // Build HystrixCommand.Setter default.
          final String groupKey = actionConfig != null ? actionConfig.groupKey() : "";
@@ -261,7 +264,7 @@ public class ActionProvider<A, IN, OUT> {
          return HystrixCommandProperties.ExecutionIsolationStrategy.THREAD;
       }
 
-      // Default non-blocking Actions to run on the calling thread.
+      // Default non-blocking remote and internal Actions to run on the calling thread (vertx event loop).
       else {
          return HystrixCommandProperties.ExecutionIsolationStrategy.SEMAPHORE;
       }
