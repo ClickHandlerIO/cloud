@@ -223,9 +223,8 @@ public class SQSProducer extends AbstractIdleService implements WorkerProducer {
                                 workerRequest,
                                 new SendMessageBatchRequestEntry()
                                     .withId(id)
+                                    .withMessageGroupId(config.name)
                                     .withMessageAttributes(attributes)
-                                    .withDelaySeconds(
-                                        workerRequest.delaySeconds > 0 ? workerRequest.delaySeconds : null)
                                     .withMessageBody(WireFormat.stringify(workerRequest.request))
                             ));
                         }

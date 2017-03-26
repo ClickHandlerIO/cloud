@@ -8,18 +8,12 @@ import rx.Subscriber;
  */
 public class WorkerRequest {
     public WorkerActionProvider actionProvider;
-    public int delaySeconds;
     public Object request;
     Subscriber<? super Boolean> subscriber;
     Context ctx;
 
     public WorkerRequest actionProvider(final WorkerActionProvider actionProvider) {
         this.actionProvider = actionProvider;
-        return this;
-    }
-
-    public WorkerRequest delaySeconds(final int delaySeconds) {
-        this.delaySeconds = delaySeconds;
         return this;
     }
 

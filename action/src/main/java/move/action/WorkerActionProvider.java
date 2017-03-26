@@ -94,8 +94,7 @@ public class WorkerActionProvider<A extends Action<IN, Boolean>, IN> extends Act
         );
         return producer.send(new WorkerRequest()
             .actionProvider(this)
-            .request(request)
-            .delaySeconds(delaySeconds));
+            .request(request));
     }
 
     /**
@@ -110,7 +109,6 @@ public class WorkerActionProvider<A extends Action<IN, Boolean>, IN> extends Act
         );
         return producer.send(new WorkerRequest()
             .actionProvider(this)
-            .request(request)
-            .delaySeconds(delaySeconds));
+            .request(request));
     }
 }
