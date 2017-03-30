@@ -477,6 +477,8 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                     LOG.error("Could not create a Hikari read connection pool.", e);
                     throw new PersistException(e);
                 }
+
+                readConfiguration = configuration.derive();
             } else {
                 readExecutor = writeExecutor;
                 readDataSource = dataSource;
@@ -1396,7 +1398,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         final AtomicReference<SqlResult<T>> r = new AtomicReference<>();
         final Connection connection;
 
-        try {connection = readDataSource.getConnection();}
+        try {connection = dataSource.getConnection();}
         catch (Throwable e) {
             throw new PersistException(e);
         }
