@@ -27,11 +27,14 @@ public class SqlSession {
     protected final SqlDatabase db;
     protected final Stack<Configuration> configurationStack = new Stack<>();
     private Configuration configuration;
+    private Connection connection;
 
     SqlSession(final SqlDatabase db,
-               final Configuration configuration) {
+               final Configuration configuration,
+               final Connection connection) {
         this.db = db;
         this.configuration = configuration.derive();
+        this.connection = connection;
     }
 
     public SqlResult commit() {
@@ -91,13 +94,14 @@ public class SqlSession {
      * @return
      */
     public Connection connection() {
-        final Connection connection = configuration.connectionProvider().acquire();
-
-        if (connection == null) {
-            throw new PersistException("Session is no longer active.");
-        }
-
         return connection;
+//        final Connection connection = configuration.connectionProvider().acquire();
+//
+//        if (connection == null) {
+//            throw new PersistException("Session is no longer active.");
+//        }
+//
+//        return connection;
     }
 
     /**

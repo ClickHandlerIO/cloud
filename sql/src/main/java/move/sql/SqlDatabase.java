@@ -10,12 +10,12 @@ import com.google.common.collect.Maps;
 import com.google.common.util.concurrent.AbstractIdleService;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
-import move.common.UID;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.rxjava.core.Vertx;
 import javaslang.control.Try;
+import move.common.UID;
 import org.h2.server.TcpServer;
 import org.h2.tools.Server;
 import org.jooq.*;
@@ -62,7 +62,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     protected final String name;
     protected final Set<Class<?>> entityClasses = new HashSet<>();
     protected final Vertx vertx;
-    private final ThreadLocal<SqlSession> sessionLocal = new ThreadLocal<>();
     private final Map<Class, TableMapping> mappings = new HashMap<>();
     private final Map<String, TableMapping> tableMappingsByName = Maps.newHashMap();
     private final Map<Class, TableMapping> tableMappings = Maps.newHashMap();
@@ -469,9 +468,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 throw new PersistException(e);
             }
 
-            // Set Connection Provider.
-            configuration.set(new DataSourceConnectionProvider(dataSource));
-
             if (!Strings.nullToEmpty(config.getReadUrl()).trim().isEmpty()) {
                 readExecutor = Executors.newFixedThreadPool(config.getMaxReadPoolSize());
 
@@ -481,8 +477,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                     LOG.error("Could not create a Hikari read connection pool.", e);
                     throw new PersistException(e);
                 }
-                // Create Read Configuration.
-                readConfiguration = configuration.derive(new DataSourceConnectionProvider(readDataSource));
             } else {
                 readExecutor = writeExecutor;
                 readDataSource = dataSource;
@@ -782,19 +776,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 throw new RuntimeException(e);
             }
         }
-    }
-
-    /**
-     * @param master
-     * @return
-     */
-    protected SqlSession createSession(boolean master) {
-        final Configuration configuration = master ? this.configuration.derive() : this.readConfiguration.derive();
-
-        return new SqlSession(
-            this,
-            configuration
-        );
     }
 
     /**
@@ -1382,22 +1363,27 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @return
      */
     protected <T> T executeRead(SqlReadCallable<T> callable) {
-        SqlSession session = sessionLocal.get();
+        final Connection connection;
 
-        if (session == null) {
-            session = createSession(false);
-
-            if (session == null) {
-                throw new PersistException("createSession() returned null.");
-            }
-
-            sessionLocal.set(session);
+        try {connection = readDataSource.getConnection();}
+        catch (Throwable e) {
+            throw new PersistException(e);
         }
 
         try {
-            return callable.call(session);
+            final ConnectionProvider connectionProvider = new DefaultConnectionProvider(connection);
+            final Configuration configuration = readConfiguration.derive(connectionProvider);
+
+            return DSL.using(configuration).connectionResult(new ConnectionCallable<T>() {
+                @Override
+                public T run(Connection connection) throws Exception {
+                    return callable.call(new SqlSession(SqlDatabase.this, configuration, connection));
+                }
+            });
+        } catch (Throwable e) {
+            throw new PersistException(e);
         } finally {
-            sessionLocal.remove();
+            Try.run(() -> connection.close()).onFailure(e -> LOG.error("Failed to close connection", e));
         }
     }
 
@@ -1407,60 +1393,50 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @return
      */
     protected <T> SqlResult<T> executeWrite(SqlCallable<T> callable) {
-        SqlSession session = sessionLocal.get();
-        final boolean created;
+        final AtomicReference<SqlResult<T>> r = new AtomicReference<>();
+        final Connection connection;
 
-        if (session == null) {
-            session = createSession(true);
-
-            if (session == null) {
-                throw new PersistException("createSession() returned null.");
-            }
-
-            sessionLocal.set(session);
-            created = true;
-        } else {
-            created = false;
+        try {connection = readDataSource.getConnection();}
+        catch (Throwable e) {
+            throw new PersistException(e);
         }
 
-        final AtomicReference<SqlResult<T>> r = new AtomicReference<>();
-        final SqlSession finalSession = session;
         try {
-            try {
-                return DSL.using(session.configuration()).transactionResult($ -> {
-                    finalSession.scope($);
+            final DefaultConnectionProvider connectionProvider = new DefaultConnectionProvider(connection);
+            final Configuration configuration = this.configuration.derive(connectionProvider);
+            configuration.set(new ThreadLocalTransactionProvider(connectionProvider));
+
+            final SqlSession session = new SqlSession(this, configuration, connection);
+
+            return DSL.using(session.configuration()).transactionResult($ -> {
+                session.scope($);
+
+                try {
+                    // Execute the code.
+                    SqlResult<T> result = null;
 
                     try {
-                        // Execute the code.
-                        SqlResult<T> result = null;
+                        result = callable.call(session);
 
-                        try {
-                            result = callable.call(finalSession);
-
-                            if (result == null) {
-                                result = SqlResult.commit();
-                            }
-                        } catch (Throwable e) {
-                            result = SqlResult.rollback(null, e);
+                        if (result == null) {
+                            result = SqlResult.commit();
                         }
-
-                        r.set(result);
-
-                        // Rollback if ActionResponse isFailure.
-                        if (!result.isSuccess() || result.getReason() != null) {
-                            throw new RollbackException();
-                        }
-
-                        return result;
-                    } finally {
-                        finalSession.unscope();
+                    } catch (Throwable e) {
+                        result = SqlResult.rollback(null, e);
                     }
-                });
-            } finally {
-                if (created) {
-                    sessionLocal.remove();
+
+                    r.set(result);
+
+                    // Rollback if ActionResponse isFailure.
+                    if (!result.isSuccess() || result.getReason() != null) {
+                        throw new RollbackException();
+                    }
+
+                    return result;
+                } finally {
+                    session.unscope();
                 }
-            }
+            });
         } catch (RollbackException e) {
             if (r.get().getReason() != null) {
                 Throwables.propagate(r.get().getReason());
@@ -1470,6 +1446,8 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         } catch (Throwable e) {
             LOG.info("write() threw an exception", e);
             Throwables.propagate(e);
+        } finally {
+            Try.run(() -> connection.close()).onFailure(e -> LOG.error("Failed to close connection", e));
         }
 
         if (r.get().getReason() != null) {
