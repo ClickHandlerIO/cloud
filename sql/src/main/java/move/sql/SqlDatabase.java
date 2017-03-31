@@ -8,6 +8,7 @@ import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.util.concurrent.AbstractIdleService;
+import com.netflix.hystrix.*;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import io.vertx.core.AsyncResult;
@@ -45,8 +46,15 @@ import java.util.stream.Stream;
 /**
  * @author Clay Molocznik
  */
+@SuppressWarnings("all")
 public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     private static final int SANE_MAX = 250;
+    private static final int READ_ACTION_TIMEOUT = 30000;
+    private static final int WRITE_ACTION_TIMEOUT = 30000;
+    private static final int WRITE_POOL_CAPACITY = 2000;
+    private static final int READ_POOL_CAPACITY = 2000;
+    private static final int MAX_QUEUE_CAPACITY = 200000;
+    private static final int MINIMUM_TIMEOUT = 2000;
     private static final int DEV_POOL_SIZE = 15;
     private static final int TEST_POOL_SIZE = 15;
     private static final int PROD_POOL_SIZE = 100;
@@ -71,6 +79,10 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     private final String[] jooqPackageNames;
     private final Map<String, Table> jooqMap = Maps.newHashMap();
     private final Reflections[] entityReflections;
+    private final HystrixCommandProperties.Setter writeCommandPropertiesDefaults = HystrixCommandProperties.Setter();
+    private final HystrixCommandProperties.Setter readCommandPropertiesDefaults = HystrixCommandProperties.Setter();
+    private final HystrixThreadPoolProperties.Setter writeThreadPoolPropertiesDefaults = HystrixThreadPoolProperties.Setter();
+    private final HystrixThreadPoolProperties.Setter readThreadPoolPropertiesDefaults = HystrixThreadPoolProperties.Setter();
     protected HikariConfig hikariConfig;
     protected HikariConfig hikariReadConfig;
     protected Configuration configuration;
@@ -81,8 +93,12 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     protected SqlPlatform dbPlatform;
     protected Settings settings;
     protected H2Server h2Server;
-    protected ExecutorService writeExecutor;
-    protected ExecutorService readExecutor;
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Property Accessors
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    private HystrixCommand.Setter writeSetter;
+    private HystrixCommand.Setter readSetter;
 
     public SqlDatabase(
         Vertx vertx,
@@ -120,6 +136,10 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         this.entityReflections = entityReflections.toArray(new Reflections[entityReflections.size()]);
     }
 
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Start Up
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+
     public static void main(String[] args) {
         Vertx vertx = Vertx.vertx();
 
@@ -155,8 +175,9 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         }
     }
 
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Property Accessors
+    // Shutdown
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
     /**
@@ -188,24 +209,17 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         return new HikariDataSource(hikariConfig);
     }
 
-    ////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Start Up
-    ////////////////////////////////////////////////////////////////////////////////////////////////////
-
     protected HikariDataSource buildReadDataSource() {
         return new HikariDataSource(hikariReadConfig);
     }
-
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Shutdown
-    ////////////////////////////////////////////////////////////////////////////////////////////////////
 
     @Override
     protected void startUp() throws Exception {
         try {
             final long started = System.currentTimeMillis();
             LOG.info("Starting SqlDatabase...");
+
+            configureHystrix();
 
             final String jdbcUrl = Strings.nullToEmpty((config.getUrl())).trim();
             final String jdbcUser = Strings.nullToEmpty((config.getUser()));
@@ -451,8 +465,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             // Build jOOQ Schema.
             findJooqSchema();
 
-            writeExecutor = Executors.newFixedThreadPool(config.getMaxPoolSize());
-
             ////////////////////////////////////////////////////////////////////////////////////////////////////
             // H2 TCP Server to allow remote connections
             ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -469,8 +481,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             }
 
             if (!Strings.nullToEmpty(config.getReadUrl()).trim().isEmpty()) {
-                readExecutor = Executors.newFixedThreadPool(config.getMaxReadPoolSize());
-
                 try {
                     readDataSource = buildReadDataSource();
                 } catch (Throwable e) {
@@ -480,7 +490,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
 
                 readConfiguration = configuration.derive();
             } else {
-                readExecutor = writeExecutor;
                 readDataSource = dataSource;
                 readConfiguration = configuration;
             }
@@ -517,21 +526,61 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             LOG.info("Finished starting SqlDatabase in " + (System.currentTimeMillis() - started) + "ms");
         } catch (Throwable e) {
             LOG.error("Failed to start", e);
-            Try.run(() -> stopAsync());
-            Throwables.propagate(e);
+            Try.run(this::stopAsync);
+            throw new RuntimeException(e);
         }
     }
 
+    private void configureHystrix() {
+        writeThreadPoolPropertiesDefaults
+            .withCoreSize(config.getMaxPoolSize())
+            .withAllowMaximumSizeToDivergeFromCoreSize(false)
+            .withMaximumSize(config.getMaxPoolSize())
+            .withMaxQueueSize(MAX_QUEUE_CAPACITY)
+            .withQueueSizeRejectionThreshold(config.getPoolCapacity() <= 0 ? WRITE_POOL_CAPACITY : config.getPoolCapacity());
 
-    ////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Initialize
-    ////////////////////////////////////////////////////////////////////////////////////////////////////
+        readThreadPoolPropertiesDefaults
+            .withCoreSize(config.getMaxReadPoolSize())
+            .withAllowMaximumSizeToDivergeFromCoreSize(false)
+            .withMaximumSize(config.getMaxReadPoolSize())
+            .withMaxQueueSize(MAX_QUEUE_CAPACITY)
+            .withQueueSizeRejectionThreshold(config.getReadPoolCapacity() <= 0 ? READ_POOL_CAPACITY : config.getReadPoolCapacity());
+
+        writeCommandPropertiesDefaults
+            .withExecutionIsolationStrategy(HystrixCommandProperties.ExecutionIsolationStrategy.THREAD)
+            .withCircuitBreakerEnabled(true)
+            .withFallbackEnabled(false)
+            .withExecutionTimeoutEnabled(true)
+            .withExecutionTimeoutInMilliseconds(config.getWriteTimeout() < MINIMUM_TIMEOUT ? WRITE_ACTION_TIMEOUT : config.getWriteTimeout())
+            .withExecutionIsolationThreadInterruptOnFutureCancel(true);
+
+        readCommandPropertiesDefaults
+            .withExecutionIsolationStrategy(HystrixCommandProperties.ExecutionIsolationStrategy.THREAD)
+            .withCircuitBreakerEnabled(true)
+            .withFallbackEnabled(false)
+            .withExecutionTimeoutEnabled(true)
+            .withExecutionTimeoutInMilliseconds(config.getReadTimeout() < MINIMUM_TIMEOUT ? READ_ACTION_TIMEOUT : config.getReadTimeout())
+            .withExecutionIsolationThreadInterruptOnFutureCancel(true);
+
+        writeSetter =
+            HystrixCommand.Setter
+                .withGroupKey(HystrixCommandGroupKey.Factory.asKey("SQL-" + config.getName()))
+                .andThreadPoolKey(HystrixThreadPoolKey.Factory.asKey("SQL-" + config.getName() + "-WRITE"))
+                .andCommandKey(HystrixCommandKey.Factory.asKey("WRITE"))
+                .andCommandPropertiesDefaults(writeCommandPropertiesDefaults)
+                .andThreadPoolPropertiesDefaults(writeThreadPoolPropertiesDefaults);
+
+        readSetter =
+            HystrixCommand.Setter
+                .withGroupKey(HystrixCommandGroupKey.Factory.asKey("SQL-" + config.getName()))
+                .andThreadPoolKey(HystrixThreadPoolKey.Factory.asKey("SQL-" + config.getName() + "-READ"))
+                .andCommandKey(HystrixCommandKey.Factory.asKey("READ"))
+                .andCommandPropertiesDefaults(readCommandPropertiesDefaults)
+                .andThreadPoolPropertiesDefaults(readThreadPoolPropertiesDefaults);
+    }
 
     @Override
     protected void shutDown() throws Exception {
-        Try.run(() -> writeExecutor.shutdown());
-        Try.run(() -> readExecutor.shutdown());
-
         // Completely destroy H2 memory database if necessary.
         if (config.getUrl().startsWith("jdbc:h2:mem")) {
             Try.run(() -> {
@@ -574,6 +623,10 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         // Rebind.
         rebindMappings(mappingMap);
     }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Initialize
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
 
     private void rebindMappings(Map<Class, TableMapping> mappings) {
         // Add all mappings.
@@ -626,11 +679,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             }
         }
     }
-
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Evolution
-    ////////////////////////////////////////////////////////////////////////////////////////////////////
 
     /**
      *
@@ -692,8 +740,9 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         }
     }
 
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Execution
+    // Evolution
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
     /**
@@ -788,23 +837,22 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     public void writeRunnable(SqlRunnable task, Handler<AsyncResult<Void>> handler) {
         final io.vertx.core.Context ctx = io.vertx.core.Vertx.currentContext();
 
-        writeExecutor.submit(() -> {
-            try {
-                executeWrite(sql -> {
-                    task.run(sql);
-                    return null;
-                });
-
-                if (handler != null) {
-                    ctx.runOnContext(event -> handler.handle(Future.succeededFuture()));
-                }
-            } catch (Exception e) {
-                if (handler != null) {
-                    ctx.runOnContext(event -> handler.handle(Future.failedFuture(e)));
-                }
+        writeObservable($ -> {
+            task.run($);
+            return SqlResult.success();
+        }).subscribe(
+            r -> {
+                ctx.runOnContext(a -> handler.handle(Future.succeededFuture()));
+            },
+            e -> {
+                ctx.runOnContext(a -> handler.handle(Future.failedFuture(e)));
             }
-        });
+        );
     }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Execution
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
 
     /**
      * @param entityClass
@@ -1209,31 +1257,33 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     public <T> Observable<SqlResult<T>> writeObservable(SqlCallable<T> task) {
         final io.vertx.rxjava.core.Context context = vertx.getOrCreateContext();
 
-        return Observable.create(
-            subscriber ->
-                writeExecutor.submit(() -> {
-                    try {
-                        final SqlResult<T> result = executeWrite(task);
+        return Observable.create(subscriber -> {
+            if (subscriber.isUnsubscribed()) {
+                return;
+            }
 
-                        if (!subscriber.isUnsubscribed()) {
-                            context.runOnContext(a -> {
-                                if (!subscriber.isUnsubscribed()) {
-                                    subscriber.onNext(result);
-                                    subscriber.onCompleted();
-                                }
-                            });
+            new WriteAction<T>(writeSetter, task).observe().subscribe(
+                r -> {
+                    context.runOnContext(a -> {
+                        if (subscriber.isUnsubscribed()) {
+                            return;
                         }
-                    } catch (Exception e) {
-                        if (!subscriber.isUnsubscribed()) {
-                            context.runOnContext(event -> {
-                                if (!subscriber.isUnsubscribed()) {
-                                    subscriber.onError(e);
-                                }
-                            });
+
+                        subscriber.onNext(r);
+                        subscriber.onCompleted();
+                    });
+                },
+                e -> {
+                    context.runOnContext(a -> {
+                        if (subscriber.isUnsubscribed()) {
+                            return;
                         }
-                    }
-                })
-        );
+
+                        subscriber.onError(e);
+                    });
+                }
+            );
+        });
     }
 
     /**
@@ -1244,19 +1294,14 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     public <T> void write(SqlCallable<T> task, Handler<AsyncResult<SqlResult<T>>> handler) {
         final io.vertx.rxjava.core.Context context = vertx.getOrCreateContext();
 
-        writeExecutor.submit(() -> {
-            try {
-                final SqlResult<T> result = executeWrite(task);
-
-                if (handler != null) {
-                    context.runOnContext(event -> handler.handle(Future.succeededFuture(result)));
-                }
-            } catch (Exception e) {
-                if (handler != null) {
-                    context.runOnContext(event -> handler.handle(Future.failedFuture(e)));
-                }
+        writeObservable(task).subscribe(
+            r -> {
+                context.runOnContext(a -> handler.handle(Future.succeededFuture(r)));
+            },
+            e -> {
+                context.runOnContext(a -> handler.handle(Future.failedFuture(e)));
             }
-        });
+        );
     }
 
     public <T> Observable<T> read(SqlReadCallable<T> task) {
@@ -1266,31 +1311,33 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     public <T> Observable<T> readObservable(SqlReadCallable<T> task) {
         final io.vertx.rxjava.core.Context context = vertx.getOrCreateContext();
 
-        return Observable.create(
-            subscriber ->
-                readExecutor.submit(() -> {
-                    try {
-                        final T result = executeRead(task);
+        return Observable.create(subscriber -> {
+            if (subscriber.isUnsubscribed()) {
+                return;
+            }
 
-                        if (!subscriber.isUnsubscribed()) {
-                            context.runOnContext(a -> {
-                                if (!subscriber.isUnsubscribed()) {
-                                    subscriber.onNext(result);
-                                    subscriber.onCompleted();
-                                }
-                            });
+            new ReadAction<T>(readSetter, task).observe().subscribe(
+                r -> {
+                    context.runOnContext(a -> {
+                        if (subscriber.isUnsubscribed()) {
+                            return;
                         }
-                    } catch (Exception e) {
-                        if (!subscriber.isUnsubscribed()) {
-                            context.runOnContext(event -> {
-                                if (!subscriber.isUnsubscribed()) {
-                                    subscriber.onError(e);
-                                }
-                            });
+
+                        subscriber.onNext(r);
+                        subscriber.onCompleted();
+                    });
+                },
+                e -> {
+                    context.runOnContext(a -> {
+                        if (subscriber.isUnsubscribed()) {
+                            return;
                         }
-                    }
-                })
-        );
+
+                        subscriber.onError(e);
+                    });
+                }
+            );
+        });
     }
 
     /**
@@ -1301,18 +1348,14 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     public <T> void read(final SqlReadCallable<T> task, final Handler<AsyncResult<T>> handler) {
         final io.vertx.rxjava.core.Context context = vertx.getOrCreateContext();
 
-        readExecutor.submit(() -> {
-            try {
-                final T result = executeRead(task);
-                if (handler != null) {
-                    context.runOnContext(event -> handler.handle(Future.succeededFuture(result)));
-                }
-            } catch (Exception e) {
-                if (handler != null) {
-                    context.runOnContext(event -> handler.handle(Future.failedFuture(e)));
-                }
+        readObservable(task).subscribe(
+            r -> {
+                context.runOnContext(a -> handler.handle(Future.succeededFuture(r)));
+            },
+            e -> {
+                context.runOnContext(a -> handler.handle(Future.failedFuture(e)));
             }
-        });
+        );
     }
 
     /**
@@ -1322,19 +1365,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @throws InterruptedException
      */
     public <T> T readBlocking(SqlReadCallable<T> task) {
-        try {
-            return readExecutor.submit(() -> {
-                try {
-                    return executeRead(task);
-                } catch (Exception e) {
-                    throw new PersistException(e);
-                }
-            }).get();
-        } catch (InterruptedException e) {
-            throw new PersistException(e);
-        } catch (ExecutionException e) {
-            throw new PersistException(e);
-        }
+        return new ReadAction<T>(readSetter, task).execute();
     }
 
     /**
@@ -1344,19 +1375,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @throws InterruptedException
      */
     public <T> SqlResult<T> writeBlocking(SqlCallable<T> task) {
-        try {
-            return writeExecutor.submit(() -> {
-                try {
-                    return executeWrite(task);
-                } catch (Exception e) {
-                    throw new PersistException(e);
-                }
-            }).get();
-        } catch (InterruptedException e) {
-            throw new PersistException(e);
-        } catch (ExecutionException e) {
-            throw new PersistException(e);
-        }
+        return new WriteAction<T>(writeSetter, task).execute();
     }
 
     /**
@@ -1367,8 +1386,9 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     protected <T> T executeRead(SqlReadCallable<T> callable) {
         final Connection connection;
 
-        try {connection = readDataSource.getConnection();}
-        catch (Throwable e) {
+        try {
+            connection = readDataSource.getConnection();
+        } catch (Throwable e) {
             throw new PersistException(e);
         }
 
@@ -1376,12 +1396,14 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             final ConnectionProvider connectionProvider = new DefaultConnectionProvider(connection);
             final Configuration configuration = readConfiguration.derive(connectionProvider);
 
-            return DSL.using(configuration).connectionResult(new ConnectionCallable<T>() {
+            final T result = DSL.using(configuration).connectionResult(new ConnectionCallable<T>() {
                 @Override
                 public T run(Connection connection) throws Exception {
                     return callable.call(new SqlSession(SqlDatabase.this, configuration, connection));
                 }
             });
+
+            return result;
         } catch (Throwable e) {
             throw new PersistException(e);
         } finally {
@@ -1398,8 +1420,9 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         final AtomicReference<SqlResult<T>> r = new AtomicReference<>();
         final Connection connection;
 
-        try {connection = dataSource.getConnection();}
-        catch (Throwable e) {
+        try {
+            connection = dataSource.getConnection();
+        } catch (Throwable e) {
             throw new PersistException(e);
         }
 
@@ -1459,11 +1482,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         return r.get();
     }
 
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Mappings
-    ////////////////////////////////////////////////////////////////////////////////////////////////////
-
     /**
      * @param cls
      * @return
@@ -1475,6 +1493,11 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     public TableMapping getMapping(Class cls) {
         return tableMappings.get(cls);
     }
+
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Mappings
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
 
     public <E extends AbstractEntity> TableMapping getMapping(E entity) {
         Preconditions.checkNotNull(entity);
@@ -1655,11 +1678,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         return readConfiguration;
     }
 
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////////
-    // jOOQ Impl
-    ////////////////////////////////////////////////////////////////////////////////////////////////////
-
     /**
      *
      */
@@ -1726,6 +1744,39 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             else if (!StringUtils.isBlank(ctx.sql())) {
                 LOG.debug(ctx.sql());
             }
+        }
+    }
+
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    // jOOQ Impl
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    private class ReadAction<T> extends HystrixCommand<T> {
+        private final SqlReadCallable<T> callback;
+
+        public ReadAction(Setter setter, SqlReadCallable<T> callback) {
+            super(setter);
+            this.callback = callback;
+        }
+
+        @Override
+        protected T run() throws Exception {
+            return executeRead(callback);
+        }
+    }
+
+    private class WriteAction<T> extends HystrixCommand<SqlResult<T>> {
+        private final SqlCallable<T> callback;
+
+        public WriteAction(Setter setter, SqlCallable<T> callback) {
+            super(setter);
+            this.callback = callback;
+        }
+
+        @Override
+        protected SqlResult<T> run() throws Exception {
+            return executeWrite(callback);
         }
     }
 

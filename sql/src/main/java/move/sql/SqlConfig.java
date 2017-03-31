@@ -14,7 +14,12 @@ public class SqlConfig {
     private String readUser = "";
     private String readPassword = "";
     private int maxPoolSize = 2;
+    private int poolCapacity = 1000;
+    private int writeTimeout = 30000;
+    private int readTimeout = 30000;
     private int maxReadPoolSize = 4;
+    private int readPoolCapacity = 1000;
+    private int acquireTimeout = 1000;
     private boolean cachePrepStmts = true;
     private int prepStmtCacheSize = 500;
     private int prepStmtCacheSqlLimit = 2048;
@@ -113,12 +118,52 @@ public class SqlConfig {
         this.maxPoolSize = maxPoolSize;
     }
 
+    public int getPoolCapacity() {
+        return poolCapacity;
+    }
+
+    public void setPoolCapacity(int poolCapacity) {
+        this.poolCapacity = poolCapacity;
+    }
+
+    public int getWriteTimeout() {
+        return writeTimeout;
+    }
+
+    public void setWriteTimeout(int writeTimeout) {
+        this.writeTimeout = writeTimeout;
+    }
+
+    public int getReadTimeout() {
+        return readTimeout;
+    }
+
+    public void setReadTimeout(int readTimeout) {
+        this.readTimeout = readTimeout;
+    }
+
     public int getMaxReadPoolSize() {
         return maxReadPoolSize;
     }
 
     public void setMaxReadPoolSize(int maxReadPoolSize) {
         this.maxReadPoolSize = maxReadPoolSize;
+    }
+
+    public int getReadPoolCapacity() {
+        return readPoolCapacity;
+    }
+
+    public void setReadPoolCapacity(int readPoolCapacity) {
+        this.readPoolCapacity = readPoolCapacity;
+    }
+
+    public int getAcquireTimeout() {
+        return acquireTimeout;
+    }
+
+    public void setAcquireTimeout(int acquireTimeout) {
+        this.acquireTimeout = acquireTimeout;
     }
 
     public boolean isCachePrepStmts() {
