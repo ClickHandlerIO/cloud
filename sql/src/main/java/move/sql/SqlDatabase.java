@@ -51,8 +51,8 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     private static final int SANE_MAX = 250;
     private static final int READ_ACTION_TIMEOUT = 30000;
     private static final int WRITE_ACTION_TIMEOUT = 30000;
-    private static final int WRITE_POOL_CAPACITY = 2000;
-    private static final int READ_POOL_CAPACITY = 2000;
+    private static final int MAX_WRITE_TASKS = 2000;
+    private static final int MAX_READ_TASKS = 2000;
     private static final int MAX_QUEUE_CAPACITY = 200000;
     private static final int MINIMUM_TIMEOUT = 2000;
     private static final int DEV_POOL_SIZE = 15;
@@ -531,27 +531,37 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         }
     }
 
+    private int ensureThreads(int threads, int poolSize) {
+        if (threads == 0) {
+            threads = (int)(poolSize * 0.9) + 1;
+        }
+        if (threads <= 5) {
+            threads = 5;
+        }
+        return threads;
+    }
+
     private void configureHystrix() {
         writeThreadPoolPropertiesDefaults
-            .withCoreSize(config.getMaxPoolSize())
+            .withCoreSize(ensureThreads(config.getWriteThreads(), config.getMaxPoolSize()))
             .withAllowMaximumSizeToDivergeFromCoreSize(false)
-            .withMaximumSize(config.getMaxPoolSize())
+            .withMaximumSize(ensureThreads(config.getWriteThreads(), config.getMaxPoolSize()))
             .withMaxQueueSize(MAX_QUEUE_CAPACITY)
-            .withQueueSizeRejectionThreshold(config.getPoolCapacity() <= 0 ? WRITE_POOL_CAPACITY : config.getPoolCapacity());
+            .withQueueSizeRejectionThreshold(config.getMaxWriteTasks() <= 0 ? MAX_WRITE_TASKS : config.getMaxWriteTasks());
 
         readThreadPoolPropertiesDefaults
-            .withCoreSize(config.getMaxReadPoolSize())
+            .withCoreSize(ensureThreads(config.getReadThreads(), config.getMaxReadPoolSize()))
             .withAllowMaximumSizeToDivergeFromCoreSize(false)
-            .withMaximumSize(config.getMaxReadPoolSize())
+            .withMaximumSize(ensureThreads(config.getReadThreads(), config.getMaxReadPoolSize()))
             .withMaxQueueSize(MAX_QUEUE_CAPACITY)
-            .withQueueSizeRejectionThreshold(config.getReadPoolCapacity() <= 0 ? READ_POOL_CAPACITY : config.getReadPoolCapacity());
+            .withQueueSizeRejectionThreshold(config.getMaxReadTasks() <= 0 ? MAX_READ_TASKS : config.getMaxReadTasks());
 
         writeCommandPropertiesDefaults
             .withExecutionIsolationStrategy(HystrixCommandProperties.ExecutionIsolationStrategy.THREAD)
             .withCircuitBreakerEnabled(true)
             .withFallbackEnabled(false)
             .withExecutionTimeoutEnabled(true)
-            .withExecutionTimeoutInMilliseconds(config.getWriteTimeout() < MINIMUM_TIMEOUT ? WRITE_ACTION_TIMEOUT : config.getWriteTimeout())
+            .withExecutionTimeoutInMilliseconds(config.getWriteTaskTimeout() < MINIMUM_TIMEOUT ? WRITE_ACTION_TIMEOUT : config.getWriteTaskTimeout())
             .withExecutionIsolationThreadInterruptOnFutureCancel(true);
 
         readCommandPropertiesDefaults
@@ -559,7 +569,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             .withCircuitBreakerEnabled(true)
             .withFallbackEnabled(false)
             .withExecutionTimeoutEnabled(true)
-            .withExecutionTimeoutInMilliseconds(config.getReadTimeout() < MINIMUM_TIMEOUT ? READ_ACTION_TIMEOUT : config.getReadTimeout())
+            .withExecutionTimeoutInMilliseconds(config.getReadTaskTimeout() < MINIMUM_TIMEOUT ? READ_ACTION_TIMEOUT : config.getReadTaskTimeout())
             .withExecutionIsolationThreadInterruptOnFutureCancel(true);
 
         writeSetter =

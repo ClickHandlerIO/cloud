@@ -13,13 +13,15 @@ public class SqlConfig {
     private String readUrl = "";
     private String readUser = "";
     private String readPassword = "";
-    private int maxPoolSize = 2;
-    private int poolCapacity = 1000;
-    private int writeTimeout = 30000;
-    private int readTimeout = 30000;
-    private int maxReadPoolSize = 4;
-    private int readPoolCapacity = 1000;
-    private int acquireTimeout = 1000;
+    private int maxPoolSize = 15;
+    private int writeThreads = 10;
+    private int maxReadPoolSize = 15;
+    private int readThreads = 10;
+    private int maxWriteTasks = 5000;
+    private int maxReadTasks = 5000;
+    private int writeTaskTimeout = 30000;
+    private int readTaskTimeout = 30000;
+    private int acquireConnectionTimeout = 2500;
     private boolean cachePrepStmts = true;
     private int prepStmtCacheSize = 500;
     private int prepStmtCacheSqlLimit = 2048;
@@ -118,28 +120,12 @@ public class SqlConfig {
         this.maxPoolSize = maxPoolSize;
     }
 
-    public int getPoolCapacity() {
-        return poolCapacity;
+    public int getWriteThreads() {
+        return writeThreads;
     }
 
-    public void setPoolCapacity(int poolCapacity) {
-        this.poolCapacity = poolCapacity;
-    }
-
-    public int getWriteTimeout() {
-        return writeTimeout;
-    }
-
-    public void setWriteTimeout(int writeTimeout) {
-        this.writeTimeout = writeTimeout;
-    }
-
-    public int getReadTimeout() {
-        return readTimeout;
-    }
-
-    public void setReadTimeout(int readTimeout) {
-        this.readTimeout = readTimeout;
+    public void setWriteThreads(int writeThreads) {
+        this.writeThreads = writeThreads;
     }
 
     public int getMaxReadPoolSize() {
@@ -150,20 +136,52 @@ public class SqlConfig {
         this.maxReadPoolSize = maxReadPoolSize;
     }
 
-    public int getReadPoolCapacity() {
-        return readPoolCapacity;
+    public int getReadThreads() {
+        return readThreads;
     }
 
-    public void setReadPoolCapacity(int readPoolCapacity) {
-        this.readPoolCapacity = readPoolCapacity;
+    public void setReadThreads(int readThreads) {
+        this.readThreads = readThreads;
     }
 
-    public int getAcquireTimeout() {
-        return acquireTimeout;
+    public int getMaxWriteTasks() {
+        return maxWriteTasks;
     }
 
-    public void setAcquireTimeout(int acquireTimeout) {
-        this.acquireTimeout = acquireTimeout;
+    public void setMaxWriteTasks(int maxWriteTasks) {
+        this.maxWriteTasks = maxWriteTasks;
+    }
+
+    public int getMaxReadTasks() {
+        return maxReadTasks;
+    }
+
+    public void setMaxReadTasks(int maxReadTasks) {
+        this.maxReadTasks = maxReadTasks;
+    }
+
+    public int getWriteTaskTimeout() {
+        return writeTaskTimeout;
+    }
+
+    public void setWriteTaskTimeout(int writeTaskTimeout) {
+        this.writeTaskTimeout = writeTaskTimeout;
+    }
+
+    public int getReadTaskTimeout() {
+        return readTaskTimeout;
+    }
+
+    public void setReadTaskTimeout(int readTaskTimeout) {
+        this.readTaskTimeout = readTaskTimeout;
+    }
+
+    public int getAcquireConnectionTimeout() {
+        return acquireConnectionTimeout;
+    }
+
+    public void setAcquireConnectionTimeout(int acquireConnectionTimeout) {
+        this.acquireConnectionTimeout = acquireConnectionTimeout;
     }
 
     public boolean isCachePrepStmts() {
