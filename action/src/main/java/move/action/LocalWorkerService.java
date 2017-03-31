@@ -12,6 +12,7 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  *
@@ -22,6 +23,7 @@ public class LocalWorkerService extends AbstractIdleService implements WorkerSer
 
    private final LinkedBlockingDeque<WorkerRequest> queue = new LinkedBlockingDeque<>();
    private final Consumer consumer = new Consumer();
+
    @Inject
    Vertx vertx;
 
