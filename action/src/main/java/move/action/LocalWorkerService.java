@@ -85,7 +85,7 @@ public class LocalWorkerService extends AbstractIdleService implements WorkerSer
          if (request == null)
             return;
 
-         request.actionProvider.observe(request.request).subscribe();
+         request.actionProvider.execute(request.request);
       }
    }
 }
