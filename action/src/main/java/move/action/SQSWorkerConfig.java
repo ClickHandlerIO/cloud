@@ -59,7 +59,7 @@ public class SQSWorkerConfig {
     * AmazonSQS maxes out at 10.
     */
    @JsonProperty
-   public int batchSize = 10;
+   public int batchSize = 1;
    /**
     * Number of seconds for the minimum visibility timeout.
     * When pulling off of the queue the initial visibility timeout
@@ -87,7 +87,7 @@ public class SQSWorkerConfig {
     * Maximum number of messages allowed to be on the server at a given time.
     */
    @JsonProperty
-   public int maxInflight = 50;
+   public int maxInflight = 1;
    /**
     * S3 Bucket.
     */

@@ -374,6 +374,9 @@ public class SQSConsumer extends AbstractIdleService {
                   // Receive a batch of messages.
                   LOG.info("Trying to get messages");
                   result = receiveMessage(request);
+               } catch (InterruptedException e) {
+                  LOG.warn("Interrupted.", e);
+                  return;
                } catch (Exception e) {
                   LOG.warn("SQS Consumer Exception", e);
                }
@@ -433,6 +436,9 @@ public class SQSConsumer extends AbstractIdleService {
                            try {
                               LOG.info("Trying to dispatch action");
                               actionContext.run(request);
+                           } catch (InterruptedException e) {
+                              LOG.warn("Interrupted.", e);
+                              return;
                            } catch (Exception ex) {
                               LOG.warn("Exception trying to run action.", ex);
                            }
@@ -451,6 +457,9 @@ public class SQSConsumer extends AbstractIdleService {
                            .withEntries(changes)
                         );
                   }
+               } catch (InterruptedException e) {
+                  LOG.warn("Interrupted.", e);
+                  return;
                } catch (Exception ex) {
                   LOG.warn("Socket error trying to extend.", ex);
                }

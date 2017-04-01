@@ -19,14 +19,14 @@ public class SqlConfig {
     private int readThreads = 75;
     private int maxWriteTasks = 5_000;
     private int maxReadTasks = 5_000;
-    private int writeTaskTimeout = 120_000;
-    private int readTaskTimeout = 120_000;
-    private int acquireConnectionTimeout =30_000;
+    private int writeTaskTimeout = 10 * 60_000;
+    private int readTaskTimeout = 5 * 60_000;
+    private int acquireConnectionTimeout =60_000;
     private boolean cachePrepStmts = true;
     private int prepStmtCacheSize = 500;
     private int prepStmtCacheSqlLimit = 2048;
     private boolean useServerPrepStmts = true;
-    private int defaultQueryTimeoutInSeconds = 20;
+    private int defaultQueryTimeoutInSeconds = 20 * 60_000;
     private String storageEngine = "InnoDB";
     private boolean memSQL;
     private int leakDetectionThreshold = 0;

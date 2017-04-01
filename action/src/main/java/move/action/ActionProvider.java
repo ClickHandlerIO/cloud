@@ -169,8 +169,6 @@ public class ActionProvider<A, IN, OUT> {
             ? actionConfig.isolationStrategy()
             : ExecutionIsolationStrategy.BEST;
 
-        blocking = AbstractBlockingAction.class.isAssignableFrom(actionClass);
-
         if (ObservableAction.class.isAssignableFrom(actionClass)) {
             // Determine Hystrix isolation strategy.
             HystrixCommandProperties.ExecutionIsolationStrategy hystrixIsolation;
@@ -187,6 +185,8 @@ public class ActionProvider<A, IN, OUT> {
                     hystrixIsolation = HystrixCommandProperties.ExecutionIsolationStrategy.THREAD;
                     break;
             }
+
+            blocking = hystrixIsolation == HystrixCommandProperties.ExecutionIsolationStrategy.THREAD;
 
             // Set Hystrix isolation strategy.
             commandPropertiesDefaults.withExecutionIsolationStrategy(hystrixIsolation);
@@ -207,6 +207,7 @@ public class ActionProvider<A, IN, OUT> {
                 commandPropertiesDefaults.withExecutionIsolationSemaphoreMaxConcurrentRequests(actionConfig.maxConcurrentRequests());
             }
         }
+
 
         // Is it a blocking action?
         else if (AbstractBlockingAction.class.isAssignableFrom(actionClass)) {
