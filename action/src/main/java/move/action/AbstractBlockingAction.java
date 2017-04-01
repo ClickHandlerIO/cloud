@@ -32,6 +32,11 @@ public abstract class AbstractBlockingAction<IN, OUT>
             protected OUT run() throws Exception {
                 return AbstractBlockingAction.this.execute();
             }
+
+            @Override
+            protected OUT getFallback() {
+                return AbstractBlockingAction.this.executeFallback();
+            }
         };
     }
 
@@ -56,8 +61,22 @@ public abstract class AbstractBlockingAction<IN, OUT>
      * @return
      * @throws Exception
      */
-    public OUT execute() throws Exception {
-        return handle();
+    OUT execute() throws Exception {
+        contextLocal.set(getActionContext());
+        try {
+            return handle();
+        } finally {
+            contextLocal.remove();
+        }
+    }
+
+    OUT executeFallback() {
+        contextLocal.set(getActionContext());
+        try {
+            return handleFallback();
+        } finally {
+            contextLocal.remove();
+        }
     }
 
     /**
@@ -67,9 +86,17 @@ public abstract class AbstractBlockingAction<IN, OUT>
         return handle(getRequest());
     }
 
+    protected OUT handleFallback() {
+        return handleFallback(getRequest());
+    }
+
     /**
      * @param request
      * @return
      */
     public abstract OUT handle(IN request);
+
+    public OUT handleFallback(IN request) {
+        throw new ActionFallbackException();
+    }
 }

@@ -8,8 +8,19 @@ import rx.Single;
  * @author Clay Molocznik
  */
 public abstract class AbstractAction<IN, OUT> implements Action<IN, OUT> {
+    public static final ThreadLocal<ActionContext> contextLocal = new ThreadLocal<>();
+
     private Object context;
     private IN request;
+    private ActionContext actionContext;
+
+    public ActionContext getActionContext() {
+        return actionContext;
+    }
+
+    void setActionContext(ActionContext actionContext) {
+        this.actionContext = actionContext;
+    }
 
     public Object getContext() {
         return context;

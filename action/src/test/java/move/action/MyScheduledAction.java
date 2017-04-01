@@ -6,7 +6,7 @@ import javax.inject.Inject;
  *
  */
 @ActionConfig(maxExecutionMillis = 10000, maxConcurrentRequests = 1)
-@ScheduledAction(intervalSeconds = 1, type = ScheduledActionType.CLUSTER_SINGLETON)
+@ScheduledAction(intervalSeconds = 1000, type = ScheduledActionType.CLUSTER_SINGLETON)
 public class MyScheduledAction extends AbstractBlockingScheduledAction {
     @Inject
     public MyScheduledAction() {

@@ -246,19 +246,7 @@ public interface SqlExecutor {
      */
     <T> Observable<SqlResult<T>> write(SqlCallable<T> task);
 
-    /**
-     * @param task
-     * @param handler
-     * @param <T>
-     */
-    <T> void write(SqlCallable<T> task, Handler<AsyncResult<SqlResult<T>>> handler);
-
-    /**
-     * @param task
-     * @param handler
-     * @param <T>
-     */
-    <T> void read(SqlReadCallable<T> task, Handler<AsyncResult<T>> handler);
+    <T> Observable<SqlResult<T>> write(SqlCallable<T> task, int timeoutMillis);
 
     /**
      * @param task
@@ -288,6 +276,13 @@ public interface SqlExecutor {
      * @param <T>
      * @return
      */
+    <T> Observable<T> read(SqlReadCallable<T> task, int timeoutMillis);
+
+    /**
+     * @param task
+     * @param <T>
+     * @return
+     */
     <T> Observable<T> readObservable(SqlReadCallable<T> task);
 
     /**
@@ -295,5 +290,14 @@ public interface SqlExecutor {
      * @param <T>
      * @return
      */
+    <T> Observable<T> readObservable(SqlReadCallable<T> task, int timeoutMillis);
+
+    /**
+     * @param task
+     * @param <T>
+     * @return
+     */
     <T> Observable<SqlResult<T>> writeObservable(SqlCallable<T> task);
+
+    <T> Observable<SqlResult<T>> writeObservable(SqlCallable<T> task, int timeoutMillis);
 }

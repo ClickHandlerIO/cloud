@@ -1,6 +1,7 @@
 package move.action;
 
 import com.netflix.hystrix.*;
+import com.netflix.hystrix.strategy.concurrency.HystrixRequestVariableDefault;
 import io.vertx.rxjava.core.Vertx;
 import javaslang.control.Try;
 import rx.Observable;
@@ -17,17 +18,17 @@ import java.util.function.Consumer;
  * @author Clay Molocznik
  */
 public class ActionProvider<A, IN, OUT> {
-    static final long DEFAULT_TIMEOUT_MILLIS = 5000;
+    static final int DEFAULT_TIMEOUT_MILLIS = 5000;
+    static final HystrixRequestVariableDefault<ActionContext> providerVariable = new HystrixRequestVariableDefault<>();
+
     private final HystrixCommandProperties.Setter commandPropertiesDefaults = HystrixCommandProperties.Setter();
     private final HystrixThreadPoolProperties.Setter threadPoolPropertiesDefaults = HystrixThreadPoolProperties.Setter();
     @Inject
     Vertx vertx;
-
     private io.vertx.core.Vertx vertxCore;
     private ActionConfig actionConfig;
     private HystrixCommand.Setter defaultSetter;
     private HystrixObservableCommand.Setter defaultObservableSetter;
-
     private Provider<A> actionProvider;
     private Provider<IN> inProvider;
     private Provider<OUT> outProvider;
@@ -37,14 +38,17 @@ public class ActionProvider<A, IN, OUT> {
     private boolean blocking;
     private boolean inited;
     private boolean executionTimeoutEnabled;
-    private long timeoutMillis;
+    private int timeoutMillis;
     private int maxConcurrentRequests;
-
     private boolean inSet;
     private boolean outSet;
 
     @Inject
     public ActionProvider() {
+    }
+
+    public static ActionContext current() {
+        return AbstractAction.contextLocal.get();
     }
 
     public ActionConfig getActionConfig() {
@@ -146,7 +150,7 @@ public class ActionProvider<A, IN, OUT> {
         actionConfig = actionClass.getAnnotation(ActionConfig.class);
 
         // Timeout milliseconds.
-        long timeoutMillis = DEFAULT_TIMEOUT_MILLIS;
+        int timeoutMillis = DEFAULT_TIMEOUT_MILLIS;
         if (actionConfig != null) {
             if (actionConfig.maxExecutionMillis() == 0) {
                 timeoutMillis = 0;
@@ -160,7 +164,7 @@ public class ActionProvider<A, IN, OUT> {
         // Enable timeout?
         if (timeoutMillis > 0) {
             commandPropertiesDefaults.withExecutionTimeoutEnabled(true);
-            commandPropertiesDefaults.withExecutionTimeoutInMilliseconds((int) timeoutMillis);
+            commandPropertiesDefaults.withExecutionTimeoutInMilliseconds(timeoutMillis);
             this.executionTimeoutEnabled = true;
         }
 
@@ -285,14 +289,22 @@ public class ActionProvider<A, IN, OUT> {
 
     protected A create() {
         final A action = actionProvider.get();
+        if (action instanceof AbstractAction) {
+            ActionContext context = AbstractAction.contextLocal.get();
+            if (context == null) {
+                context = new ActionContext(timeoutMillis, this, io.vertx.core.Vertx.currentContext());
+            }
+            ((AbstractAction) action).setActionContext(context);
+        }
+
         if (action instanceof AbstractBlockingAction) {
             ((AbstractBlockingAction) action).setCommandSetter(defaultSetter);
         } else if (action instanceof AbstractObservableAction) {
             ((AbstractObservableAction) action).setCommandSetter(defaultObservableSetter);
         }
+
         return action;
     }
-
 
     /**
      * @return
@@ -403,45 +415,70 @@ public class ActionProvider<A, IN, OUT> {
             return Observable.error(e);
         }
 
-        // Build observable.
-        final Observable<OUT> observable = abstractAction.toObservable();
-        final io.vertx.rxjava.core.Context ctx = Vertx.currentContext();//vertxCore.getOrCreateContext();
-
         return
             Single.<OUT>create(
                 subscriber -> {
-                    observable.subscribe(
-                        r -> {
-                            if (subscriber.isUnsubscribed())
-                                return;
+                    // Build observable.
+                    final Observable<OUT> observable = abstractAction.toObservable();
+                    final io.vertx.core.Context ctx = io.vertx.core.Vertx.currentContext();
+                    final ActionContext actionContext = abstractAction.getActionContext();
 
-                            if (ctx != null) {
-                                ctx.runOnContext(a -> {
-                                    if (subscriber.isUnsubscribed())
-                                        return;
+                    try {
+                        observable.subscribe(
+                            r -> {
+                                if (subscriber.isUnsubscribed())
+                                    return;
 
-                                    subscriber.onSuccess(r);
-                                });
-                            } else {
-                                subscriber.onSuccess(r);
+                                if (ctx != null) {
+                                    ctx.runOnContext(a -> {
+                                        if (subscriber.isUnsubscribed())
+                                            return;
+
+                                        AbstractAction.contextLocal.set(actionContext);
+                                        try {
+                                            subscriber.onSuccess(r);
+                                        } finally {
+                                            AbstractAction.contextLocal.remove();
+                                        }
+                                    });
+                                } else {
+                                    AbstractAction.contextLocal.set(actionContext);
+                                    try {
+                                        subscriber.onSuccess(r);
+                                    } finally {
+                                        AbstractAction.contextLocal.remove();
+                                    }
+                                }
+                            },
+                            e -> {
+                                if (subscriber.isUnsubscribed())
+                                    return;
+
+                                if (ctx != null) {
+                                    ctx.runOnContext(a -> {
+                                        if (subscriber.isUnsubscribed())
+                                            return;
+
+                                        AbstractAction.contextLocal.set(actionContext);
+                                        try {
+                                            subscriber.onError(e);
+                                        } finally {
+                                            AbstractAction.contextLocal.remove();
+                                        }
+                                    });
+                                } else {
+                                    AbstractAction.contextLocal.set(actionContext);
+                                    try {
+                                        subscriber.onError(e);
+                                    } finally {
+                                        AbstractAction.contextLocal.remove();
+                                    }
+                                }
                             }
-                        },
-                        e -> {
-                            if (subscriber.isUnsubscribed())
-                                return;
-
-                            if (ctx != null) {
-                                ctx.runOnContext(a -> {
-                                    if (subscriber.isUnsubscribed())
-                                        return;
-
-                                    subscriber.onError(e);
-                                });
-                            } else {
-                                subscriber.onError(e);
-                            }
-                        }
-                    );
+                        );
+                    } catch (Throwable e) {
+//                        Try.run(() -> htx.close());
+                    }
                 }
             ).toObservable();
     }

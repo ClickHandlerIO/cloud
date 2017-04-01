@@ -16,6 +16,8 @@ import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.rxjava.core.Vertx;
 import javaslang.control.Try;
+import move.action.ActionContext;
+import move.action.ActionProvider;
 import move.common.UID;
 import org.h2.server.TcpServer;
 import org.h2.tools.Server;
@@ -65,6 +67,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     private static final int DEV_MYSQL_PREPARE_STMT_CACHE_SQL_LIMIT = 2048;
     private static final String ENTITY_PACKAGE = "move.sql";
     private static final Logger LOG = LoggerFactory.getLogger(SqlDatabase.class);
+    private static final String ACTION_CONTEXT_KEY = "a";
 
     protected final SqlConfig config;
     protected final String name;
@@ -79,10 +82,16 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     private final String[] jooqPackageNames;
     private final Map<String, Table> jooqMap = Maps.newHashMap();
     private final Reflections[] entityReflections;
-    private final HystrixCommandProperties.Setter writeCommandPropertiesDefaults = HystrixCommandProperties.Setter();
-    private final HystrixCommandProperties.Setter readCommandPropertiesDefaults = HystrixCommandProperties.Setter();
-    private final HystrixThreadPoolProperties.Setter writeThreadPoolPropertiesDefaults = HystrixThreadPoolProperties.Setter();
-    private final HystrixThreadPoolProperties.Setter readThreadPoolPropertiesDefaults = HystrixThreadPoolProperties.Setter();
+    private final HystrixThreadPoolProperties.Setter writeThreadPoolPropertiesDefaults;
+    private final HystrixThreadPoolProperties.Setter readThreadPoolPropertiesDefaults;
+    private final HystrixCommandGroupKey groupKey;
+    private final HystrixThreadPoolKey readThreadPoolKey;
+    private final HystrixThreadPoolKey writeThreadPoolKey;
+    private final HystrixCommandKey readCommandKey = HystrixCommandKey.Factory.asKey("READ");
+    private final HystrixCommandKey writeCommandKey = HystrixCommandKey.Factory.asKey("WRITE");
+    private final int readTaskTimout;
+    private final int writeTaskTimout;
+
     protected HikariConfig hikariConfig;
     protected HikariConfig hikariReadConfig;
     protected Configuration configuration;
@@ -97,8 +106,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     ////////////////////////////////////////////////////////////////////////////////////////////////////
     // Property Accessors
     ////////////////////////////////////////////////////////////////////////////////////////////////////
-    private HystrixCommand.Setter writeSetter;
-    private HystrixCommand.Setter readSetter;
 
     public SqlDatabase(
         Vertx vertx,
@@ -112,6 +119,36 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         this.name = Strings.nullToEmpty(config.getName()).trim();
         this.entityPackageNames = entityPackageNames;
         this.jooqPackageNames = jooqPackageNames;
+
+        this.groupKey = HystrixCommandGroupKey.Factory.asKey("SQL-" + config.getName());
+        this.readThreadPoolKey = HystrixThreadPoolKey.Factory.asKey("SQL-" + config.getName() + "-READ");
+        this.writeThreadPoolKey = HystrixThreadPoolKey.Factory.asKey("SQL-" + config.getName() + "-WRITE");
+
+        if (config.getReadTaskTimeout() < MINIMUM_TIMEOUT) {
+            this.readTaskTimout = MINIMUM_TIMEOUT;
+        } else {
+            this.readTaskTimout = config.getReadTaskTimeout();
+        }
+
+        if (config.getWriteTaskTimeout() < MINIMUM_TIMEOUT) {
+            this.writeTaskTimout = MINIMUM_TIMEOUT;
+        } else {
+            this.writeTaskTimout = config.getWriteTaskTimeout();
+        }
+
+        this.readThreadPoolPropertiesDefaults = HystrixThreadPoolProperties.Setter()
+            .withCoreSize(ensureThreads(config.getReadThreads(), config.getMaxReadPoolSize()))
+            .withAllowMaximumSizeToDivergeFromCoreSize(false)
+            .withMaximumSize(ensureThreads(config.getReadThreads(), config.getMaxReadPoolSize()))
+            .withMaxQueueSize(MAX_QUEUE_CAPACITY)
+            .withQueueSizeRejectionThreshold(config.getMaxReadTasks() <= 0 ? MAX_READ_TASKS : config.getMaxReadTasks());
+
+        this.writeThreadPoolPropertiesDefaults = HystrixThreadPoolProperties.Setter()
+            .withCoreSize(ensureThreads(config.getWriteThreads(), config.getMaxPoolSize()))
+            .withAllowMaximumSizeToDivergeFromCoreSize(false)
+            .withMaximumSize(ensureThreads(config.getWriteThreads(), config.getMaxPoolSize()))
+            .withMaxQueueSize(MAX_QUEUE_CAPACITY)
+            .withQueueSizeRejectionThreshold(config.getMaxWriteTasks() <= 0 ? MAX_WRITE_TASKS : config.getMaxWriteTasks());
 
         final List<Reflections> entityReflections = new ArrayList<>();
         final List<Reflections> jooqReflections = new ArrayList<>();
@@ -218,8 +255,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         try {
             final long started = System.currentTimeMillis();
             LOG.info("Starting SqlDatabase...");
-
-            configureHystrix();
 
             final String jdbcUrl = Strings.nullToEmpty((config.getUrl())).trim();
             final String jdbcUser = Strings.nullToEmpty((config.getUser()));
@@ -533,7 +568,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
 
     private int ensureThreads(int threads, int poolSize) {
         if (threads == 0) {
-            threads = (int)(poolSize * 0.9) + 1;
+            threads = (int) (poolSize * 0.9) + 1;
         }
         if (threads <= 5) {
             threads = 5;
@@ -541,52 +576,66 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         return threads;
     }
 
-    private void configureHystrix() {
-        writeThreadPoolPropertiesDefaults
-            .withCoreSize(ensureThreads(config.getWriteThreads(), config.getMaxPoolSize()))
-            .withAllowMaximumSizeToDivergeFromCoreSize(false)
-            .withMaximumSize(ensureThreads(config.getWriteThreads(), config.getMaxPoolSize()))
-            .withMaxQueueSize(MAX_QUEUE_CAPACITY)
-            .withQueueSizeRejectionThreshold(config.getMaxWriteTasks() <= 0 ? MAX_WRITE_TASKS : config.getMaxWriteTasks());
+    private HystrixCommand.Setter readSetter(int timeoutInMillis, ActionContext context) {
+        int maxTimeout = context != null ? (int) (context.timesOutAt - System.currentTimeMillis()) : readTaskTimout;
 
-        readThreadPoolPropertiesDefaults
-            .withCoreSize(ensureThreads(config.getReadThreads(), config.getMaxReadPoolSize()))
-            .withAllowMaximumSizeToDivergeFromCoreSize(false)
-            .withMaximumSize(ensureThreads(config.getReadThreads(), config.getMaxReadPoolSize()))
-            .withMaxQueueSize(MAX_QUEUE_CAPACITY)
-            .withQueueSizeRejectionThreshold(config.getMaxReadTasks() <= 0 ? MAX_READ_TASKS : config.getMaxReadTasks());
+        if (timeoutInMillis < MINIMUM_TIMEOUT) {
+            timeoutInMillis = MINIMUM_TIMEOUT;
+        }
 
-        writeCommandPropertiesDefaults
+        if (maxTimeout <= 1000) {
+            return null;
+        }
+
+        if (timeoutInMillis > maxTimeout) {
+            timeoutInMillis = maxTimeout;
+        }
+
+        final HystrixCommandProperties.Setter setter = HystrixCommandProperties.Setter()
             .withExecutionIsolationStrategy(HystrixCommandProperties.ExecutionIsolationStrategy.THREAD)
             .withCircuitBreakerEnabled(true)
             .withFallbackEnabled(false)
             .withExecutionTimeoutEnabled(true)
-            .withExecutionTimeoutInMilliseconds(config.getWriteTaskTimeout() < MINIMUM_TIMEOUT ? WRITE_ACTION_TIMEOUT : config.getWriteTaskTimeout())
+            .withExecutionTimeoutInMilliseconds(timeoutInMillis)
             .withExecutionIsolationThreadInterruptOnFutureCancel(true);
 
-        readCommandPropertiesDefaults
+        return HystrixCommand.Setter
+            .withGroupKey(groupKey)
+            .andThreadPoolKey(readThreadPoolKey)
+            .andCommandKey(readCommandKey)
+            .andCommandPropertiesDefaults(setter)
+            .andThreadPoolPropertiesDefaults(readThreadPoolPropertiesDefaults);
+    }
+
+    private HystrixCommand.Setter writeSetter(long timeoutInMillis, ActionContext context) {
+        int maxTimeout = context != null ? (int) (context.timesOutAt - System.currentTimeMillis()) : writeTaskTimout;
+
+        if (timeoutInMillis < MINIMUM_TIMEOUT) {
+            timeoutInMillis = MINIMUM_TIMEOUT;
+        }
+
+        if (maxTimeout <= 1000) {
+            return null;
+        }
+
+        if (timeoutInMillis > maxTimeout) {
+            timeoutInMillis = maxTimeout;
+        }
+
+        final HystrixCommandProperties.Setter setter = HystrixCommandProperties.Setter()
             .withExecutionIsolationStrategy(HystrixCommandProperties.ExecutionIsolationStrategy.THREAD)
             .withCircuitBreakerEnabled(true)
             .withFallbackEnabled(false)
             .withExecutionTimeoutEnabled(true)
-            .withExecutionTimeoutInMilliseconds(config.getReadTaskTimeout() < MINIMUM_TIMEOUT ? READ_ACTION_TIMEOUT : config.getReadTaskTimeout())
+            .withExecutionTimeoutInMilliseconds((int) timeoutInMillis)
             .withExecutionIsolationThreadInterruptOnFutureCancel(true);
 
-        writeSetter =
-            HystrixCommand.Setter
-                .withGroupKey(HystrixCommandGroupKey.Factory.asKey("SQL-" + config.getName()))
-                .andThreadPoolKey(HystrixThreadPoolKey.Factory.asKey("SQL-" + config.getName() + "-WRITE"))
-                .andCommandKey(HystrixCommandKey.Factory.asKey("WRITE"))
-                .andCommandPropertiesDefaults(writeCommandPropertiesDefaults)
-                .andThreadPoolPropertiesDefaults(writeThreadPoolPropertiesDefaults);
-
-        readSetter =
-            HystrixCommand.Setter
-                .withGroupKey(HystrixCommandGroupKey.Factory.asKey("SQL-" + config.getName()))
-                .andThreadPoolKey(HystrixThreadPoolKey.Factory.asKey("SQL-" + config.getName() + "-READ"))
-                .andCommandKey(HystrixCommandKey.Factory.asKey("READ"))
-                .andCommandPropertiesDefaults(readCommandPropertiesDefaults)
-                .andThreadPoolPropertiesDefaults(readThreadPoolPropertiesDefaults);
+        return HystrixCommand.Setter
+            .withGroupKey(groupKey)
+            .andThreadPoolKey(writeThreadPoolKey)
+            .andCommandKey(writeCommandKey)
+            .andCommandPropertiesDefaults(setter)
+            .andThreadPoolPropertiesDefaults(writeThreadPoolPropertiesDefaults);
     }
 
     @Override
@@ -817,7 +866,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 }
 
                 return SqlResult.success(evolution);
-            });
+            }, null);
         } finally {
             try {
                 // Save if evolution failed since the transaction rolled back.
@@ -829,7 +878,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                             sql.insert(evolution);
                             sql.insert(changeEntities);
                             return SqlResult.success();
-                        });
+                        }, null);
                     }
                 }
             } catch (Throwable e) {
@@ -1264,7 +1313,16 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         return writeObservable(task);
     }
 
+    public <T> Observable<SqlResult<T>> write(SqlCallable<T> task, int timeoutMillis) {
+        return writeObservable(task, timeoutMillis);
+    }
+
     public <T> Observable<SqlResult<T>> writeObservable(SqlCallable<T> task) {
+        return writeObservable(task, writeTaskTimout);
+    }
+
+    public <T> Observable<SqlResult<T>> writeObservable(SqlCallable<T> task, int timeoutMillis) {
+        final ActionContext actionContext = ActionProvider.current();
         final io.vertx.rxjava.core.Context context = vertx.getOrCreateContext();
 
         return Observable.create(subscriber -> {
@@ -1272,7 +1330,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 return;
             }
 
-            new WriteAction<T>(writeSetter, task).observe().subscribe(
+            new WriteAction<T>(writeSetter(timeoutMillis, actionContext), task, actionContext).observe().subscribe(
                 r -> {
                     context.runOnContext(a -> {
                         if (subscriber.isUnsubscribed()) {
@@ -1318,7 +1376,16 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         return readObservable(task);
     }
 
+    public <T> Observable<T> read(SqlReadCallable<T> task, int timeoutMillis) {
+        return readObservable(task, timeoutMillis);
+    }
+
     public <T> Observable<T> readObservable(SqlReadCallable<T> task) {
+        return readObservable(task, readTaskTimout);
+    }
+
+    public <T> Observable<T> readObservable(SqlReadCallable<T> task, int timeoutMillis) {
+        final ActionContext actionContext = ActionProvider.current();
         final io.vertx.rxjava.core.Context context = vertx.getOrCreateContext();
 
         return Observable.create(subscriber -> {
@@ -1326,7 +1393,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 return;
             }
 
-            new ReadAction<T>(readSetter, task).observe().subscribe(
+            new ReadAction<T>(readSetter(timeoutMillis, actionContext), task, actionContext).observe().subscribe(
                 r -> {
                     context.runOnContext(a -> {
                         if (subscriber.isUnsubscribed()) {
@@ -1350,6 +1417,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         });
     }
 
+
     /**
      * @param task
      * @param handler
@@ -1368,14 +1436,8 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         );
     }
 
-    /**
-     * @param task
-     * @param <T>
-     * @throws ExecutionException
-     * @throws InterruptedException
-     */
     public <T> T readBlocking(SqlReadCallable<T> task) {
-        return new ReadAction<T>(readSetter, task).execute();
+        return readBlocking(task, readTaskTimout);
     }
 
     /**
@@ -1384,8 +1446,24 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @throws ExecutionException
      * @throws InterruptedException
      */
+    public <T> T readBlocking(SqlReadCallable<T> task, int timeoutMillis) {
+        final ActionContext actionContext = ActionProvider.current();
+        return new ReadAction<T>(readSetter(timeoutMillis, actionContext), task, actionContext).execute();
+    }
+
     public <T> SqlResult<T> writeBlocking(SqlCallable<T> task) {
-        return new WriteAction<T>(writeSetter, task).execute();
+        return writeBlocking(task, writeTaskTimout);
+    }
+
+    /**
+     * @param task
+     * @param <T>
+     * @throws ExecutionException
+     * @throws InterruptedException
+     */
+    public <T> SqlResult<T> writeBlocking(SqlCallable<T> task, int timeoutMillis) {
+        final ActionContext actionContext = ActionProvider.current();
+        return new WriteAction<T>(writeSetter(timeoutMillis, actionContext), task, actionContext).execute();
     }
 
     /**
@@ -1393,7 +1471,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @param <T>
      * @return
      */
-    protected <T> T executeRead(SqlReadCallable<T> callable) {
+    protected <T> T executeRead(SqlReadCallable<T> callable, ActionContext context) {
         final Connection connection;
 
         try {
@@ -1406,14 +1484,24 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             final ConnectionProvider connectionProvider = new DefaultConnectionProvider(connection);
             final Configuration configuration = readConfiguration.derive(connectionProvider);
 
-            final T result = DSL.using(configuration).connectionResult(new ConnectionCallable<T>() {
-                @Override
-                public T run(Connection connection) throws Exception {
-                    return callable.call(new SqlSession(SqlDatabase.this, configuration, connection));
-                }
-            });
+            if (context != null) {
+                configuration.data(ACTION_CONTEXT_KEY, context);
+            }
 
-            return result;
+            try {
+                final T result = DSL.using(configuration).connectionResult(new ConnectionCallable<T>() {
+                    @Override
+                    public T run(Connection connection) throws Exception {
+                        return callable.call(new SqlSession(SqlDatabase.this, configuration, connection));
+                    }
+                });
+
+                return result;
+            } finally {
+                if (context != null) {
+                    configuration.data().remove(ACTION_CONTEXT_KEY);
+                }
+            }
         } catch (Throwable e) {
             throw new PersistException(e);
         } finally {
@@ -1426,7 +1514,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @param <T>
      * @return
      */
-    protected <T> SqlResult<T> executeWrite(SqlCallable<T> callable) {
+    protected <T> SqlResult<T> executeWrite(SqlCallable<T> callable, ActionContext context) {
         final AtomicReference<SqlResult<T>> r = new AtomicReference<>();
         final Connection connection;
 
@@ -1441,37 +1529,47 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             final Configuration configuration = this.configuration.derive(connectionProvider);
             configuration.set(new ThreadLocalTransactionProvider(connectionProvider));
 
-            final SqlSession session = new SqlSession(this, configuration, connection);
+            if (context != null) {
+                configuration.data(ACTION_CONTEXT_KEY, context);
+            }
 
-            return DSL.using(session.configuration()).transactionResult($ -> {
-                session.scope($);
+            try {
+                final SqlSession session = new SqlSession(this, configuration, connection);
 
-                try {
-                    // Execute the code.
-                    SqlResult<T> result = null;
+                return DSL.using(session.configuration()).transactionResult($ -> {
+                    session.scope($);
 
                     try {
-                        result = callable.call(session);
+                        // Execute the code.
+                        SqlResult<T> result = null;
 
-                        if (result == null) {
-                            result = SqlResult.commit();
+                        try {
+                            result = callable.call(session);
+
+                            if (result == null) {
+                                result = SqlResult.commit();
+                            }
+                        } catch (Throwable e) {
+                            result = SqlResult.rollback(null, e);
                         }
-                    } catch (Throwable e) {
-                        result = SqlResult.rollback(null, e);
+
+                        r.set(result);
+
+                        // Rollback if ActionResponse isFailure.
+                        if (!result.isSuccess() || result.getReason() != null) {
+                            throw new RollbackException();
+                        }
+
+                        return result;
+                    } finally {
+                        session.unscope();
                     }
-
-                    r.set(result);
-
-                    // Rollback if ActionResponse isFailure.
-                    if (!result.isSuccess() || result.getReason() != null) {
-                        throw new RollbackException();
-                    }
-
-                    return result;
-                } finally {
-                    session.unscope();
+                });
+            } finally {
+                if (context != null && configuration.data() != null) {
+                    configuration.data().remove(ACTION_CONTEXT_KEY);
                 }
-            });
+            }
         } catch (RollbackException e) {
             if (r.get().getReason() != null) {
                 Throwables.propagate(r.get().getReason());
@@ -1764,29 +1862,33 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
 
     private class ReadAction<T> extends HystrixCommand<T> {
         private final SqlReadCallable<T> callback;
+        private final ActionContext context;
 
-        public ReadAction(Setter setter, SqlReadCallable<T> callback) {
+        public ReadAction(Setter setter, SqlReadCallable<T> callback, ActionContext context) {
             super(setter);
             this.callback = callback;
+            this.context = context;
         }
 
         @Override
         protected T run() throws Exception {
-            return executeRead(callback);
+            return executeRead(callback, context);
         }
     }
 
     private class WriteAction<T> extends HystrixCommand<SqlResult<T>> {
         private final SqlCallable<T> callback;
+        private final ActionContext context;
 
-        public WriteAction(Setter setter, SqlCallable<T> callback) {
+        public WriteAction(Setter setter, SqlCallable<T> callback, ActionContext context) {
             super(setter);
             this.callback = callback;
+            this.context = context;
         }
 
         @Override
         protected SqlResult<T> run() throws Exception {
-            return executeWrite(callback);
+            return executeWrite(callback, context);
         }
     }
 
@@ -1797,8 +1899,24 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             try {
                 if (ctx.statement() != null) {
                     int queryTimeout = ctx.statement().getQueryTimeout();
-                    if (queryTimeout < 1) {
-                        ctx.statement().setQueryTimeout(4);
+                    final Object ac = ctx.configuration().data(ACTION_CONTEXT_KEY);
+
+                    if (ac != null && ac instanceof ActionContext) {
+                        final ActionContext actionContext = (ActionContext) ac;
+
+                        int timeLeft = (int) (System.currentTimeMillis() - actionContext.timesOutAt);
+
+                        if (timeLeft <= 1000) {
+                            queryTimeout = 1;
+                        } else {
+                            queryTimeout = Math.round((float) timeLeft / 1000.0f);
+                        }
+
+                        ctx.statement().setQueryTimeout(queryTimeout);
+                    } else {
+                        if (queryTimeout < 30) {
+                            ctx.statement().setQueryTimeout(30);
+                        }
                     }
                 }
             } catch (Throwable e) {

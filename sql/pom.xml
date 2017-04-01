@@ -25,6 +25,10 @@
             <artifactId>common</artifactId>
         </dependency>
         <dependency>
+            <groupId>io.clickhandler</groupId>
+            <artifactId>action</artifactId>
+        </dependency>
+        <dependency>
             <groupId>io.vertx</groupId>
             <artifactId>vertx-core</artifactId>
         </dependency>

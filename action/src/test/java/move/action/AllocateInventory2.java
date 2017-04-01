@@ -15,6 +15,8 @@ public class AllocateInventory2 extends AbstractBlockingAction<String, String> {
 
     @Override
     public String handle(String request) {
+
+        System.out.println(Thread.currentThread().getName() + " - Action Context: " + getActionContext().started);
         System.out.println(Thread.currentThread().getName() + " - Start");
 
         final String result = Main.actions().allocateInventory.observe("Test").toBlocking().first();

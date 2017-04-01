@@ -4,7 +4,8 @@ import com.netflix.hystrix.HystrixObservableCommand;
 import io.vertx.core.Context;
 import io.vertx.core.Vertx;
 import rx.Observable;
-import rx.Subscriber;
+import rx.Single;
+import rx.SingleSubscriber;
 
 import java.util.function.Consumer;
 
@@ -18,8 +19,13 @@ public abstract class AbstractObservableAction<IN, OUT>
     private HystrixObservableCommand<OUT> command;
     private HystrixObservableCommand.Setter setter;
 
-    private Subscriber<? super OUT> subscriber;
+    private SingleSubscriber<? super OUT> subscriber;
     private Context ctx;
+    private boolean fallback;
+
+    public boolean isFallback() {
+        return fallback;
+    }
 
     protected HystrixObservableCommand.Setter getCommandSetter() {
         return setter;
@@ -38,6 +44,11 @@ public abstract class AbstractObservableAction<IN, OUT>
             protected Observable<OUT> construct() {
                 return AbstractObservableAction.this.construct();
             }
+
+            @Override
+            protected Observable<OUT> resumeWithFallback() {
+                return constructFallback();
+            }
         };
     }
 
@@ -45,19 +56,49 @@ public abstract class AbstractObservableAction<IN, OUT>
      * @return
      */
     protected Observable<OUT> construct() {
-        return Observable.create(new Observable.OnSubscribe<OUT>() {
-            @Override
-            public void call(Subscriber<? super OUT> subscriber) {
-                try {
-                    ctx = Vertx.currentContext();
-                    if (!subscriber.isUnsubscribed()) {
+        return Single.<OUT>create(subscriber -> {
+            try {
+                ctx = Vertx.currentContext();
+                if (!subscriber.isUnsubscribed()) {
+                    contextLocal.set(getActionContext());
+                    try {
                         start(subscriber);
+                    } finally {
+                        contextLocal.remove();
                     }
-                } catch (Exception e) {
+                }
+            } catch (Exception e) {
+                contextLocal.set(getActionContext());
+                try {
                     subscriber.onError(e);
+                } finally {
+                    contextLocal.remove();
                 }
             }
-        });
+        }).toObservable();
+    }
+
+    protected Observable<OUT> constructFallback() {
+        return Single.<OUT>create(subscriber -> {
+            try {
+                ctx = Vertx.currentContext();
+                if (!subscriber.isUnsubscribed()) {
+                    contextLocal.set(getActionContext());
+                    try {
+                        startFallback(subscriber);
+                    } finally {
+                        contextLocal.remove();
+                    }
+                }
+            } catch (Exception e) {
+                contextLocal.set(getActionContext());
+                try {
+                    subscriber.onError(e);
+                } finally {
+                    contextLocal.remove();
+                }
+            }
+        }).toObservable();
     }
 
     /**
@@ -74,15 +115,31 @@ public abstract class AbstractObservableAction<IN, OUT>
     /**
      * @param subscriber
      */
-    protected void start(Subscriber<? super OUT> subscriber) {
+    protected void start(SingleSubscriber<? super OUT> subscriber) {
         this.subscriber = subscriber;
         start(getRequest());
+    }
+
+    /**
+     * @param subscriber
+     */
+    protected void startFallback(SingleSubscriber<? super OUT> subscriber) {
+        this.subscriber = subscriber;
+        this.fallback = true;
+        startFallback(getRequest());
     }
 
     /**
      * @param request
      */
     protected abstract void start(IN request);
+
+    /**
+     * @param request
+     */
+    protected void startFallback(IN request) {
+        throw new ActionFallbackException();
+    }
 
     /**
      * @param response
@@ -104,11 +161,10 @@ public abstract class AbstractObservableAction<IN, OUT>
      * @param subscriber
      * @param response
      */
-    protected void complete(Subscriber<? super OUT> subscriber, OUT response) {
+    protected void complete(SingleSubscriber<? super OUT> subscriber, OUT response) {
         try {
             if (!subscriber.isUnsubscribed()) {
-                subscriber.onNext(response);
-                subscriber.onCompleted();
+                subscriber.onSuccess(response);
             }
         } catch (Exception e) {
             subscriber.onError(e);
