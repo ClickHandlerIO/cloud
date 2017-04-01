@@ -16,6 +16,7 @@ import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.rxjava.core.Vertx;
 import javaslang.control.Try;
+import move.action.AbstractAction;
 import move.action.ActionContext;
 import move.action.ActionProvider;
 import move.common.UID;
@@ -893,6 +894,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @param handler
      */
     @Override
+    @Deprecated
     public void writeRunnable(SqlRunnable task, Handler<AsyncResult<Void>> handler) {
         final io.vertx.core.Context ctx = io.vertx.core.Vertx.currentContext();
 
@@ -1225,6 +1227,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @return
      */
     @Override
+    @Deprecated
     public <T extends AbstractEntity> Observable<SqlResult<int[]>> insert(List<T> entities, int timeoutSeconds) {
         return write(sql -> sql.insert(entities, timeoutSeconds));
     }
@@ -1245,6 +1248,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @return
      */
     @Override
+    @Deprecated
     public <T extends AbstractEntity> Observable<SqlResult<int[]>> insertAtomic(List<T> entities, int timeoutSeconds) {
         return write(sql -> sql.insertAtomic(entities, timeoutSeconds));
     }
@@ -1285,6 +1289,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @return
      */
     @Override
+    @Deprecated
     public <T extends AbstractEntity> Observable<SqlResult<int[]>> update(List<T> entities, int timeoutSeconds) {
         return write(sql -> sql.update(entities, timeoutSeconds));
     }
@@ -1305,6 +1310,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @return
      */
     @Override
+    @Deprecated
     public <T extends AbstractEntity> Observable<SqlResult<int[]>> updateAtomic(List<T> entities, int timeoutSeconds) {
         return write(sql -> sql.updateAtomic(entities, timeoutSeconds));
     }
@@ -1337,8 +1343,18 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                             return;
                         }
 
-                        subscriber.onNext(r);
-                        subscriber.onCompleted();
+                        if (actionContext != null) {
+                            AbstractAction.contextLocal.set(actionContext);
+                            try {
+                                subscriber.onNext(r);
+                                subscriber.onCompleted();
+                            } finally {
+                                AbstractAction.contextLocal.remove();
+                            }
+                        } else {
+                            subscriber.onNext(r);
+                            subscriber.onCompleted();
+                        }
                     });
                 },
                 e -> {
@@ -1347,7 +1363,16 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                             return;
                         }
 
-                        subscriber.onError(e);
+                        if (actionContext != null) {
+                            AbstractAction.contextLocal.set(actionContext);
+                            try {
+                                subscriber.onError(e);
+                            } finally {
+                                AbstractAction.contextLocal.remove();
+                            }
+                        } else {
+                            subscriber.onError(e);
+                        }
                     });
                 }
             );
@@ -1400,8 +1425,18 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                             return;
                         }
 
-                        subscriber.onNext(r);
-                        subscriber.onCompleted();
+                        if (actionContext != null) {
+                            AbstractAction.contextLocal.set(actionContext);
+                            try {
+                                subscriber.onNext(r);
+                                subscriber.onCompleted();
+                            } finally {
+                                AbstractAction.contextLocal.remove();
+                            }
+                        } else {
+                            subscriber.onNext(r);
+                            subscriber.onCompleted();
+                        }
                     });
                 },
                 e -> {
@@ -1410,7 +1445,16 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                             return;
                         }
 
-                        subscriber.onError(e);
+                        if (actionContext != null) {
+                            AbstractAction.contextLocal.set(actionContext);
+                            try {
+                                subscriber.onError(e);
+                            } finally {
+                                AbstractAction.contextLocal.remove();
+                            }
+                        } else {
+                            subscriber.onError(e);
+                        }
                     });
                 }
             );
@@ -1909,7 +1953,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                         if (timeLeft <= 1000) {
                             queryTimeout = 1;
                         } else {
-                            queryTimeout = Math.round((float) timeLeft / 1000.0f);
+                            queryTimeout = (int)Math.ceil((double) timeLeft / 1000.0);
                         }
 
                         ctx.statement().setQueryTimeout(queryTimeout);
