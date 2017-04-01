@@ -116,7 +116,7 @@ public class ZonedDate {
 
    // Helper Functions
    public ZonedDate startOfDay() {
-      return this.withHour(0).withMinute(0).withSecond(0).withHour(0);
+      return this.withHour(0).withMinute(0).withSecond(0).withNano(0);
    }
 
    public ZonedDate endOfDay() {
