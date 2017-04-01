@@ -42,10 +42,10 @@ public class SQSConsumer extends AbstractIdleService {
    private AtomicInteger inflight; //Total messages on this server to be processed from this queue.
    private ReceiveThread[] receiveThreads;
    private DeleteThread[] deleteThreads;
-   private int batchSize = 10;
+   private int batchSize = 1;
    private int minimumVisibility = 30;
    private int visibilityBufferMillis = 5_000;
-   private int maxInflight = 30;
+   private int maxInflight = 2;
    private String queueUrl;
    private Map<String, ActionContext> actionMap;
    private ActionContext dedicated;
@@ -349,7 +349,6 @@ public class SQSConsumer extends AbstractIdleService {
             try {
                // Does this server need more messages.
                if (inflight.get() >= maxInflight) {
-                  LOG.warn("Max inflight reached, will check again in 2000ms");
                   try {
                      Thread.sleep(2_000);
                      continue;
@@ -375,6 +374,9 @@ public class SQSConsumer extends AbstractIdleService {
                   // Receive a batch of messages.
                   LOG.info("Trying to get messages");
                   result = receiveMessage(request);
+               } catch (InterruptedException e) {
+                  LOG.warn("Interrupted.", e);
+                  return;
                } catch (Exception e) {
                   LOG.warn("SQS Consumer Exception", e);
                }
@@ -434,6 +436,9 @@ public class SQSConsumer extends AbstractIdleService {
                            try {
                               LOG.info("Trying to dispatch action");
                               actionContext.run(request);
+                           } catch (InterruptedException e) {
+                              LOG.warn("Interrupted.", e);
+                              return;
                            } catch (Exception ex) {
                               LOG.warn("Exception trying to run action.", ex);
                            }
@@ -452,6 +457,9 @@ public class SQSConsumer extends AbstractIdleService {
                            .withEntries(changes)
                         );
                   }
+               } catch (InterruptedException e) {
+                  LOG.warn("Interrupted.", e);
+                  return;
                } catch (Exception ex) {
                   LOG.warn("Socket error trying to extend.", ex);
                }
