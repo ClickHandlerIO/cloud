@@ -434,11 +434,9 @@ public class SQSConsumer extends AbstractIdleService {
                      } finally {
                         if (!request.queued) {
                            try {
-                              LOG.info("Trying to dispatch action");
                               actionContext.run(request);
                            } catch (InterruptedException e) {
                               LOG.warn("Interrupted.", e);
-                              return;
                            } catch (Exception ex) {
                               LOG.warn("Exception trying to run action.", ex);
                            }

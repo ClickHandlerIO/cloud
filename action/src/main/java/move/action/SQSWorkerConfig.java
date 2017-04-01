@@ -19,7 +19,7 @@ public class SQSWorkerConfig {
    /**
     * Indicates FIFO queue rules to be used.
     */
-   public boolean fifo;
+   public boolean fifo = false;
    /**
     * AWS region
     */
@@ -128,6 +128,11 @@ public class SQSWorkerConfig {
       this.sqsName = sqsName;
       return this;
    }
+
+   public SQSWorkerConfig fifo(final boolean fifo) {
+         this.fifo = fifo;
+         return this;
+      }
 
    public SQSWorkerConfig region(final String region) {
       this.region = region;
