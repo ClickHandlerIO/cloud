@@ -40,6 +40,22 @@ public class InternalActionProvider<A extends Action<IN, OUT>, IN, OUT> extends 
         return super.observe(callback);
     }
 
+    public Observable<OUT> observe(final Object data, final IN request) {
+        final A action = create(request);
+
+        if (action instanceof AbstractAction) {
+            final ActionContext actionContext = ((AbstractAction)action).actionContext();
+            if (actionContext != null) {
+                actionContext.data = data;
+            }
+        }
+
+        return observe0(
+            request,
+            action
+        );
+    }
+
     /**
      * @param request
      * @return

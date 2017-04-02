@@ -194,6 +194,7 @@ public class ActionProvider<A, IN, OUT> {
 
          // Set Hystrix isolation strategy.
          commandPropertiesDefaults.withExecutionIsolationStrategy(hystrixIsolation);
+         commandPropertiesDefaults.withFallbackEnabled(true);
 
          // Build HystrixObservableCommand.Setter default.
          final String groupKey = actionConfig != null ? actionConfig.groupKey() : "";
