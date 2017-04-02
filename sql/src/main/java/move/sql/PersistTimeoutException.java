@@ -1,4 +1,4 @@
-package move.action;
+package move.sql;
 
 /**
  *

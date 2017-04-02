@@ -19,7 +19,6 @@ import javaslang.control.Try;
 import move.action.AbstractAction;
 import move.action.ActionContext;
 import move.action.ActionProvider;
-import move.action.PersistTimeoutException;
 import move.common.UID;
 import org.h2.server.TcpServer;
 import org.h2.tools.Server;
