@@ -1948,7 +1948,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                     if (ac != null && ac instanceof ActionContext) {
                         final ActionContext actionContext = (ActionContext) ac;
 
-                        int timeLeft = (int) (System.currentTimeMillis() - actionContext.timesOutAt);
+                        int timeLeft = (int) (actionContext.timesOutAt - System.currentTimeMillis());
 
                         if (timeLeft <= 1000) {
                             queryTimeout = 1;
