@@ -22,6 +22,7 @@ import java.util.Map;
 @Singleton
 public class ActionManager extends AbstractIdleService {
     private final static Logger LOG = LoggerFactory.getLogger(ActionManager.class);
+    private final static Map<String, ThreadPoolConfig> threadPoolConfigs = new HashMap<>();
     private final static Map<Object, ActionProvider<?, ?, ?>> actionProviderMap = new HashMap<>();
     private final static Map<Object, RemoteActionProvider<?, ?, ?>> remoteActionMap = new HashMap<>();
     private final static Map<Object, InternalActionProvider<?, ?, ?>> internalActionMap = new HashMap<>();
@@ -72,6 +73,10 @@ public class ActionManager extends AbstractIdleService {
 
     public static void setExecutionTimeoutEnabled(boolean enabled) {
         actionProviderMap.forEach((k, v) -> v.setExecutionTimeoutEnabled(enabled));
+    }
+
+    public static ThreadPoolConfig getThreadPoolConfig(String groupKey){
+        return threadPoolConfigs.get(groupKey);
     }
 
     static synchronized void register(Map<Object, ActionProvider<?, ?, ?>> map) {

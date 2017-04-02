@@ -29,11 +29,6 @@ public @interface ActionConfig {
     /**
      * @return
      */
-    String threadPoolKey() default "";
-
-    /**
-     * @return
-     */
     int maxExecutionMillis() default 5000;
 
     /**
