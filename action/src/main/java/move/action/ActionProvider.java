@@ -233,7 +233,7 @@ public class ActionProvider<A, IN, OUT> {
             commandPropertiesDefaults
                 .withExecutionIsolationStrategy(hystrixIsolation)
                 .withCircuitBreakerEnabled(true)
-                .withFallbackEnabled(false);
+                .withFallbackEnabled(true);
 
             threadPoolPropertiesDefaults
                 .withCoreSize(10)
