@@ -29,7 +29,7 @@ public @interface ActionConfig {
     /**
      * @return
      */
-    int maxExecutionMillis() default 5000;
+    int maxExecutionMillis() default 20_000;
 
     /**
      * @return

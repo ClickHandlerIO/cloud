@@ -62,11 +62,10 @@ public class SQSProducer extends AbstractIdleService implements WorkerProducer {
     */
    void setConfig(SQSWorkerConfig config) {
       Preconditions.checkArgument(config.batchSize > 0, "batchSize must be 1-10");
-      Preconditions.checkArgument(config.batchSize <= 10, "batchSize must be 1-10");
       Preconditions.checkArgument(config.sendThreads > 0, "sendThreads must be greater than 0");
       this.config = config;
-      this.batchSize = config.batchSize;
       this.threadCount = config.sendThreads;
+      this.batchSize = 10; //Producer should always be 10
    }
 
    /**
@@ -125,11 +124,11 @@ public class SQSProducer extends AbstractIdleService implements WorkerProducer {
             });
          }
       } catch (SocketException e) {
-         // Ignore.
+         LOG.error("AmazonSQSClient.sendMessageBatch() threw a socket exception", e);
       } catch (AmazonClientException e) {
-         // Ignore.
+         LOG.error("AmazonSQSClient.sendMessageBatch() threw a client exception", e);
       } catch (InterruptedException e) {
-         // Ignore.
+         LOG.warn("AmazonSQSClient.sendMessageBatch() threw an interrupted exception", e);
       } catch (Throwable e) {
          LOG.error("AmazonSQSClient.sendMessageBatch() threw an exception", e);
       }
