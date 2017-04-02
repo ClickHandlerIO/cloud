@@ -79,6 +79,10 @@ public class ActionManager extends AbstractIdleService {
         return threadPoolConfigs;
     }
 
+    public static ThreadPoolConfig getThreadPoolConfig(String groupKey) {
+        return threadPoolConfigs.get(groupKey);
+    }
+
     static synchronized void register(Map<Object, ActionProvider<?, ?, ?>> map) {
         if (map == null || map.isEmpty()) {
             return;
