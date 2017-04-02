@@ -75,8 +75,8 @@ public class ActionManager extends AbstractIdleService {
         actionProviderMap.forEach((k, v) -> v.setExecutionTimeoutEnabled(enabled));
     }
 
-    public static ThreadPoolConfig getThreadPoolConfig(String groupKey){
-        return threadPoolConfigs.get(groupKey);
+    public static Map<String, ThreadPoolConfig> getThreadPoolConfigs(){
+        return threadPoolConfigs;
     }
 
     static synchronized void register(Map<Object, ActionProvider<?, ?, ?>> map) {
