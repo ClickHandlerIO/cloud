@@ -304,7 +304,7 @@ public class ActionProvider<A, IN, OUT> {
          if (context == null) {
             context = new ActionContext(timeoutMillis, this, io.vertx.core.Vertx.currentContext());
          }
-         ((AbstractAction) action).setActionContext(context);
+         ((AbstractAction) action).setContext(context);
       }
 
       if (action instanceof AbstractBlockingAction) {
@@ -346,26 +346,12 @@ public class ActionProvider<A, IN, OUT> {
    public OUT execute(final IN request) {
       try {
          return observe(
-            null,
             request,
             create()
          ).toBlocking().toFuture().get();
       } catch (Throwable e) {
          throw new RuntimeException(e);
       }
-   }
-
-   /**
-    * @param context
-    * @param callback
-    * @return
-    */
-   public Observable<OUT> observe(final Object context, final Consumer<IN> callback) {
-      final IN in = inProvider.get();
-      if (callback != null) {
-         callback.accept(in);
-      }
-      return observe(context, in);
    }
 
    /**
@@ -387,22 +373,6 @@ public class ActionProvider<A, IN, OUT> {
    public Observable<OUT> observe(
       final IN request) {
       return observe(
-         null,
-         request,
-         create()
-      );
-   }
-
-   /**
-    * @param context
-    * @param request
-    * @return
-    */
-   public Observable<OUT> observe(
-      final Object context,
-      final IN request) {
-      return observe(
-         context,
          request,
          create()
       );
@@ -412,13 +382,11 @@ public class ActionProvider<A, IN, OUT> {
     * @param request\
     */
    protected Observable<OUT> observe(
-      final Object context,
       final IN request,
       final A action) {
       final AbstractAction<IN, OUT> abstractAction;
       try {
          abstractAction = (AbstractAction<IN, OUT>) action;
-         abstractAction.setContext(context);
          abstractAction.setRequest(request);
       } catch (Exception e) {
          // Ignore.
@@ -431,7 +399,7 @@ public class ActionProvider<A, IN, OUT> {
                // Build observable.
                final Observable<OUT> observable = abstractAction.toObservable();
                final io.vertx.core.Context ctx = io.vertx.core.Vertx.currentContext();
-               final ActionContext actionContext = abstractAction.getActionContext();
+               final ActionContext actionContext = abstractAction.actionContext();
 
                try {
                   observable.subscribe(

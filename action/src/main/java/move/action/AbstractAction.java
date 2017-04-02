@@ -10,23 +10,14 @@ import rx.Single;
 public abstract class AbstractAction<IN, OUT> implements Action<IN, OUT> {
     public static final ThreadLocal<ActionContext> contextLocal = new ThreadLocal<>();
 
-    private Object context;
     private IN request;
-    private ActionContext actionContext;
+    private ActionContext context;
 
-    public ActionContext getActionContext() {
-        return actionContext;
-    }
-
-    void setActionContext(ActionContext actionContext) {
-        this.actionContext = actionContext;
-    }
-
-    public Object getContext() {
+    public ActionContext actionContext() {
         return context;
     }
 
-    public void setContext(Object context) {
+    void setContext(ActionContext context) {
         this.context = context;
     }
 

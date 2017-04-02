@@ -62,7 +62,7 @@ public abstract class AbstractBlockingAction<IN, OUT>
      * @throws Exception
      */
     OUT execute() throws Exception {
-        contextLocal.set(getActionContext());
+        contextLocal.set(actionContext());
         try {
             return handle();
         } finally {
@@ -71,7 +71,7 @@ public abstract class AbstractBlockingAction<IN, OUT>
     }
 
     OUT executeFallback() {
-        contextLocal.set(getActionContext());
+        contextLocal.set(actionContext());
         try {
             return handleFallback();
         } finally {

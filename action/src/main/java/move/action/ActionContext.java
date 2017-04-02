@@ -10,10 +10,15 @@ public class ActionContext {
     public final long timesOutAt;
     public final ActionProvider entry;
     public final Context context;
+    public Object data;
 
     public ActionContext(long timeoutMillis, ActionProvider entry, Context context) {
         this.timesOutAt = started + timeoutMillis;
         this.entry = entry;
         this.context = context;
+    }
+
+    public <T> T data() {
+        return (T) data;
     }
 }

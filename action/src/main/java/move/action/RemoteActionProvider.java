@@ -39,15 +39,6 @@ public class RemoteActionProvider<A extends Action<IN, OUT>, IN, OUT> extends Ac
     }
 
     /**
-     * @param context
-     * @param callback
-     * @return
-     */
-    public Observable<OUT> observe(final Object context, final Consumer<IN> callback) {
-        return super.observe(context, callback);
-    }
-
-    /**
      * @param callback
      * @return
      */
@@ -56,24 +47,21 @@ public class RemoteActionProvider<A extends Action<IN, OUT>, IN, OUT> extends Ac
     }
 
     /**
-     * @param context
-     * @param request
-     * @return
-     */
-    @Override
-    public Observable<OUT> observe(Object context, IN request) {
-        return super.observe(context, request);
-    }
-
-    /**
      * @param request
      * @return
      */
     public Observable<OUT> observe(final IN request) {
         return observe(
-            null,
             request,
             create()
         );
+    }
+
+    public Observable<OUT> observe(final IN request, final Consumer<A> actionCallback) {
+        final A action = create(request);
+        if (actionCallback != null) {
+            actionCallback.accept(action);
+        }
+        return observe(request, action);
     }
 }

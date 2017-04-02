@@ -60,7 +60,7 @@ public abstract class AbstractObservableAction<IN, OUT>
             try {
                 ctx = Vertx.currentContext();
                 if (!subscriber.isUnsubscribed()) {
-                    contextLocal.set(getActionContext());
+                    contextLocal.set(actionContext());
                     try {
                         start(subscriber);
                     } finally {
@@ -68,7 +68,7 @@ public abstract class AbstractObservableAction<IN, OUT>
                     }
                 }
             } catch (Exception e) {
-                contextLocal.set(getActionContext());
+                contextLocal.set(actionContext());
                 try {
                     subscriber.onError(e);
                 } finally {
@@ -83,7 +83,7 @@ public abstract class AbstractObservableAction<IN, OUT>
             try {
                 ctx = Vertx.currentContext();
                 if (!subscriber.isUnsubscribed()) {
-                    contextLocal.set(getActionContext());
+                    contextLocal.set(actionContext());
                     try {
                         startFallback(subscriber);
                     } finally {
@@ -91,7 +91,7 @@ public abstract class AbstractObservableAction<IN, OUT>
                     }
                 }
             } catch (Exception e) {
-                contextLocal.set(getActionContext());
+                contextLocal.set(actionContext());
                 try {
                     subscriber.onError(e);
                 } finally {
@@ -187,6 +187,6 @@ public abstract class AbstractObservableAction<IN, OUT>
 
     protected <A extends Action<I, O>, I, O> Observable<O> observe(ActionProvider<A, I, O> provider,
                                                                    I in) {
-        return provider.observe(getContext(), in);
+        return provider.observe(in);
     }
 }

@@ -14,7 +14,7 @@ public class AllocateInventory extends AbstractObservableAction<String, String> 
 
     @Override
     protected void start(String request) {
-        final ActionContext actionContext = getActionContext();
+        final ActionContext actionContext = actionContext();
         String r = "T";
         System.out.println(Thread.currentThread().getName() + " - Observable Start");
 
