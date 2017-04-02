@@ -19,6 +19,7 @@ import javaslang.control.Try;
 import move.action.AbstractAction;
 import move.action.ActionContext;
 import move.action.ActionProvider;
+import move.action.PersistTimeoutException;
 import move.common.UID;
 import org.h2.server.TcpServer;
 import org.h2.tools.Server;
@@ -52,6 +53,7 @@ import java.util.stream.Stream;
 @SuppressWarnings("all")
 public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     private static final int SANE_MAX = 250;
+    private static final int TIMEOUT_THRESHOLD = 150;
     private static final int READ_ACTION_TIMEOUT = 30000;
     private static final int WRITE_ACTION_TIMEOUT = 30000;
     private static final int MAX_WRITE_TASKS = 2000;
@@ -584,8 +586,8 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             timeoutInMillis = MINIMUM_TIMEOUT;
         }
 
-        if (maxTimeout <= 1000) {
-            return null;
+        if (maxTimeout <= TIMEOUT_THRESHOLD) {
+            throw new PersistTimeoutException();
         }
 
         if (timeoutInMillis > maxTimeout) {
@@ -615,8 +617,8 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             timeoutInMillis = MINIMUM_TIMEOUT;
         }
 
-        if (maxTimeout <= 1000) {
-            return null;
+        if (maxTimeout <= TIMEOUT_THRESHOLD) {
+            throw new PersistTimeoutException();
         }
 
         if (timeoutInMillis > maxTimeout) {
