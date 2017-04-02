@@ -51,9 +51,25 @@ public class RemoteActionProvider<A extends Action<IN, OUT>, IN, OUT> extends Ac
      * @return
      */
     public Observable<OUT> observe(final IN request) {
-        return observe(
+        return observe0(
             request,
             create()
+        );
+    }
+
+    public Observable<OUT> observe(final Object data, final IN request) {
+        final A action = create(request);
+
+        if (action instanceof AbstractAction) {
+            final ActionContext actionContext = ((AbstractAction)action).actionContext();
+            if (actionContext != null) {
+                actionContext.data = data;
+            }
+        }
+
+        return observe0(
+            request,
+            action
         );
     }
 
@@ -62,6 +78,6 @@ public class RemoteActionProvider<A extends Action<IN, OUT>, IN, OUT> extends Ac
         if (actionCallback != null) {
             actionCallback.accept(action);
         }
-        return observe(request, action);
+        return observe0(request, action);
     }
 }

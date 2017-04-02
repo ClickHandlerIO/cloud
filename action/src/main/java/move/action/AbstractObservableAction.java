@@ -171,6 +171,7 @@ public abstract class AbstractObservableAction<IN, OUT>
         }
     }
 
+    @Deprecated
     protected <A extends Action<I, O>, I, O> Observable<O> pipe(ActionProvider<A, I, O> provider,
                                                                 Consumer<I> inCallback) {
         final I in = provider.getInProvider().get();
@@ -178,6 +179,7 @@ public abstract class AbstractObservableAction<IN, OUT>
         return observe(provider, in);
     }
 
+    @Deprecated
     protected <A extends Action<I, O>, I, O> Observable<O> observeWithSupplier(ActionProvider<A, I, O> provider,
                                                                                Consumer<I> inCallback) {
         final I in = provider.getInProvider().get();
@@ -185,6 +187,7 @@ public abstract class AbstractObservableAction<IN, OUT>
         return observe(provider, in);
     }
 
+    @Deprecated
     protected <A extends Action<I, O>, I, O> Observable<O> observe(ActionProvider<A, I, O> provider,
                                                                    I in) {
         return provider.observe(in);

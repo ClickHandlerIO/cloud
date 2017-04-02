@@ -345,7 +345,7 @@ public class ActionProvider<A, IN, OUT> {
     */
    public OUT execute(final IN request) {
       try {
-         return observe(
+         return observe0(
             request,
             create()
          ).toBlocking().toFuture().get();
@@ -372,7 +372,7 @@ public class ActionProvider<A, IN, OUT> {
     */
    public Observable<OUT> observe(
       final IN request) {
-      return observe(
+      return observe0(
          request,
          create()
       );
@@ -381,7 +381,7 @@ public class ActionProvider<A, IN, OUT> {
    /**
     * @param request\
     */
-   protected Observable<OUT> observe(
+   protected Observable<OUT> observe0(
       final IN request,
       final A action) {
       final AbstractAction<IN, OUT> abstractAction;

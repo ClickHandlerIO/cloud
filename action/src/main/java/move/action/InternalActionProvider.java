@@ -45,7 +45,7 @@ public class InternalActionProvider<A extends Action<IN, OUT>, IN, OUT> extends 
      * @return
      */
     public Observable<OUT> observe(final IN request) {
-        return observe(
+        return observe0(
             request,
             create()
         );
