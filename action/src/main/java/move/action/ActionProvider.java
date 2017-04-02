@@ -238,7 +238,7 @@ public class ActionProvider<A, IN, OUT> {
 
          final String groupKey = actionConfig != null ? actionConfig.groupKey() : "";
 
-         ThreadPoolConfig threadPoolConfig = ActionManager.getThreadPoolConfig(groupKey);
+         ThreadPoolConfig threadPoolConfig = ActionManager.getThreadPoolConfigs().get(groupKey);
 
          if (threadPoolConfig == null) {
             threadPoolPropertiesDefaults
