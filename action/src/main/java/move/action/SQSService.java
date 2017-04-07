@@ -13,7 +13,6 @@ import com.amazonaws.services.sqs.AmazonSQSClient;
 import com.amazonaws.services.sqs.model.GetQueueUrlResult;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.google.common.collect.Iterators;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Multimaps;
 import com.google.common.util.concurrent.AbstractIdleService;
@@ -26,7 +25,9 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 
 /**
  * Manages the lifecycle of all SQS Producers and Consumers.
@@ -35,7 +36,6 @@ import java.util.*;
  */
 @Singleton
 public class SQSService extends AbstractIdleService implements WorkerService {
-    static final String ATTRIBUTE_NAME = "n";
     private static final Logger LOG = LoggerFactory.getLogger(SQSService.class);
 
     private final Multimap<String, QueueContext> queueMap =
@@ -71,26 +71,14 @@ public class SQSService extends AbstractIdleService implements WorkerService {
             }
         });
 
-        // Build Queue map.
-        final Multimap<String, WorkerActionProvider> map = Multimaps.newSetMultimap(
-            new HashMap<>(), HashSet::new
-        );
-        ActionManager.getWorkerActionMap().values().forEach(
-            provider -> map.put(provider.getQueueName(), provider)
-        );
-        if (map.isEmpty()) {
-            LOG.warn("No WorkerActions were registered.");
-            return;
-        }
-
         // Get worker configs.
         final List<SQSWorkerConfig> workerConfigs = config.workers == null ? new ArrayList<>() : config.workers;
 
         // Create SQS Clients.
         workerConfigs.forEach(workerConfig -> {
-            final Collection<WorkerActionProvider> actionProviders = map.get(workerConfig.name);
-            if (actionProviders == null || actionProviders.isEmpty()) {
-                LOG.warn("No WorkerActions are mapped to Queue [" + workerConfig.name + "]");
+            final WorkerActionProvider actionProvider = ActionManager.getWorkerActionMap().get(workerConfig.name);
+            if (actionProvider == null) {
+                LOG.warn("Worker Action '" + workerConfig.name + " does not exist.");
                 return;
             }
 
@@ -233,27 +221,6 @@ public class SQSService extends AbstractIdleService implements WorkerService {
                 }
             }
 
-            WorkerActionProvider dedicated = null;
-            if (actionProviders.size() > 1) {
-                actionProviders.forEach($ ->
-                    Preconditions.checkArgument(
-                        !$.getWorkerAction().dedicated(),
-                        "Queue [" +
-                            workerConfig.name +
-                            "] with dedicated WorkerAction [" +
-                            $.getActionClass().getCanonicalName() +
-                            "] cannot have other WorkerActions mapped to it."
-                    )
-                );
-            } else if (actionProviders.size() == 1) {
-                dedicated = Iterators.get(actionProviders.iterator(), 0);
-                if (!dedicated.getWorkerAction().dedicated())
-                    dedicated = null;
-            } else {
-                LOG.warn("Queue [" + workerConfig.name + "] is not mapped to any WorkerActions.");
-                return;
-            }
-
             // Get QueueURL from AWS.
             final GetQueueUrlResult result = sqsSendClient.getQueueUrl(workerConfig.sqsName);
             final String queueUrl = result.getQueueUrl();
@@ -271,19 +238,13 @@ public class SQSService extends AbstractIdleService implements WorkerService {
                 consumer.setQueueUrl(queueUrl);
                 consumer.setSqsReceiveClient(sqsReceiveClient);
                 consumer.setSqsDeleteClient(sqsDeleteClient);
+                consumer.setActionProvider(actionProvider);
                 consumer.setConfig(workerConfig);
-
-                // Set dedicated if necessary.
-                if (dedicated != null && dedicated.getWorkerAction().dedicated()) {
-                    consumer.setDedicated(dedicated);
-                }
             } else {
                 consumer = null;
             }
 
-            for (WorkerActionProvider actionProvider : actionProviders) {
-                actionProvider.setProducer(producer);
-            }
+            actionProvider.setProducer(producer);
 
             queueMap.put(workerConfig.name, new QueueContext(producer, consumer, sqsSendClient));
         });

@@ -9,23 +9,25 @@ import com.google.common.base.Strings;
 import com.google.common.hash.Hashing;
 import com.google.common.util.concurrent.AbstractExecutionThreadService;
 import com.google.common.util.concurrent.AbstractIdleService;
+import com.google.common.util.concurrent.AbstractScheduledService;
 import io.vertx.rxjava.core.Context;
 import io.vertx.rxjava.core.Vertx;
 import javaslang.control.Try;
 import move.common.WireFormat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import rx.Subscription;
 
 import java.io.IOException;
 import java.net.SocketException;
 import java.util.ArrayList;
-import java.util.LinkedList;
-import java.util.List;
+import java.util.Iterator;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Processes Worker requests from a single AmazonSQS Queue.
@@ -34,633 +36,474 @@ import java.util.stream.Collectors;
  * Reliable
  */
 public class SQSConsumer extends AbstractIdleService {
-   private static final Logger LOG = LoggerFactory.getLogger(SQSConsumer.class);
-   private final Vertx vertx;
-   private SQSWorkerConfig config;
-   private AmazonSQS sqsDeleteClient;
-   private AmazonSQS sqsReceiveClient;
-   private AtomicInteger inflight; //Total messages on this server to be processed from this queue.
-   private ReceiveThread[] receiveThreads;
-   private DeleteThread[] deleteThreads;
-   private int batchSize = 1;
-   private int minimumVisibility = 30;
-   private int visibilityBufferMillis = 5_000;
-   private int maxInflight = 2;
-   private String queueUrl;
-   private Map<String, ActionContext> actionMap;
-   private ActionContext dedicated;
+    private static final Logger LOG = LoggerFactory.getLogger(SQSConsumer.class);
+    private final Vertx vertx;
+    private final LinkedBlockingDeque<ActionRequest> requestQueue = new LinkedBlockingDeque<>(100);
+    private SQSWorkerConfig config;
+    private AmazonSQS sqsDeleteClient;
+    private AmazonSQS sqsReceiveClient;
+    private ReceiveThread[] receiveThreads;
+    private DeleteThread[] deleteThreads;
+    private int batchSize = 10;
+    private WorkerActionProvider actionProvider;
+    private String queueUrl;
+    private ConcurrentMap<String, ActionRequest> inflightMap = new ConcurrentHashMap<>();
+    private DispatchService dispatchService;
+    private TimeoutService timeoutService;
 
-   public SQSConsumer(Vertx vertx) {
-      this.vertx = vertx;
-   }
+    public SQSConsumer(Vertx vertx) {
+        this.vertx = vertx;
+    }
 
-   /**
-    * @param config
-    */
-   void setConfig(SQSWorkerConfig config) {
-      Preconditions.checkNotNull(
-         config,
-         "SQSWorkerConfig cannot be null"
-      );
-      Preconditions.checkArgument(
-         config.batchSize > 0,
-         "SQSWorkerConfig.batchSize must be greater than 0"
-      );
-      Preconditions.checkArgument(
-         config.minimumVisibility > 0,
-         "SQSWorkerConfig.minimumVisibility must be greater than 0"
-      );
-      if (config.deleteThreads < 1)
-         config.deleteThreads = config.receiveThreads;
-      Preconditions.checkArgument(
-         config.deleteThreads > 0,
-         "SQSWorkerConfig.deleteThreads must be greater than 0"
-      );
-      Preconditions.checkArgument(
-         config.receiveThreads > 0,
-         "SQSWorkerConfig.receiveThreads must be greater than 0"
-      );
-      Preconditions.checkArgument(
-         config.maxInflight >= config.batchSize,
-         "SQSWorkerConfig.maxInFlight must be greater than or equal to batchsize"
-      );
-      this.config = config;
-      this.batchSize = config.batchSize;
-      this.minimumVisibility = config.minimumVisibility;
-      this.maxInflight = config.maxInflight;
+    /**
+     * @param config
+     */
+    void setConfig(SQSWorkerConfig config) {
+        Preconditions.checkNotNull(
+            config,
+            "SQSWorkerConfig cannot be null"
+        );
+        Preconditions.checkArgument(
+            config.batchSize > 0,
+            "SQSWorkerConfig.batchSize must be greater than 0"
+        );
+        Preconditions.checkArgument(
+            config.minimumVisibility > 0,
+            "SQSWorkerConfig.minimumVisibility must be greater than 0"
+        );
+        if (config.deleteThreads < 1)
+            config.deleteThreads = config.receiveThreads;
+        Preconditions.checkArgument(
+            config.deleteThreads > 0,
+            "SQSWorkerConfig.deleteThreads must be greater than 0"
+        );
+        Preconditions.checkArgument(
+            config.receiveThreads > 0,
+            "SQSWorkerConfig.receiveThreads must be greater than 0"
+        );
+        Preconditions.checkArgument(
+            config.maxInflight >= config.batchSize,
+            "SQSWorkerConfig.maxInFlight must be greater than or equal to batchsize"
+        );
+        this.config = config;
+        this.batchSize = config.batchSize;
+    }
 
-      if (config.visibilityBuffer < 1 || config.visibilityBuffer > 10) {
-         this.visibilityBufferMillis = 5_000;
-         LOG.warn("SQSWorkerConfig[" +
-            config.name +
-            "].visibilityBuffer must be between 1 and 10. Value attempted was " +
-            config.visibilityBuffer +
-            ". Setting to 5 seconds.");
-      } else {
-         this.visibilityBufferMillis = (int) TimeUnit.SECONDS.toMillis(config.visibilityBuffer);
-      }
-   }
+    /**
+     * @param queueUrl
+     */
+    void setQueueUrl(String queueUrl) {
+        this.queueUrl = queueUrl;
+    }
 
-   /**
-    * @param queueUrl
-    */
-   void setQueueUrl(String queueUrl) {
-      this.queueUrl = queueUrl;
-   }
+    void setSqsReceiveClient(AmazonSQS sqsReceiveClient) {
+        this.sqsReceiveClient = sqsReceiveClient;
+    }
 
-   void setSqsReceiveClient(AmazonSQS sqsReceiveClient) {
-      this.sqsReceiveClient = sqsReceiveClient;
-   }
+    /**
+     * @param sqsDeleteClient
+     */
+    void setSqsDeleteClient(AmazonSQS sqsDeleteClient) {
+        this.sqsDeleteClient = sqsDeleteClient;
+    }
 
-   /**
-    * @param sqsDeleteClient
-    */
-   void setSqsDeleteClient(AmazonSQS sqsDeleteClient) {
-      this.sqsDeleteClient = sqsDeleteClient;
-   }
+    void setActionProvider(WorkerActionProvider actionProvider) {
+        this.actionProvider = actionProvider;
+    }
 
-   void setDedicated(WorkerActionProvider dedicated) {
-      this.dedicated = new ActionContext(dedicated);
-   }
+    @Override
+    protected void startUp() throws Exception {
+        LOG.debug("Starting up SQS service.");
 
-   @Override
-   protected void startUp() throws Exception {
-      LOG.debug("Starting up SQS service.");
+        final String name = Strings.nullToEmpty(config.name).trim();
 
-      inflight = new AtomicInteger(0);
+        // Find ActionProvider.
+        Preconditions.checkNotNull(actionProvider, "ActionProvider for '" + name + "' was not set.");
 
-      // Init ActionQueues.
-      actionMap = ActionManager.getWorkerActionMap().values().stream()
-         .map(ActionContext::new)
-         .collect(Collectors.toMap(
-            k -> k.actionProvider.getActionClass().getCanonicalName(),
-            v -> v,
-            (v1, v2) -> v2)
-         );
+        dispatchService = new DispatchService();
+        timeoutService = new TimeoutService();
 
-      // Start Delete threads.
-      deleteThreads = new DeleteThread[config.deleteThreads];
-      for (int i = 0; i < deleteThreads.length; i++) {
-         deleteThreads[i] = new DeleteThread();
-         deleteThreads[i].startAsync().awaitRunning();
-      }
+        dispatchService.startAsync().awaitRunning();
+        timeoutService.startAsync().awaitRunning();
 
-      // Start Receive threads.
-      receiveThreads = new ReceiveThread[config.receiveThreads];
-      for (int i = 0; i < receiveThreads.length; i++) {
-         receiveThreads[i] = new ReceiveThread();
-         receiveThreads[i].startAsync().awaitRunning();
-      }
-   }
+        // Start Delete threads.
+        deleteThreads = new DeleteThread[config.deleteThreads];
+        for (int i = 0; i < deleteThreads.length; i++) {
+            deleteThreads[i] = new DeleteThread();
+            deleteThreads[i].startAsync().awaitRunning();
+        }
 
-   @Override
-   protected void shutDown() throws Exception {
-      Try.run(() -> sqsReceiveClient.shutdown());
+        // Start Receive threads.
+        receiveThreads = new ReceiveThread[config.receiveThreads];
+        for (int i = 0; i < receiveThreads.length; i++) {
+            receiveThreads[i] = new ReceiveThread();
+            receiveThreads[i].startAsync().awaitRunning();
+        }
+    }
 
-      // Stop receiving messages.
-      for (ReceiveThread thread : receiveThreads) {
-         Try.run(() -> thread.stopAsync().awaitTerminated(5, TimeUnit.SECONDS));
-      }
+    @Override
+    protected void shutDown() throws Exception {
+        Try.run(() -> sqsReceiveClient.shutdown());
 
-      // Delete any remaining messages.
-      // Stop delete threads.
-      for (DeleteThread thread : deleteThreads) {
-         Try.run(() -> thread.stopAsync().awaitTerminated(5, TimeUnit.SECONDS));
-      }
+        // Stop receiving messages.
+        for (ReceiveThread thread : receiveThreads) {
+            Try.run(() -> thread.stopAsync().awaitTerminated(5, TimeUnit.SECONDS));
+        }
 
-      // Delete client.
-      Try.run(() -> sqsDeleteClient.shutdown());
+        // Delete any remaining messages.
+        // Stop delete threads.
+        for (DeleteThread thread : deleteThreads) {
+            Try.run(() -> thread.stopAsync().awaitTerminated(5, TimeUnit.SECONDS));
+        }
 
-      // Clear threads.
-      receiveThreads = null;
-      deleteThreads = null;
-   }
+        // Delete client.
+        Try.run(() -> sqsDeleteClient.shutdown());
 
-   private DeleteMessageBatchResult deleteMessageBatch(DeleteMessageBatchRequest request)
-      throws InterruptedException, SocketException {
-      return sqsDeleteClient.deleteMessageBatch(request);
-   }
+        // Clear threads.
+        receiveThreads = null;
+        deleteThreads = null;
+    }
 
-   /**
-    * @param take
-    * @return
-    */
-   private boolean deleteRun(LinkedBlockingDeque<String> queue, boolean take)
-      throws InterruptedException, IOException {
-      try {
-         final ArrayList<DeleteMessageBatchRequestEntry> batch = new ArrayList<>(batchSize);
-         final ArrayList<String> takeBatch = new ArrayList<>(batchSize);
+    private DeleteMessageBatchResult deleteMessageBatch(DeleteMessageBatchRequest request)
+        throws InterruptedException, SocketException {
+        return sqsDeleteClient.deleteMessageBatch(request);
+    }
 
-         int size = queue.drainTo(takeBatch, batchSize);
-         if (size == 0) {
-            String receiptHandle = take ? queue.take() : queue.poll();
-            if (receiptHandle == null)
-               return false;
+    /**
+     * @param take
+     * @return
+     */
+    private boolean deleteRun(LinkedBlockingDeque<String> queue, boolean take)
+        throws InterruptedException, IOException {
+        try {
+            final ArrayList<DeleteMessageBatchRequestEntry> batch = new ArrayList<>(batchSize);
+            final ArrayList<String> takeBatch = new ArrayList<>(batchSize);
 
-            takeBatch.add(receiptHandle);
-            if (batchSize > 1)
-               queue.drainTo(takeBatch, batchSize - 1);
-         }
+            int size = queue.drainTo(takeBatch, batchSize);
+            if (size == 0) {
+                String receiptHandle = take ? queue.take() : queue.poll();
+                if (receiptHandle == null)
+                    return false;
 
-         for (int i = 0; i < takeBatch.size(); i++) {
-            batch.add(new DeleteMessageBatchRequestEntry(Integer.toString(i), takeBatch.get(i)));
-         }
+                takeBatch.add(receiptHandle);
+                if (batchSize > 1)
+                    queue.drainTo(takeBatch, batchSize - 1);
+            }
 
-         if (!batch.isEmpty()) {
-            deleteMessageBatch(new DeleteMessageBatchRequest()
-               .withQueueUrl(queueUrl)
-               .withEntries(batch));
-            return true;
-         } else {
-            return false;
-         }
-      } catch (SocketException e) {
-         // Ignore.
-      } catch (AmazonClientException e) {
-         return false;
-      } catch (InterruptedException e) {
-         return false;
-      } catch (Throwable e) {
-         LOG.error("AmazonSQSClient.deleteMessageBatch() threw an exception", e);
-      }
+            for (int i = 0; i < takeBatch.size(); i++) {
+                batch.add(new DeleteMessageBatchRequestEntry(Integer.toString(i), takeBatch.get(i)));
+            }
 
-      return false;
-   }
-
-   /**
-    * Schedules a message to be deleted from SQS.
-    * Uses a consistent hash on the ReceiptHandle to pick a thread.
-    *
-    * @param receiptHandle ReceiptHandle to delete.
-    */
-   private void scheduleToDelete(String receiptHandle) {
-      try {
-         // Do we only have 1 thread?
-         if (deleteThreads.length == 1) {
-            deleteThreads[0].queue.add(receiptHandle);
-            return;
-         }
-         deleteThreads[Hashing.consistentHash(
-            Hashing.adler32().hashString(receiptHandle, Charsets.UTF_8),
-            deleteThreads.length
-         )].queue.add(receiptHandle);
-      } catch (Throwable e) {
-         LOG.error("scheduleToDelete threw an exception", e);
-      }
-   }
-
-   protected ActionContext getActionContext(Message message) {
-      if (dedicated != null)
-         return dedicated;
-
-      final MessageAttributeValue type = message.getMessageAttributes() != null
-         ? message.getMessageAttributes().get(SQSService.ATTRIBUTE_NAME)
-         : null;
-
-      if (type == null) {
-         return null;
-      }
-
-      // Get action name.
-      final String actionType = Try.of(type::getStringValue).getOrElse("");
-      if (actionType == null || actionType.isEmpty()) {
-         return null;
-      }
-
-      return actionMap.get(actionType);
-   }
-
-   /**
-    * Delete threads each have their own queue of ReceiptHandles to delete.
-    */
-   private class DeleteThread extends AbstractExecutionThreadService {
-      private final LinkedBlockingDeque<String> queue = new LinkedBlockingDeque<>();
-      private Thread thread;
-
-      @Override
-      protected String serviceName() {
-         return "worker-consumer-delete-" + config.name + "-SQS-" + config.sqsName;
-      }
-
-      @Override
-      protected void triggerShutdown() {
-         Try.run(() -> thread.interrupt());
-      }
-
-      @Override
-      protected void shutDown() throws Exception {
-         try {
-            while (deleteRun(queue, false)) ;
-         } catch (InterruptedException e) {
+            if (!batch.isEmpty()) {
+                deleteMessageBatch(new DeleteMessageBatchRequest()
+                    .withQueueUrl(queueUrl)
+                    .withEntries(batch));
+                return true;
+            } else {
+                return false;
+            }
+        } catch (SocketException e) {
             // Ignore.
-         }
-      }
+        } catch (AmazonClientException e) {
+            return false;
+        } catch (InterruptedException e) {
+            return false;
+        } catch (Throwable e) {
+            LOG.error("AmazonSQSClient.deleteMessageBatch() threw an exception", e);
+        }
 
-      @Override
-      protected void run() throws Exception {
-         thread = Thread.currentThread();
+        return false;
+    }
 
-         while (isRunning()) {
+    /**
+     * Schedules a message to be deleted from SQS.
+     * Uses a consistent hash on the ReceiptHandle to pick a thread.
+     *
+     * @param receiptHandle ReceiptHandle to delete.
+     */
+    private void scheduleToDelete(String receiptHandle) {
+        try {
+            // Do we only have 1 thread?
+            if (deleteThreads.length == 1) {
+                deleteThreads[0].queue.add(receiptHandle);
+                return;
+            }
+            deleteThreads[Hashing.consistentHash(
+                Hashing.adler32().hashString(receiptHandle, Charsets.UTF_8),
+                deleteThreads.length
+            )].queue.add(receiptHandle);
+        } catch (Throwable e) {
+            LOG.error("scheduleToDelete threw an exception", e);
+        }
+    }
+
+    private static class InternalInterruptedException extends RuntimeException {
+        public InternalInterruptedException(Throwable cause) {
+            super(cause);
+        }
+    }
+
+    /**
+     * Delete threads each have their own queue of ReceiptHandles to delete.
+     */
+    private class DeleteThread extends AbstractExecutionThreadService {
+        private final LinkedBlockingDeque<String> queue = new LinkedBlockingDeque<>();
+        private Thread thread;
+
+        @Override
+        protected String serviceName() {
+            return "worker-consumer-delete-" + config.name + "-SQS-" + config.sqsName;
+        }
+
+        @Override
+        protected void triggerShutdown() {
+            Try.run(() -> thread.interrupt());
+        }
+
+        @Override
+        protected void shutDown() throws Exception {
             try {
-               deleteRun(queue, true);
+                while (deleteRun(queue, false)) ;
             } catch (InterruptedException e) {
-               return;
-            } catch (Throwable e) {
-               // Ignore.
-               LOG.error("DeleteThread.run threw an exception", e);
+                // Ignore.
             }
-         }
-      }
-   }
+        }
 
-   /**
-    *
-    */
-   private class ReceiveThread extends AbstractExecutionThreadService {
-      private Thread thread;
-      private Context context;
+        @Override
+        protected void run() throws Exception {
+            thread = Thread.currentThread();
 
-      @Override
-      protected String serviceName() {
-         return "worker-consumer-receive-" + config.name + "-SQS-" + config.sqsName;
-      }
+            while (isRunning()) {
+                try {
+                    deleteRun(queue, true);
+                } catch (InterruptedException e) {
+                    return;
+                } catch (Throwable e) {
+                    // Ignore.
+                    LOG.error("DeleteThread.run threw an exception", e);
+                }
+            }
+        }
+    }
 
-      @Override
-      protected void triggerShutdown() {
-         Try.run(() -> thread.interrupt());
-      }
+    /**
+     *
+     */
+    private class ReceiveThread extends AbstractExecutionThreadService {
+        private Thread thread;
+        private Context context;
 
-      protected ReceiveMessageResult receiveMessage(ReceiveMessageRequest request)
-         throws InterruptedException, SocketException {
-         return sqsReceiveClient.receiveMessage(request);
-      }
+        @Override
+        protected String serviceName() {
+            return "worker-consumer-receive-" + config.name + "-SQS-" + config.sqsName;
+        }
 
-      protected ChangeMessageVisibilityBatchResult changeVisibility(ChangeMessageVisibilityBatchRequest request)
-         throws InterruptedException, SocketException {
-         return sqsReceiveClient.changeMessageVisibilityBatch(request);
-      }
+        @Override
+        protected void triggerShutdown() {
+            Try.run(() -> thread.interrupt());
+        }
 
-      @Override
-      protected void run() throws Exception {
-         thread = Thread.currentThread();
-         context = vertx.getOrCreateContext();
+        protected ReceiveMessageResult receiveMessage(ReceiveMessageRequest request)
+            throws InterruptedException, SocketException {
+            return sqsReceiveClient.receiveMessage(request);
+        }
 
-         while (isRunning()) {
-            try {
-               // Does this server need more messages.
-               if (inflight.get() >= maxInflight) {
-                  try {
-                     Thread.sleep(2_000);
-                     continue;
-                  } catch (Exception e) {
-                     LOG.warn("Error sleeping message consumer thread.", e);
-                     continue;
-                  }
-               }
+        @Override
+        protected void run() throws Exception {
+            thread = Thread.currentThread();
+            context = vertx.getOrCreateContext();
 
-               ReceiveMessageResult result = null;
+            while (isRunning()) {
+                try {
+                    ReceiveMessageResult result = null;
+                    try {
+                        final ReceiveMessageRequest request = new ReceiveMessageRequest()
+                            .withQueueUrl(queueUrl)
+                            .withWaitTimeSeconds(20)
+                            .withVisibilityTimeout((int) TimeUnit.MILLISECONDS.toSeconds(actionProvider.getTimeoutMillis() + 1000))
+                            .withMaxNumberOfMessages(batchSize);
 
-               try {
-                  final ReceiveMessageRequest request = new ReceiveMessageRequest()
-                     .withQueueUrl(queueUrl)
-                     .withWaitTimeSeconds(20)
-                     .withVisibilityTimeout(minimumVisibility)
-                     .withMaxNumberOfMessages(batchSize);
+                        // Receive a batch of messages.
+                        LOG.info("Trying to get messages");
+                        result = receiveMessage(request);
+                    } catch (InterruptedException e) {
+                        LOG.warn("Interrupted.", e);
+                        return;
+                    } catch (Exception e) {
+                        LOG.warn("SQS Consumer Exception", e);
+                    }
 
-                  if (dedicated == null) {
-                     request.withMessageAttributeNames(SQSService.ATTRIBUTE_NAME);
-                  }
-
-                  // Receive a batch of messages.
-                  LOG.info("Trying to get messages");
-                  result = receiveMessage(request);
-               } catch (InterruptedException e) {
-                  LOG.warn("Interrupted.", e);
-                  return;
-               } catch (Exception e) {
-                  LOG.warn("SQS Consumer Exception", e);
-               }
-
-               // Were any messages received?
-               if (result == null || result.getMessages() == null || result.getMessages().isEmpty()) {
-                  continue;
-               }
-
-               // Are we still running.
-               if (!isRunning()) {
-                  LOG.warn("Consumer not running when checked.");
-                  return;
-               }
-
-               // Go through the messages.
-               List<ChangeMessageVisibilityBatchRequestEntry> changes = null;
-               for (Message message : result.getMessages()) {
-                  try {
-                     // Find ActionContext
-                     final ActionContext actionContext = getActionContext(message);
-                     if (actionContext == null) {
-                        LOG.warn("No action context.");
-                        scheduleToDelete(message.getReceiptHandle());
+                    // Were any messages received?
+                    if (result == null || result.getMessages() == null || result.getMessages().isEmpty()) {
                         continue;
-                     }
+                    }
 
-                     // Parse request.
-                     final String body = Strings.nullToEmpty(message.getBody());
-                     final Object in = body.isEmpty() ? null : WireFormat.parse(
-                        actionContext.actionProvider.getInClass(),
-                        body
-                     );
+                    // Are we still running.
+                    if (!isRunning()) {
+                        LOG.warn("Consumer not running when checked.");
+                        return;
+                    }
 
-                     // Create ActionRequest.
-                     final ActionRequest request = actionContext.createRequest(
-                        context,
-                        message.getReceiptHandle(),
-                        in
-                     );
+                    result.getMessages().stream().map(message -> {
+                            // Parse request.
+                            final String body = Strings.nullToEmpty(message.getBody());
+                            final Object in = body.isEmpty() ? null : WireFormat.parse(
+                                actionProvider.getInClass(),
+                                body
+                            );
 
-                     try {
-                        // Do we need to extend the visibility timeout?
-                        if (request.extendBySeconds > 0) {
-                           if (changes == null) {
-                              changes = new ArrayList<>(batchSize);
-                           }
-                           changes.add(new ChangeMessageVisibilityBatchRequestEntry(
-                              Integer.toString(changes.size()),
-                              message.getReceiptHandle()
-                           ));
+                            // Create ActionRequest.
+                            final ActionRequest request = new ActionRequest(
+                                context,
+                                message.getReceiptHandle(),
+                                in,
+                                System.currentTimeMillis() + actionProvider.getTimeoutMillis()
+                            );
+
+                            return request;
                         }
-                     } catch (Exception e) {
-                        LOG.warn("Exception checking for extend.", e);
-                     } finally {
-                        if (!request.queued) {
-                           try {
-                              actionContext.run(request);
-                           } catch (InterruptedException e) {
-                              LOG.warn("Interrupted.", e);
-                           } catch (Exception ex) {
-                              LOG.warn("Exception trying to run action.", ex);
-                           }
+                    ).filter(
+                        $ -> inflightMap.putIfAbsent($.receiptHandle, $) == null
+                    ).forEach(
+                        $ -> {
+                            try {
+                                requestQueue.put($);
+                            } catch (InterruptedException e) {
+                                throw new InternalInterruptedException(e);
+                            }
                         }
-                     }
-                  } catch (Exception ex) {
-                     LOG.error("Error processing message.", ex);
-                  }
-               }
+                    );
+                } catch (Exception e) {
+                    if (e instanceof InternalInterruptedException) {
+                        LOG.info("Consumer Interrupted... Shutting down.");
+                        return;
+                    }
 
-               try {
-                  if (changes != null && !changes.isEmpty()) {
-                     final ChangeMessageVisibilityBatchResult visibilityBatchResult =
-                        changeVisibility(new ChangeMessageVisibilityBatchRequest()
-                           .withQueueUrl(queueUrl)
-                           .withEntries(changes)
-                        );
-                  }
-               } catch (InterruptedException e) {
-                  LOG.warn("Interrupted.", e);
-                  return;
-               } catch (Exception ex) {
-                  LOG.warn("Socket error trying to extend.", ex);
-               }
-            } catch (Exception e) {
-               // Ignore.
-               LOG.error("ReceiveThread.run() threw an exception", e);
+                    // Ignore.
+                    LOG.error("ReceiveThread.run() threw an exception", e);
+                }
             }
-         }
-      }
-   }
+        }
+    }
 
-   /**
-    * Manages executing one Action type.
-    * <p>
-    * If the Action has maxConcurrentRequests set, then a backlog is created
-    * and the SQS message visibility may be extended by a configurable multiple
-    * of the maxExecutionMillis that's configured for the Action type.
-    */
-   private final class ActionContext {
-      private final AtomicInteger running = new AtomicInteger(0);
-      private final WorkerActionProvider actionProvider;
-      private final int maxConcurrentRequests;
-      private final long executionMillis;
-      private final int changeVisibilityBy;
-      private final int changeVisibilityByQueue;
-      private final LinkedList<ActionRequest> backlog;
+    /**
+     * Dispatches Action Request.
+     */
+    private final class DispatchService extends AbstractExecutionThreadService {
+        @Override
+        protected void run() throws Exception {
+            while (isRunning()) {
+                try {
+                    final ActionRequest actionRequest = requestQueue.poll(1, TimeUnit.SECONDS);
+                    if (actionRequest == null) {
+                        continue;
+                    }
 
-      private ActionContext(WorkerActionProvider actionProvider) {
-         this.actionProvider = actionProvider;
-         this.maxConcurrentRequests = actionProvider.getMaxConcurrentRequests();
-         this.executionMillis = actionProvider.getTimeoutMillis();
-
-         // Should we accept a backlog?
-         if (maxConcurrentRequests > 0) {
-            this.backlog = new LinkedList<>();
-         } else {
-            this.backlog = null;
-         }
-
-         if (executionMillis >= TimeUnit.SECONDS.toMillis(minimumVisibility) - visibilityBufferMillis) {
-            changeVisibilityBy = (int) TimeUnit.MILLISECONDS.toSeconds(
-               executionMillis + visibilityBufferMillis - TimeUnit.SECONDS.toMillis(minimumVisibility)
-            );
-         } else {
-            changeVisibilityBy = 0;
-         }
-
-         if (executionMillis > (TimeUnit.SECONDS.toMillis(minimumVisibility) / 2)) {
-            changeVisibilityByQueue = (int) TimeUnit.MILLISECONDS.toSeconds(
-               executionMillis * 2 - TimeUnit.SECONDS.toMillis(minimumVisibility)
-            );
-         } else {
-            changeVisibilityByQueue = 0;
-         }
-      }
-
-      /**
-       * @return
-       */
-      private ActionRequest createRequest(Context context, final String receiptHandle, Object in) {
-         inflight.incrementAndGet();
-
-         if (backlog != null) {
-            synchronized (this) {
-               if (maxConcurrentRequests > 0 && running.get() >= maxConcurrentRequests) {
-                  final ActionRequest request = new ActionRequest(
-                     context,
-                     receiptHandle,
-                     in,
-                     true,
-                     changeVisibilityByQueue,
-                     actionProvider.getTimeoutMillis()
-                  );
-                  backlog.add(request);
-                  return request;
-               }
-               running.incrementAndGet();
+                    actionRequest.invoke();
+                } catch (Throwable e) {
+                    if (e instanceof InterruptedException) {
+                        return;
+                    }
+                }
             }
-         } else {
-            running.incrementAndGet();
-         }
+        }
+    }
 
-         return new ActionRequest(
-            context,
-            receiptHandle,
-            in,
-            false,
-            changeVisibilityBy,
-            actionProvider.getTimeoutMillis()
-         );
-      }
+    /**
+     * Ensures In-Flight messages are cleaned up.
+     */
+    private final class TimeoutService extends AbstractScheduledService {
+        @Override
+        protected void runOneIteration() throws Exception {
+            try {
+                final long now = System.currentTimeMillis();
+                Iterator<Map.Entry<String, ActionRequest>> iterator = inflightMap.entrySet().iterator();
+                while (iterator.hasNext()) {
+                    final Map.Entry<String, ActionRequest> entry = iterator.next();
 
-      /**
-       * @param request
-       */
-      @SuppressWarnings("all")
-      private void run(ActionRequest request) throws InterruptedException {
-         final long worstCaseTime = System.currentTimeMillis() + actionProvider.getTimeoutMillis();
+                    final ActionRequest request = entry.getValue();
+                    if (request == null) {
+                        continue;
+                    }
 
-         // Is there enough time leased to reliably run this Action?
-         if (request.timeoutAt > worstCaseTime + visibilityBufferMillis) {
-            dequeue();
-            return;
-         }
-
-         if (actionProvider.isBlocking()) {
-            actionProvider.observe(request.in).subscribe(
-               r -> {
-                  try {
-                     // Do we need to remove from the Queue?
-                     if (r == Boolean.TRUE) {
-                        scheduleToDelete(request.receiptHandle);
-                     }
-                  } finally {
-                     dequeue();
-                  }
-               },
-               e -> {
-                  try {
-                     LOG.warn(
-                        "Action [" +
-                           actionProvider.getName() +
-                           "] threw an exception. Placed back on the Queue.",
-                        e
-                     );
-                  } finally {
-                     dequeue();
-                  }
-               }
-            );
-         } else {
-            request.context.runOnContext(a -> actionProvider.observe(request.in).subscribe(
-               r -> {
-                  try {
-                     // Do we need to remove from the Queue?
-                     if (r == Boolean.TRUE) {
-                        scheduleToDelete(request.receiptHandle);
-                     }
-                  } finally {
-                     dequeue();
-                  }
-               },
-               e -> {
-                  try {
-                     LOG.warn(
-                        "Action [" +
-                           actionProvider.getName() +
-                           "] threw an exception. Placed back on the Queue.",
-                        e
-                     );
-                  } finally {
-                     dequeue();
-                  }
-               }
-            ));
-         }
-      }
-
-      private void dequeue() {
-         inflight.getAndDecrement();
-
-         if (backlog != null) {
-            synchronized (this) {
-               final ActionRequest next = backlog.poll();
-               if (next != null) {
-                  try {
-                     run(next);
-                  } catch (InterruptedException e) {
-                     return;
-                  }
-               } else {
-                  running.decrementAndGet();
-               }
+                    if (request.timedOut(now)) {
+                        iterator.remove();
+                    }
+                }
+            } catch (Throwable e) {
+                LOG.error("Unexpected exception thrown", e);
             }
-         } else {
-            running.decrementAndGet();
-         }
-      }
-   }
+        }
 
-   /**
-    *
-    */
-   private final class ActionRequest {
-      final Context context;
-      final String receiptHandle;
-      final Object in;
-      final boolean queued;
-      final int extendBySeconds;
-      final long timeoutAt;
+        @Override
+        protected Scheduler scheduler() {
+            return Scheduler.newFixedRateSchedule(0, 1, TimeUnit.SECONDS);
+        }
+    }
 
-      public ActionRequest(Context context,
-                           String receiptHandle,
-                           Object in,
-                           boolean queued,
-                           int extendBySeconds,
-                           long timeoutAt) {
-         this.context = context;
-         this.receiptHandle = receiptHandle;
-         this.in = in;
-         this.queued = queued;
-         this.extendBySeconds = extendBySeconds;
-         this.timeoutAt = timeoutAt;
-      }
-   }
+    /**
+     *
+     */
+    private final class ActionRequest {
+        final Context context;
+        final String receiptHandle;
+        final Object in;
+        final long timeoutAt;
+        final AtomicBoolean done = new AtomicBoolean(false);
+        Subscription subscription;
+
+        public ActionRequest(Context context,
+                             String receiptHandle,
+                             Object in,
+                             long timeoutAt) {
+            this.context = context;
+            this.receiptHandle = receiptHandle;
+            this.in = in;
+            this.timeoutAt = timeoutAt;
+        }
+
+        boolean timedOut(long now) {
+            if (done.get()) {
+                if (subscription != null && !subscription.isUnsubscribed()) {
+                    Try.run(() -> subscription.unsubscribe());
+                }
+                return true;
+            }
+
+            if (now <= timeoutAt) {
+                Try.run(() -> subscription.unsubscribe());
+                return true;
+            }
+
+            return false;
+        }
+
+        @SuppressWarnings("all")
+        void invoke() {
+            subscription = actionProvider.observe(in).subscribe(
+                r -> {
+                    if (done.compareAndSet(false, true)) {
+                        inflightMap.remove(receiptHandle);
+
+                        try {
+                            if (r == Boolean.TRUE) {
+                                scheduleToDelete(receiptHandle);
+                            }
+                        } finally {
+                            Try.run(() -> subscription.unsubscribe());
+                        }
+                    }
+                },
+                e -> {
+                    inflightMap.remove(receiptHandle);
+
+                    if (done.compareAndSet(false, true)) {
+                        Try.run(() -> subscription.unsubscribe());
+                    }
+                    LOG.error(
+                        "Action " + actionProvider.getActionClass().getCanonicalName() + " threw an exception", e);
+                }
+            );
+        }
+    }
 }

@@ -52,7 +52,6 @@ public abstract class AbstractAction<IN, OUT> implements Action<IN, OUT> {
     }
 
     /**
-     *
      * @return
      */
     public Single<OUT> single() {
@@ -67,7 +66,6 @@ public abstract class AbstractAction<IN, OUT> implements Action<IN, OUT> {
     }
 
     /**
-     *
      * @return
      */
     public Single<OUT> toSingle() {
