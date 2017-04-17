@@ -2,7 +2,13 @@ package move.action;
 
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.services.sqs.AmazonSQS;
-import com.amazonaws.services.sqs.model.*;
+import com.amazonaws.services.sqs.model.SendMessageBatchRequest;
+import com.amazonaws.services.sqs.model.SendMessageBatchRequestEntry;
+import com.amazonaws.services.sqs.model.SendMessageBatchResult;
+import com.amazonaws.services.sqs.model.SendMessageBatchResultEntry;
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.SharedMetricRegistries;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.AbstractExecutionThreadService;
 import com.google.common.util.concurrent.AbstractIdleService;
@@ -14,7 +20,9 @@ import org.slf4j.LoggerFactory;
 import rx.Observable;
 
 import java.net.SocketException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -35,6 +43,10 @@ public class SQSProducer extends AbstractIdleService implements WorkerProducer {
     private int threadCount;
     private String queueUrl;
     private SQSWorkerConfig config;
+
+    private Counter jobCounter;
+    private Counter successCounter;
+    private Counter failuresCounter;
 
     /**
      * @param vertx
@@ -86,6 +98,11 @@ public class SQSProducer extends AbstractIdleService implements WorkerProducer {
         Preconditions.checkNotNull(queueUrl, "queueUrl must be set");
         Preconditions.checkArgument(!queueUrl.isEmpty(), "queueUrl must be set");
 
+        final MetricRegistry registry = SharedMetricRegistries.getOrCreate("app");
+        jobCounter = registry.counter(config.name + "-PRODUCED");
+        successCounter = registry.counter(config.name + "-SUCCESS");
+        failuresCounter = registry.counter(config.name + "-FAILURE");
+
         sendThreads = new SendThread[threadCount];
         for (int i = 0; i < sendThreads.length; i++) {
             sendThreads[i] = new SendThread();
@@ -117,11 +134,16 @@ public class SQSProducer extends AbstractIdleService implements WorkerProducer {
 
             final List<SendMessageBatchResultEntry> success = result.getSuccessful();
             if (success != null && !success.isEmpty()) {
+                successCounter.inc(success.size());
                 success.forEach(e -> {
                     final Entry entry = batch.get(e.getId());
                     if (entry != null)
                         entry.success = true;
                 });
+            }
+
+            if (result.getFailed() != null && !result.getFailed().isEmpty()) {
+                failuresCounter.inc(result.getFailed().size());
             }
         } catch (SocketException e) {
             LOG.error("AmazonSQSClient.sendMessageBatch() threw a socket exception", e);
@@ -245,6 +267,8 @@ public class SQSProducer extends AbstractIdleService implements WorkerProducer {
                         takeBatch.clear();
 
                         try {
+                            jobCounter.inc(batch.size());
+
                             // Send to SQS.
                             send(batch);
                         } finally {

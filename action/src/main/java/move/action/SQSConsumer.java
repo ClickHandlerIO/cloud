@@ -3,6 +3,10 @@ package move.action;
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.services.sqs.AmazonSQS;
 import com.amazonaws.services.sqs.model.*;
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.Gauge;
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.SharedMetricRegistries;
 import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
@@ -10,6 +14,7 @@ import com.google.common.hash.Hashing;
 import com.google.common.util.concurrent.AbstractExecutionThreadService;
 import com.google.common.util.concurrent.AbstractIdleService;
 import com.google.common.util.concurrent.AbstractScheduledService;
+import com.netflix.hystrix.exception.HystrixTimeoutException;
 import io.vertx.rxjava.core.Context;
 import io.vertx.rxjava.core.Vertx;
 import javaslang.control.Try;
@@ -51,6 +56,15 @@ public class SQSConsumer extends AbstractIdleService {
     private ConcurrentMap<String, ActionRequest> inflightMap = new ConcurrentHashMap<>();
     private DispatchService dispatchService;
     private TimeoutService timeoutService;
+
+    private Gauge<Long> inflightGauge;
+    private Counter jobsCounter;
+    private Counter timeoutsCounter;
+    private Counter completesCounter;
+    private Counter incompletesCounter;
+    private Counter exceptionCounter;
+    private Counter deletesCounter;
+    private Counter deleteFailuresCounter;
 
     public SQSConsumer(Vertx vertx) {
         this.vertx = vertx;
@@ -120,6 +134,19 @@ public class SQSConsumer extends AbstractIdleService {
 
         // Find ActionProvider.
         Preconditions.checkNotNull(actionProvider, "ActionProvider for '" + name + "' was not set.");
+
+        final MetricRegistry registry = SharedMetricRegistries.getOrCreate("app");
+        inflightGauge = registry.register(
+            config.name + "-INFLIGHT",
+            () -> (long) inflightMap.size()
+        );
+        jobsCounter = registry.counter(config.name + "-JOBS");
+        completesCounter = registry.counter(config.name + "-COMPLETES");
+        incompletesCounter = registry.counter(config.name + "-INCOMPLETES");
+        exceptionCounter = registry.counter(config.name + "-EXCEPTIONS");
+        timeoutsCounter = registry.counter(config.name + "-TIMEOUTS");
+        deletesCounter = registry.counter(config.name + "-DELETES");
+        deleteFailuresCounter = registry.counter(config.name + "-DELETE_FAILURES");
 
         dispatchService = new DispatchService();
         timeoutService = new TimeoutService();
@@ -196,9 +223,15 @@ public class SQSConsumer extends AbstractIdleService {
             }
 
             if (!batch.isEmpty()) {
-                deleteMessageBatch(new DeleteMessageBatchRequest()
+                deletesCounter.inc(batch.size());
+                DeleteMessageBatchResult result = deleteMessageBatch(new DeleteMessageBatchRequest()
                     .withQueueUrl(queueUrl)
                     .withEntries(batch));
+
+                if (result.getFailed() != null && !result.getFailed().isEmpty()) {
+                    deleteFailuresCounter.inc(result.getFailed().size());
+                }
+
                 return true;
             } else {
                 return false;
@@ -370,7 +403,14 @@ public class SQSConsumer extends AbstractIdleService {
                             return request;
                         }
                     ).filter(
-                        $ -> inflightMap.putIfAbsent($.receiptHandle, $) == null
+                        $ -> {
+                            if (inflightMap.putIfAbsent($.receiptHandle, $) == null) {
+                                jobsCounter.inc();
+                                return true;
+                            }
+
+                            return false;
+                        }
                     ).forEach(
                         $ -> {
                             try {
@@ -474,6 +514,7 @@ public class SQSConsumer extends AbstractIdleService {
                 if (subscription != null && !subscription.isUnsubscribed()) {
                     Try.run(() -> subscription.unsubscribe());
                 }
+                timeoutsCounter.inc();
                 return true;
             }
 
@@ -494,7 +535,10 @@ public class SQSConsumer extends AbstractIdleService {
 
                         try {
                             if (r == Boolean.TRUE) {
+                                completesCounter.inc();
                                 scheduleToDelete(receiptHandle);
+                            } else {
+                                incompletesCounter.inc();
                             }
                         } finally {
                             Try.run(() -> subscription.unsubscribe());
@@ -505,7 +549,15 @@ public class SQSConsumer extends AbstractIdleService {
                     inflightMap.remove(receiptHandle);
 
                     if (done.compareAndSet(false, true)) {
-                        Try.run(() -> subscription.unsubscribe());
+                        try {
+                            if (e instanceof HystrixTimeoutException) {
+                                timeoutsCounter.inc();
+                            } else {
+                                exceptionCounter.inc();
+                            }
+                        } finally {
+                            Try.run(() -> subscription.unsubscribe());
+                        }
                     }
                     LOG.error(
                         "Action " + actionProvider.getActionClass().getCanonicalName() + " threw an exception", e);

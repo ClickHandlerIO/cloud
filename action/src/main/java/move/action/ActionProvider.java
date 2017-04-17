@@ -1,7 +1,6 @@
 package move.action;
 
 import com.netflix.hystrix.*;
-import com.netflix.hystrix.strategy.concurrency.HystrixRequestVariableDefault;
 import io.vertx.rxjava.core.Vertx;
 import javaslang.control.Try;
 import rx.Observable;
@@ -20,7 +19,6 @@ import java.util.function.Consumer;
 public class ActionProvider<A, IN, OUT> {
     static final int DEFAULT_TIMEOUT_MILLIS = 5000;
     static final int MIN_TIMEOUT_MILLIS = 200;
-    static final HystrixRequestVariableDefault<ActionContext> providerVariable = new HystrixRequestVariableDefault<>();
 
     private final HystrixCommandProperties.Setter commandPropertiesDefaults = HystrixCommandProperties.Setter();
     private final HystrixThreadPoolProperties.Setter threadPoolPropertiesDefaults = HystrixThreadPoolProperties.Setter();
@@ -315,18 +313,18 @@ public class ActionProvider<A, IN, OUT> {
         return actionClass.getName();
     }
 
-    private <A> void setCommandSetter(A action, ActionContext context) {
+    protected <A> void setCommandSetter(A action, ActionContext context) {
+        // Calculate max execution millis.
         long maxMillis = timeoutMillis;
         final long now = System.currentTimeMillis();
-
         if (now + maxMillis > context.timesOutAt) {
             maxMillis = context.timesOutAt - now;
         }
-
         if (maxMillis < MIN_TIMEOUT_MILLIS) {
             maxMillis = MIN_TIMEOUT_MILLIS;
         }
 
+        // Clone command properties from default and adjust the timeout.
         final HystrixCommandProperties.Setter commandProperties = HystrixCommandProperties.Setter()
             .withCircuitBreakerEnabled(commandPropertiesDefaults.getCircuitBreakerEnabled())
             .withCircuitBreakerErrorThresholdPercentage(commandPropertiesDefaults.getCircuitBreakerErrorThresholdPercentage())
@@ -355,19 +353,17 @@ public class ActionProvider<A, IN, OUT> {
         if (action instanceof AbstractBlockingAction) {
             ((AbstractBlockingAction) action).setCommandSetter(HystrixCommand.Setter
                 .withGroupKey(groupKey)
-                .andThreadPoolKey(threadPoolKey)
-                .andThreadPoolPropertiesDefaults(threadPoolPropertiesDefaults)
                 .andCommandKey(commandKey)
                 .andCommandPropertiesDefaults(commandProperties)
+                .andThreadPoolKey(threadPoolKey)
+                .andThreadPoolPropertiesDefaults(threadPoolPropertiesDefaults)
             );
         } else if (action instanceof AbstractObservableAction) {
             ((AbstractObservableAction) action).setCommandSetter(HystrixObservableCommand.Setter
-                // Set Group Key
                 .withGroupKey(groupKey)
-                // Set default command props
+                .andCommandKey(commandKey)
                 .andCommandPropertiesDefaults(commandProperties)
-                // Set command key
-                .andCommandKey(commandKey));
+            );
         }
     }
 
