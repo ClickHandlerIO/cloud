@@ -44,6 +44,7 @@ public class SQSProducer extends AbstractIdleService implements WorkerProducer {
     private String queueUrl;
     private SQSWorkerConfig config;
 
+    private Counter threadsCounter;
     private Counter jobCounter;
     private Counter successCounter;
     private Counter failuresCounter;
@@ -99,6 +100,7 @@ public class SQSProducer extends AbstractIdleService implements WorkerProducer {
         Preconditions.checkArgument(!queueUrl.isEmpty(), "queueUrl must be set");
 
         final MetricRegistry registry = SharedMetricRegistries.getOrCreate("app");
+        threadsCounter = registry.counter(config.name + "-THREADS");
         jobCounter = registry.counter(config.name + "-PRODUCED");
         successCounter = registry.counter(config.name + "-SUCCESS");
         failuresCounter = registry.counter(config.name + "-FAILURE");
@@ -212,76 +214,81 @@ public class SQSProducer extends AbstractIdleService implements WorkerProducer {
         @Override
         protected void run() throws Exception {
             thread = Thread.currentThread();
+            threadsCounter.inc();
 
-            while (isRunning()) {
-                try {
-                    final HashMap<String, Entry> batch = new HashMap<>(batchSize);
-                    final ArrayList<WorkerRequest> takeBatch = new ArrayList<>(batchSize);
-                    while (true) {
-                        int size = queue.drainTo(takeBatch, batchSize);
+            try {
+                while (isRunning()) {
+                    try {
+                        final HashMap<String, Entry> batch = new HashMap<>(batchSize);
+                        final ArrayList<WorkerRequest> takeBatch = new ArrayList<>(batchSize);
+                        while (true) {
+                            int size = queue.drainTo(takeBatch, batchSize);
 
-                        if (size == 0) {
-                            final WorkerRequest workerRequest = queue.take();
-                            if (workerRequest == null)
-                                break;
+                            if (size == 0) {
+                                final WorkerRequest workerRequest = queue.take();
+                                if (workerRequest == null)
+                                    break;
 
-                            takeBatch.add(workerRequest);
-                            if (batchSize > 1)
-                                queue.drainTo(takeBatch, batchSize - 1);
-                        }
+                                takeBatch.add(workerRequest);
+                                if (batchSize > 1)
+                                    queue.drainTo(takeBatch, batchSize - 1);
+                            }
 
-                        for (int i = 0; i < takeBatch.size(); i++) {
-                            final WorkerRequest workerRequest = takeBatch.get(i);
+                            for (int i = 0; i < takeBatch.size(); i++) {
+                                final WorkerRequest workerRequest = takeBatch.get(i);
 
-                            final String id = Integer.toString(i);
+                                final String id = Integer.toString(i);
 
-                            if (config.fifo) {
-                                String groupId = config.name;
+                                if (config.fifo) {
+                                    String groupId = config.name;
 
-                                if (!workerRequest.actionProvider.getMessageGroupId().isEmpty())
-                                    groupId = workerRequest.actionProvider.getMessageGroupId();
+                                    if (!workerRequest.actionProvider.getMessageGroupId().isEmpty())
+                                        groupId = workerRequest.actionProvider.getMessageGroupId();
 
-                                if (workerRequest.groupId != null && !workerRequest.groupId.isEmpty())
-                                    groupId = workerRequest.groupId;
+                                    if (workerRequest.groupId != null && !workerRequest.groupId.isEmpty())
+                                        groupId = workerRequest.groupId;
 
-                                batch.put(id, new Entry(
-                                    workerRequest,
-                                    new SendMessageBatchRequestEntry()
-                                        .withId(id)
-                                        .withMessageGroupId(groupId)
-                                        .withMessageBody(WireFormat.stringify(workerRequest.request))
-                                ));
-                            } else {
-                                batch.put(id, new Entry(
-                                    workerRequest,
-                                    new SendMessageBatchRequestEntry()
-                                        .withId(id)
-                                        .withDelaySeconds(
-                                            workerRequest.delaySeconds > 0 ? workerRequest.delaySeconds : null)
-                                        .withMessageBody(WireFormat.stringify(workerRequest.request))
-                                ));
+                                    batch.put(id, new Entry(
+                                        workerRequest,
+                                        new SendMessageBatchRequestEntry()
+                                            .withId(id)
+                                            .withMessageGroupId(groupId)
+                                            .withMessageBody(WireFormat.stringify(workerRequest.request))
+                                    ));
+                                } else {
+                                    batch.put(id, new Entry(
+                                        workerRequest,
+                                        new SendMessageBatchRequestEntry()
+                                            .withId(id)
+                                            .withDelaySeconds(
+                                                workerRequest.delaySeconds > 0 ? workerRequest.delaySeconds : null)
+                                            .withMessageBody(WireFormat.stringify(workerRequest.request))
+                                    ));
+                                }
+                            }
+
+                            // Clear the takeBatch.
+                            takeBatch.clear();
+
+                            try {
+                                jobCounter.inc(batch.size());
+
+                                // Send to SQS.
+                                send(batch);
+                            } finally {
+                                // Clear the batch.
+                                batch.clear();
                             }
                         }
-
-                        // Clear the takeBatch.
-                        takeBatch.clear();
-
-                        try {
-                            jobCounter.inc(batch.size());
-
-                            // Send to SQS.
-                            send(batch);
-                        } finally {
-                            // Clear the batch.
-                            batch.clear();
-                        }
+                    } catch (InterruptedException e) {
+                        return;
+                    } catch (Throwable e) {
+                        // Ignore.
+                        LOG.error("Unexpected exception thrown in SendThread.run()", e);
                     }
-                } catch (InterruptedException e) {
-                    return;
-                } catch (Throwable e) {
-                    // Ignore.
-                    LOG.error("Unexpected exception thrown in SendThread.run()", e);
                 }
+            } finally {
+                threadsCounter.dec();
             }
         }
     }

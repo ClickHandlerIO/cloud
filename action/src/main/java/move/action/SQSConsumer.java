@@ -58,13 +58,18 @@ public class SQSConsumer extends AbstractIdleService {
     private TimeoutService timeoutService;
 
     private Gauge<Long> inflightGauge;
+    private Gauge<Long> secondsSinceLastPollGauge;
+    private Counter receiveThreadsCounter;
+    private Counter deleteThreadsCounter;
     private Counter jobsCounter;
     private Counter timeoutsCounter;
     private Counter completesCounter;
     private Counter incompletesCounter;
-    private Counter exceptionCounter;
+    private Counter exceptionsCounter;
     private Counter deletesCounter;
     private Counter deleteFailuresCounter;
+
+    private volatile long lastPoll;
 
     public SQSConsumer(Vertx vertx) {
         this.vertx = vertx;
@@ -137,13 +142,19 @@ public class SQSConsumer extends AbstractIdleService {
 
         final MetricRegistry registry = SharedMetricRegistries.getOrCreate("app");
         inflightGauge = registry.register(
-            config.name + "-INFLIGHT",
+            config.name + "-IN_FLIGHT",
             () -> (long) inflightMap.size()
         );
+        secondsSinceLastPollGauge = registry.register(
+            config.name + "-SECONDS_SINCE_LAST_POLL",
+            () -> TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis() - lastPoll)
+        );
+        receiveThreadsCounter = registry.counter(config.name + "-RECEIVE_THREADS");
+        deleteThreadsCounter = registry.counter(config.name + "-DELETE_THREADS");
         jobsCounter = registry.counter(config.name + "-JOBS");
         completesCounter = registry.counter(config.name + "-COMPLETES");
-        incompletesCounter = registry.counter(config.name + "-INCOMPLETES");
-        exceptionCounter = registry.counter(config.name + "-EXCEPTIONS");
+        incompletesCounter = registry.counter(config.name + "-IN_COMPLETES");
+        exceptionsCounter = registry.counter(config.name + "-EXCEPTIONS");
         timeoutsCounter = registry.counter(config.name + "-TIMEOUTS");
         deletesCounter = registry.counter(config.name + "-DELETES");
         deleteFailuresCounter = registry.counter(config.name + "-DELETE_FAILURES");
@@ -306,16 +317,21 @@ public class SQSConsumer extends AbstractIdleService {
         @Override
         protected void run() throws Exception {
             thread = Thread.currentThread();
+            deleteThreadsCounter.inc();
 
-            while (isRunning()) {
-                try {
-                    deleteRun(queue, true);
-                } catch (InterruptedException e) {
-                    return;
-                } catch (Throwable e) {
-                    // Ignore.
-                    LOG.error("DeleteThread.run threw an exception", e);
+            try {
+                while (isRunning()) {
+                    try {
+                        deleteRun(queue, true);
+                    } catch (InterruptedException e) {
+                        return;
+                    } catch (Throwable e) {
+                        // Ignore.
+                        LOG.error("DeleteThread.run threw an exception", e);
+                    }
                 }
+            } finally {
+                deleteThreadsCounter.dec();
             }
         }
     }
@@ -346,89 +362,96 @@ public class SQSConsumer extends AbstractIdleService {
         protected void run() throws Exception {
             thread = Thread.currentThread();
             context = vertx.getOrCreateContext();
+            receiveThreadsCounter.inc();
 
-            while (isRunning()) {
-                try {
-                    ReceiveMessageResult result = null;
+            try {
+                while (isRunning()) {
                     try {
-                        final ReceiveMessageRequest request = new ReceiveMessageRequest()
-                            .withQueueUrl(queueUrl)
-                            .withWaitTimeSeconds(20)
-                            .withVisibilityTimeout((int) TimeUnit.MILLISECONDS.toSeconds(actionProvider.getTimeoutMillis() + 1000))
-                            .withMaxNumberOfMessages(batchSize);
+                        ReceiveMessageResult result = null;
+                        try {
+                            lastPoll = Math.max(System.currentTimeMillis(), lastPoll);
 
-                        // Receive a batch of messages.
-                        LOG.info("Trying to get messages");
-                        result = receiveMessage(request);
-                    } catch (InterruptedException e) {
-                        LOG.warn("Interrupted.", e);
-                        return;
+                            final ReceiveMessageRequest request = new ReceiveMessageRequest()
+                                .withQueueUrl(queueUrl)
+                                .withWaitTimeSeconds(20)
+                                .withVisibilityTimeout((int) TimeUnit.MILLISECONDS.toSeconds(actionProvider.getTimeoutMillis() + 1000))
+                                .withMaxNumberOfMessages(batchSize);
+
+                            // Receive a batch of messages.
+                            LOG.info("Trying to get messages");
+                            result = receiveMessage(request);
+                        } catch (InterruptedException e) {
+                            LOG.warn("Interrupted.", e);
+                            return;
+                        } catch (Exception e) {
+                            LOG.warn("SQS Consumer Exception", e);
+                        }
+
+                        if (result == null) {
+                            continue;
+                        }
+
+                        final List<Message> messages = result.getMessages();
+
+                        // Were any messages received?
+                        if (messages == null || messages.isEmpty()) {
+                            continue;
+                        }
+
+                        // Are we still running.
+                        if (!isRunning()) {
+                            LOG.warn("Consumer not running when checked.");
+                            return;
+                        }
+
+                        messages.stream().map(message -> {
+                                // Parse request.
+                                final String body = Strings.nullToEmpty(message.getBody());
+                                final Object in = body.isEmpty() ? null : WireFormat.parse(
+                                    actionProvider.getInClass(),
+                                    body
+                                );
+
+                                // Create ActionRequest.
+                                final ActionRequest request = new ActionRequest(
+                                    context,
+                                    message.getReceiptHandle(),
+                                    in,
+                                    System.currentTimeMillis() + actionProvider.getTimeoutMillis()
+                                );
+
+                                return request;
+                            }
+                        ).filter(
+                            $ -> {
+                                if (inflightMap.putIfAbsent($.receiptHandle, $) == null) {
+                                    jobsCounter.inc();
+                                    return true;
+                                }
+
+                                return false;
+                            }
+                        ).forEach(
+                            $ -> {
+                                try {
+                                    requestQueue.put($);
+                                } catch (InterruptedException e) {
+                                    throw new InternalInterruptedException(e);
+                                }
+                            }
+                        );
                     } catch (Exception e) {
-                        LOG.warn("SQS Consumer Exception", e);
-                    }
-
-                    if (result == null) {
-                        continue;
-                    }
-
-                    final List<Message> messages = result.getMessages();
-
-                    // Were any messages received?
-                    if (messages == null || messages.isEmpty()) {
-                        continue;
-                    }
-
-                    // Are we still running.
-                    if (!isRunning()) {
-                        LOG.warn("Consumer not running when checked.");
-                        return;
-                    }
-
-                    messages.stream().map(message -> {
-                            // Parse request.
-                            final String body = Strings.nullToEmpty(message.getBody());
-                            final Object in = body.isEmpty() ? null : WireFormat.parse(
-                                actionProvider.getInClass(),
-                                body
-                            );
-
-                            // Create ActionRequest.
-                            final ActionRequest request = new ActionRequest(
-                                context,
-                                message.getReceiptHandle(),
-                                in,
-                                System.currentTimeMillis() + actionProvider.getTimeoutMillis()
-                            );
-
-                            return request;
+                        if (e instanceof InternalInterruptedException) {
+                            LOG.info("Consumer Interrupted... Shutting down.");
+                            return;
                         }
-                    ).filter(
-                        $ -> {
-                            if (inflightMap.putIfAbsent($.receiptHandle, $) == null) {
-                                jobsCounter.inc();
-                                return true;
-                            }
 
-                            return false;
-                        }
-                    ).forEach(
-                        $ -> {
-                            try {
-                                requestQueue.put($);
-                            } catch (InterruptedException e) {
-                                throw new InternalInterruptedException(e);
-                            }
-                        }
-                    );
-                } catch (Exception e) {
-                    if (e instanceof InternalInterruptedException) {
-                        LOG.info("Consumer Interrupted... Shutting down.");
-                        return;
+                        // Ignore.
+                        LOG.error("ReceiveThread.run() threw an exception", e);
                     }
-
-                    // Ignore.
-                    LOG.error("ReceiveThread.run() threw an exception", e);
                 }
+            } finally {
+                receiveThreadsCounter.dec();
             }
         }
     }
@@ -553,7 +576,7 @@ public class SQSConsumer extends AbstractIdleService {
                             if (e instanceof HystrixTimeoutException) {
                                 timeoutsCounter.inc();
                             } else {
-                                exceptionCounter.inc();
+                                exceptionsCounter.inc();
                             }
                         } finally {
                             Try.run(() -> subscription.unsubscribe());
