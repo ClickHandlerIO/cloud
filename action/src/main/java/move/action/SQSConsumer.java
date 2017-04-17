@@ -6,7 +6,6 @@ import com.amazonaws.services.sqs.model.*;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.SharedMetricRegistries;
 import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
@@ -18,6 +17,7 @@ import com.netflix.hystrix.exception.HystrixTimeoutException;
 import io.vertx.rxjava.core.Context;
 import io.vertx.rxjava.core.Vertx;
 import javaslang.control.Try;
+import move.common.Metrics;
 import move.common.WireFormat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,18 +53,18 @@ public class SQSConsumer extends AbstractIdleService {
     private int batchSize = 10;
     private WorkerActionProvider actionProvider;
     private String queueUrl;
-    private ConcurrentMap<String, ActionRequest> inflightMap = new ConcurrentHashMap<>();
+    private ConcurrentMap<String, ActionRequest> inFlightMap = new ConcurrentHashMap<>();
     private DispatchService dispatchService;
     private TimeoutService timeoutService;
 
-    private Gauge<Long> inflightGauge;
+    private Gauge<Long> inFlightGauge;
     private Gauge<Long> secondsSinceLastPollGauge;
     private Counter receiveThreadsCounter;
     private Counter deleteThreadsCounter;
     private Counter jobsCounter;
     private Counter timeoutsCounter;
     private Counter completesCounter;
-    private Counter incompletesCounter;
+    private Counter inCompletesCounter;
     private Counter exceptionsCounter;
     private Counter deletesCounter;
     private Counter deleteFailuresCounter;
@@ -140,10 +140,10 @@ public class SQSConsumer extends AbstractIdleService {
         // Find ActionProvider.
         Preconditions.checkNotNull(actionProvider, "ActionProvider for '" + name + "' was not set.");
 
-        final MetricRegistry registry = SharedMetricRegistries.getOrCreate("app");
-        inflightGauge = registry.register(
+        final MetricRegistry registry = Metrics.registry();
+        inFlightGauge = registry.register(
             config.name + "-IN_FLIGHT",
-            () -> (long) inflightMap.size()
+            () -> (long) inFlightMap.size()
         );
         secondsSinceLastPollGauge = registry.register(
             config.name + "-SECONDS_SINCE_LAST_POLL",
@@ -153,7 +153,7 @@ public class SQSConsumer extends AbstractIdleService {
         deleteThreadsCounter = registry.counter(config.name + "-DELETE_THREADS");
         jobsCounter = registry.counter(config.name + "-JOBS");
         completesCounter = registry.counter(config.name + "-COMPLETES");
-        incompletesCounter = registry.counter(config.name + "-IN_COMPLETES");
+        inCompletesCounter = registry.counter(config.name + "-IN_COMPLETES");
         exceptionsCounter = registry.counter(config.name + "-EXCEPTIONS");
         timeoutsCounter = registry.counter(config.name + "-TIMEOUTS");
         deletesCounter = registry.counter(config.name + "-DELETES");
@@ -424,7 +424,7 @@ public class SQSConsumer extends AbstractIdleService {
                             }
                         ).filter(
                             $ -> {
-                                if (inflightMap.putIfAbsent($.receiptHandle, $) == null) {
+                                if (inFlightMap.putIfAbsent($.receiptHandle, $) == null) {
                                     jobsCounter.inc();
                                     return true;
                                 }
@@ -487,7 +487,7 @@ public class SQSConsumer extends AbstractIdleService {
         protected void runOneIteration() throws Exception {
             try {
                 final long now = System.currentTimeMillis();
-                Iterator<Map.Entry<String, ActionRequest>> iterator = inflightMap.entrySet().iterator();
+                Iterator<Map.Entry<String, ActionRequest>> iterator = inFlightMap.entrySet().iterator();
                 while (iterator.hasNext()) {
                     final Map.Entry<String, ActionRequest> entry = iterator.next();
 
@@ -554,14 +554,14 @@ public class SQSConsumer extends AbstractIdleService {
             subscription = actionProvider.observe(in).subscribe(
                 r -> {
                     if (done.compareAndSet(false, true)) {
-                        inflightMap.remove(receiptHandle);
+                        inFlightMap.remove(receiptHandle);
 
                         try {
                             if (r == Boolean.TRUE) {
                                 completesCounter.inc();
                                 scheduleToDelete(receiptHandle);
                             } else {
-                                incompletesCounter.inc();
+                                inCompletesCounter.inc();
                             }
                         } finally {
                             Try.run(() -> subscription.unsubscribe());
@@ -569,7 +569,7 @@ public class SQSConsumer extends AbstractIdleService {
                     }
                 },
                 e -> {
-                    inflightMap.remove(receiptHandle);
+                    inFlightMap.remove(receiptHandle);
 
                     if (done.compareAndSet(false, true)) {
                         try {

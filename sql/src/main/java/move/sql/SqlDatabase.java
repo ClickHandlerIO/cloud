@@ -1,7 +1,8 @@
 package move.sql;
 
+import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.SharedMetricRegistries;
+import com.codahale.metrics.Timer;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.base.Throwables;
@@ -9,6 +10,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.util.concurrent.AbstractIdleService;
 import com.netflix.hystrix.*;
+import com.netflix.hystrix.exception.HystrixTimeoutException;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import io.vertx.core.AsyncResult;
@@ -19,6 +21,7 @@ import javaslang.control.Try;
 import move.action.AbstractAction;
 import move.action.ActionContext;
 import move.action.ActionProvider;
+import move.common.Metrics;
 import move.common.UID;
 import org.h2.server.TcpServer;
 import org.h2.tools.Server;
@@ -38,6 +41,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -79,6 +83,8 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     private final Map<String, TableMapping> tableMappingsByName = Maps.newHashMap();
     private final Map<Class, TableMapping> tableMappings = Maps.newHashMap();
     private final Map<Class, TableMapping> tableMappingsByEntity = Maps.newHashMap();
+    private final ConcurrentHashMap<String, Timer> readTimerMap = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Timer> writeTimerMap = new ConcurrentHashMap<>();
     private final List<TableMapping> tableMappingList = Lists.newArrayList();
     private final String[] entityPackageNames;
     private final String[] jooqPackageNames;
@@ -93,7 +99,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     private final HystrixCommandKey writeCommandKey = HystrixCommandKey.Factory.asKey("WRITE");
     private final int readTaskTimout;
     private final int writeTaskTimout;
-
     protected HikariConfig hikariConfig;
     protected HikariConfig hikariReadConfig;
     protected Configuration configuration;
@@ -104,6 +109,13 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     protected SqlPlatform dbPlatform;
     protected Settings settings;
     protected H2Server h2Server;
+    private Timer readTimer;
+    private Timer writeTimer;
+    private Counter readTimeoutsCounter;
+    private Counter readExceptionsCounter;
+    private Counter writeTimeoutsCounter;
+    private Counter writeExceptionsCounter;
+    private MetricRegistry metricRegistry;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////
     // Property Accessors
@@ -125,6 +137,8 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         this.groupKey = HystrixCommandGroupKey.Factory.asKey("SQL-" + config.getName());
         this.readThreadPoolKey = HystrixThreadPoolKey.Factory.asKey("SQL-" + config.getName() + "-READ");
         this.writeThreadPoolKey = HystrixThreadPoolKey.Factory.asKey("SQL-" + config.getName() + "-WRITE");
+
+        this.metricRegistry = Metrics.registry();
 
         if (config.getReadTaskTimeout() < MINIMUM_TIMEOUT) {
             this.readTaskTimout = MINIMUM_TIMEOUT;
@@ -321,13 +335,18 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             hikariConfig.setValidationTimeout(5000);
             hikariReadConfig.setValidationTimeout(5000);
 
-            final MetricRegistry registry = SharedMetricRegistries.getOrCreate("app");
+            readTimer = metricRegistry.timer("SQL-" + config.getName() + "-READ");
+            writeTimer = metricRegistry.timer("SQL-" + config.getName() + "-WRITE");
+            readTimeoutsCounter = metricRegistry.counter("SQL-" + config.getName() + "-READ_TIMEOUTS");
+            writeTimeoutsCounter = metricRegistry.counter("SQL-" + config.getName() + "-WRITE_TIMEOUTS");
+            readExceptionsCounter = metricRegistry.counter("SQL-" + config.getName() + "-READ_EXCEPTIONS");
+            writeExceptionsCounter = metricRegistry.counter("SQL-" + config.getName() + "-WRITE_EXCEPTIONS");
 
             hikariConfig.setPoolName(("sql-" + config.getName() + "-master").toLowerCase());
             hikariReadConfig.setPoolName(("sql-" + config.getName() + "-read").toLowerCase());
 
-            hikariConfig.setMetricRegistry(registry);
-            hikariReadConfig.setMetricRegistry(registry);
+            hikariConfig.setMetricRegistry(metricRegistry);
+            hikariReadConfig.setMetricRegistry(metricRegistry);
 
             // Configure jOOQ settings.
             settings = new Settings();
@@ -1511,6 +1530,68 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         return new WriteAction<T>(writeSetter(timeoutMillis, actionContext), task, actionContext).execute();
     }
 
+    private Timer getReadTimerFor(ActionContext context) {
+        if (context == null || context.entry == null) {
+            return null;
+        }
+
+        final String name = context.entry.getActionClass().getCanonicalName();
+
+        Timer timer = readTimerMap.get(name);
+
+        if (timer != null) {
+            return timer;
+        }
+
+        synchronized (this) {
+            timer = readTimerMap.get(name);
+
+            if (timer != null) {
+                return timer;
+            }
+
+            timer = metricRegistry
+                .timer(
+                    "SQL-" + config.getName() + "-READ-" + name
+                );
+
+            readTimerMap.put(name, timer);
+        }
+
+        return timer;
+    }
+
+    private Timer getWriteTimerFor(ActionContext context) {
+        if (context == null || context.entry == null) {
+            return null;
+        }
+
+        final String name = context.entry.getActionClass().getCanonicalName();
+
+        Timer timer = writeTimerMap.get(name);
+
+        if (timer != null) {
+            return timer;
+        }
+
+        synchronized (this) {
+            timer = writeTimerMap.get(name);
+
+            if (timer != null) {
+                return timer;
+            }
+
+            timer = metricRegistry
+                .timer(
+                    "SQL-" + config.getName() + "-WRITE-" + name
+                );
+
+            writeTimerMap.put(name, timer);
+        }
+
+        return timer;
+    }
+
     /**
      * @param callable
      * @param <T>
@@ -1519,9 +1600,16 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     protected <T> T executeRead(SqlReadCallable<T> callable, ActionContext context) {
         final Connection connection;
 
+        final Timer contextTimer = getReadTimerFor(context);
+        final Timer.Context contextTimerContext = contextTimer != null ? contextTimer.time() : null;
+        final Timer.Context timerContext = readTimer.time();
         try {
             connection = readDataSource.getConnection();
         } catch (Throwable e) {
+            if (contextTimerContext != null) {
+                contextTimerContext.stop();
+            }
+            timerContext.stop();
             throw new PersistException(e);
         }
 
@@ -1548,9 +1636,15 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 }
             }
         } catch (Throwable e) {
+            timerContext.stop();
             throw new PersistException(e);
         } finally {
             Try.run(() -> connection.close()).onFailure(e -> LOG.error("Failed to close connection", e));
+
+            if (contextTimerContext != null) {
+                contextTimerContext.stop();
+            }
+            timerContext.stop();
         }
     }
 
@@ -1563,9 +1657,16 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         final AtomicReference<SqlResult<T>> r = new AtomicReference<>();
         final Connection connection;
 
+        final Timer contextTimer = getWriteTimerFor(context);
+        final Timer.Context contextTimerContext = contextTimer != null ? contextTimer.time() : null;
+        final Timer.Context timerContext = writeTimer.time();
         try {
             connection = dataSource.getConnection();
         } catch (Throwable e) {
+            if (contextTimerContext != null) {
+                contextTimerContext.stop();
+            }
+            timerContext.stop();
             throw new PersistException(e);
         }
 
@@ -1626,6 +1727,10 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             Throwables.propagate(e);
         } finally {
             Try.run(() -> connection.close()).onFailure(e -> LOG.error("Failed to close connection", e));
+            if (contextTimerContext != null) {
+                contextTimerContext.stop();
+            }
+            timerContext.stop();
         }
 
         if (r.get().getReason() != null) {
@@ -1917,7 +2022,16 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
 
         @Override
         protected T run() throws Exception {
-            return executeRead(callback, context);
+            try {
+                return executeRead(callback, context);
+            } catch (Exception e) {
+                if (e instanceof HystrixTimeoutException) {
+                    readTimeoutsCounter.inc();
+                } else {
+                    readExceptionsCounter.inc();
+                }
+                throw e;
+            }
         }
     }
 
@@ -1933,7 +2047,16 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
 
         @Override
         protected SqlResult<T> run() throws Exception {
-            return executeWrite(callback, context);
+            try {
+                return executeWrite(callback, context);
+            } catch (Exception e) {
+                if (e instanceof HystrixTimeoutException) {
+                    writeTimeoutsCounter.inc();
+                } else {
+                    writeExceptionsCounter.inc();
+                }
+                throw e;
+            }
         }
     }
 
@@ -1954,7 +2077,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                         if (timeLeft <= 1000) {
                             queryTimeout = 1;
                         } else {
-                            queryTimeout = (int)Math.ceil((double) timeLeft / 1000.0);
+                            queryTimeout = (int) Math.ceil((double) timeLeft / 1000.0);
                         }
 
                         ctx.statement().setQueryTimeout(queryTimeout);
