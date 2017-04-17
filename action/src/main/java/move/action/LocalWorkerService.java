@@ -12,82 +12,82 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  *
  */
 @Singleton
 public class LocalWorkerService extends AbstractIdleService implements WorkerService, WorkerProducer, WorkerConsumer {
-   static final Logger LOG = LoggerFactory.getLogger(LocalWorkerService.class);
+    static final Logger LOG = LoggerFactory.getLogger(LocalWorkerService.class);
 
-   private final LinkedBlockingDeque<WorkerRequest> queue = new LinkedBlockingDeque<>();
-   private final Consumer consumer = new Consumer();
+    private final LinkedBlockingDeque<WorkerRequest> queue = new LinkedBlockingDeque<>();
+    private final Consumer consumer = new Consumer();
 
-   @Inject
-   Vertx vertx;
+    @Inject
+    Vertx vertx;
 
-   @Inject
-   LocalWorkerService() {
-   }
+    @Inject
+    LocalWorkerService() {
+    }
 
-   @Override
-   protected void startUp() throws Exception {
-      ActionManager.getWorkerActionMap().values().forEach(provider -> provider.setProducer(this));
-      consumer.startAsync().awaitRunning();
-   }
+    @Override
+    protected void startUp() throws Exception {
+        ActionManager.getWorkerActionMap().values().forEach(provider -> provider.setProducer(this));
+        consumer.startAsync().awaitRunning();
+    }
 
-   @Override
-   protected void shutDown() throws Exception {
-      consumer.stopAsync().awaitTerminated();
-   }
+    @Override
+    protected void shutDown() throws Exception {
+        consumer.stopAsync().awaitTerminated();
+    }
 
-   @Override
-   public Observable<Boolean> send(WorkerRequest request) {
-      return Observable.create(subscriber -> {
-         if (request.delaySeconds > 0) {
-            vertx.setTimer(TimeUnit.SECONDS.toMillis(request.delaySeconds), event -> {
-               queue.add(request);
-            });
-         } else {
-            queue.add(request);
-         }
-
-         subscriber.onNext(true);
-         subscriber.onCompleted();
-      });
-   }
-
-   private final class Consumer extends AbstractExecutionThreadService {
-      private Thread thread;
-
-      @Override
-      protected void triggerShutdown() {
-         Try.run(() -> thread.interrupt());
-      }
-
-      @Override
-      protected void run() throws Exception {
-         thread = Thread.currentThread();
-
-         while (isRunning()) {
-            try {
-               doRun();
-            } catch (InterruptedException e) {
-               return;
-            } catch (Throwable e) {
-               // Ignore.
-               LOG.error("Unexpected exception", e);
+    @Override
+    public Observable<Boolean> send(WorkerRequest request) {
+        return Observable.create(subscriber -> {
+            if (request.delaySeconds > 0) {
+                vertx.setTimer(
+                    TimeUnit.SECONDS.toMillis(request.delaySeconds),
+                    event -> queue.add(request)
+                );
+            } else {
+                queue.add(request);
             }
-         }
-      }
 
-      protected void doRun() throws InterruptedException {
-         final WorkerRequest request = queue.take();
-         if (request == null)
-            return;
+            subscriber.onNext(true);
+            subscriber.onCompleted();
+        });
+    }
 
-         request.actionProvider.execute(request.request);
-      }
-   }
+    private final class Consumer extends AbstractExecutionThreadService {
+        private Thread thread;
+
+        @Override
+        protected void triggerShutdown() {
+            Try.run(() -> thread.interrupt());
+        }
+
+        @Override
+        protected void run() throws Exception {
+            thread = Thread.currentThread();
+
+            while (isRunning()) {
+                try {
+                    doRun();
+                } catch (InterruptedException e) {
+                    return;
+                } catch (Throwable e) {
+                    // Ignore.
+                    LOG.error("Unexpected exception", e);
+                }
+            }
+        }
+
+        protected void doRun() throws InterruptedException {
+            final WorkerRequest request = queue.take();
+            if (request == null)
+                return;
+
+            request.actionProvider.execute(request.request);
+        }
+    }
 }

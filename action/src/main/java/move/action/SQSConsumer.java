@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -333,8 +334,14 @@ public class SQSConsumer extends AbstractIdleService {
                         LOG.warn("SQS Consumer Exception", e);
                     }
 
+                    if (result == null) {
+                        continue;
+                    }
+
+                    final List<Message> messages = result.getMessages();
+
                     // Were any messages received?
-                    if (result == null || result.getMessages() == null || result.getMessages().isEmpty()) {
+                    if (messages == null || messages.isEmpty()) {
                         continue;
                     }
 
@@ -344,7 +351,7 @@ public class SQSConsumer extends AbstractIdleService {
                         return;
                     }
 
-                    result.getMessages().stream().map(message -> {
+                    messages.stream().map(message -> {
                             // Parse request.
                             final String body = Strings.nullToEmpty(message.getBody());
                             final Object in = body.isEmpty() ? null : WireFormat.parse(
