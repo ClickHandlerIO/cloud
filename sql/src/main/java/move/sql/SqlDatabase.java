@@ -2025,7 +2025,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             try {
                 return executeRead(callback, context);
             } catch (Exception e) {
-                if (e instanceof HystrixTimeoutException) {
+                if (e instanceof HystrixTimeoutException || e instanceof InterruptedException) {
                     readTimeoutsCounter.inc();
                 } else {
                     readExceptionsCounter.inc();
@@ -2050,7 +2050,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             try {
                 return executeWrite(callback, context);
             } catch (Exception e) {
-                if (e instanceof HystrixTimeoutException) {
+                if (e instanceof HystrixTimeoutException || e instanceof InterruptedException) {
                     writeTimeoutsCounter.inc();
                 } else {
                     writeExceptionsCounter.inc();
