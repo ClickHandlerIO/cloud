@@ -51,7 +51,9 @@ public class ActionHolder {
         } else if (isInternal()) {
             return ClassName.get(InternalActionProvider.class);
         } else if (isWorker()) {
-            return ClassName.get(WorkerActionProvider.class);
+            return workerAction.fifo() ?
+                ClassName.get(FifoWorkerActionProvider.class) :
+                ClassName.get(WorkerActionProvider.class);
         } else if (isScheduled()) {
             return ClassName.get(ScheduledActionProvider.class);
         } else {

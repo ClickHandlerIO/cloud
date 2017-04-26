@@ -5,7 +5,7 @@ import javax.inject.Inject;
 /**
  *
  */
-@WorkerAction
+@WorkerAction(fifo = true)
 public class MyWorker extends AbstractWorkerAction<MyWorker.Request> {
     @Inject
     MyWorker() {

@@ -87,10 +87,6 @@ public class SQSConsumer extends AbstractIdleService {
             config.batchSize > 0,
             "SQSWorkerConfig.batchSize must be greater than 0"
         );
-        Preconditions.checkArgument(
-            config.minimumVisibility > 0,
-            "SQSWorkerConfig.minimumVisibility must be greater than 0"
-        );
         if (config.deleteThreads < 1)
             config.deleteThreads = config.receiveThreads;
         Preconditions.checkArgument(
@@ -100,10 +96,6 @@ public class SQSConsumer extends AbstractIdleService {
         Preconditions.checkArgument(
             config.receiveThreads > 0,
             "SQSWorkerConfig.receiveThreads must be greater than 0"
-        );
-        Preconditions.checkArgument(
-            config.maxInflight >= config.batchSize,
-            "SQSWorkerConfig.maxInFlight must be greater than or equal to batchsize"
         );
         this.config = config;
         this.batchSize = config.batchSize;

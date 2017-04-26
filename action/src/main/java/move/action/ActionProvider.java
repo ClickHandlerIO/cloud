@@ -151,6 +151,12 @@ public class ActionProvider<A, IN, OUT> {
         // Get default config.
         actionConfig = actionClass.getAnnotation(ActionConfig.class);
 
+        final String groupKey = actionConfig != null ? actionConfig.groupKey() : "";
+
+        this.groupKey = HystrixCommandGroupKey.Factory.asKey(groupKey);
+        this.threadPoolKey = HystrixThreadPoolKey.Factory.asKey(groupKey);
+        this.commandKey = HystrixCommandKey.Factory.asKey(commandKey(actionConfig, actionClass));
+
         // Timeout milliseconds.
         int timeoutMillis = DEFAULT_TIMEOUT_MILLIS;
         if (actionConfig != null) {
@@ -208,15 +214,14 @@ public class ActionProvider<A, IN, OUT> {
             commandPropertiesDefaults.withFallbackEnabled(true);
 
             // Build HystrixObservableCommand.Setter default.
-            final String groupKey = actionConfig != null ? actionConfig.groupKey() : "";
             defaultObservableSetter =
                 HystrixObservableCommand.Setter
                     // Set Group Key
-                    .withGroupKey(HystrixCommandGroupKey.Factory.asKey(groupKey))
+                    .withGroupKey(this.groupKey)
                     // Set default command props
                     .andCommandPropertiesDefaults(commandPropertiesDefaults)
                     // Set command key
-                    .andCommandKey(HystrixCommandKey.Factory.asKey(commandKey(actionConfig, actionClass)));
+                    .andCommandKey(this.commandKey);
 
             if (actionConfig != null && actionConfig.maxConcurrentRequests() > 0) {
                 maxConcurrentRequests = actionConfig.maxConcurrentRequests();
@@ -247,8 +252,6 @@ public class ActionProvider<A, IN, OUT> {
                 .withCircuitBreakerEnabled(true)
                 .withFallbackEnabled(true);
 
-            final String groupKey = actionConfig != null ? actionConfig.groupKey() : "";
-
             ThreadPoolConfig threadPoolConfig = ActionManager.getThreadPoolConfig(groupKey);
 
             if (threadPoolConfig == null) {
@@ -262,10 +265,6 @@ public class ActionProvider<A, IN, OUT> {
                     .withAllowMaximumSizeToDivergeFromCoreSize(true)
                     .withMaximumSize(threadPoolConfig.maxSize());
             }
-
-            this.groupKey = HystrixCommandGroupKey.Factory.asKey(groupKey);
-            this.threadPoolKey = HystrixThreadPoolKey.Factory.asKey(groupKey);
-            this.commandKey = HystrixCommandKey.Factory.asKey(commandKey(actionConfig, actionClass));
 
             // Build HystrixCommand.Setter default.
             defaultSetter =
@@ -326,27 +325,12 @@ public class ActionProvider<A, IN, OUT> {
 
         // Clone command properties from default and adjust the timeout.
         final HystrixCommandProperties.Setter commandProperties = HystrixCommandProperties.Setter()
-            .withCircuitBreakerEnabled(commandPropertiesDefaults.getCircuitBreakerEnabled())
-            .withCircuitBreakerErrorThresholdPercentage(commandPropertiesDefaults.getCircuitBreakerErrorThresholdPercentage())
-            .withCircuitBreakerForceClosed(commandPropertiesDefaults.getCircuitBreakerForceClosed())
-            .withCircuitBreakerForceOpen(commandPropertiesDefaults.getCircuitBreakerForceOpen())
-            .withCircuitBreakerRequestVolumeThreshold(commandPropertiesDefaults.getCircuitBreakerRequestVolumeThreshold())
-            .withCircuitBreakerSleepWindowInMilliseconds(commandPropertiesDefaults.getCircuitBreakerSleepWindowInMilliseconds())
-            .withExecutionIsolationSemaphoreMaxConcurrentRequests(commandPropertiesDefaults.getExecutionIsolationSemaphoreMaxConcurrentRequests())
             .withExecutionIsolationStrategy(commandPropertiesDefaults.getExecutionIsolationStrategy())
-            .withExecutionIsolationThreadInterruptOnTimeout(commandPropertiesDefaults.getExecutionIsolationThreadInterruptOnTimeout())
-            .withExecutionIsolationThreadInterruptOnFutureCancel(commandPropertiesDefaults.getExecutionIsolationThreadInterruptOnFutureCancel())
+            .withExecutionTimeoutEnabled(commandPropertiesDefaults.getExecutionTimeoutEnabled() == Boolean.TRUE)
             .withExecutionTimeoutInMilliseconds((int) maxMillis)
-            .withExecutionTimeoutEnabled(true)
-            .withFallbackIsolationSemaphoreMaxConcurrentRequests(commandPropertiesDefaults.getFallbackIsolationSemaphoreMaxConcurrentRequests())
-            .withFallbackEnabled(commandPropertiesDefaults.getFallbackEnabled())
-            .withMetricsHealthSnapshotIntervalInMilliseconds(commandPropertiesDefaults.getMetricsHealthSnapshotIntervalInMilliseconds())
-            .withMetricsRollingPercentileBucketSize(commandPropertiesDefaults.getMetricsRollingPercentileBucketSize())
-            .withMetricsRollingPercentileEnabled(commandPropertiesDefaults.getMetricsRollingPercentileEnabled())
-            .withMetricsRollingPercentileWindowInMilliseconds(commandPropertiesDefaults.getMetricsRollingPercentileWindowInMilliseconds())
-            .withMetricsRollingPercentileWindowBuckets(commandPropertiesDefaults.getMetricsRollingPercentileWindowBuckets())
-            .withMetricsRollingStatisticalWindowInMilliseconds(commandPropertiesDefaults.getMetricsRollingStatisticalWindowInMilliseconds())
-            .withMetricsRollingStatisticalWindowBuckets(commandPropertiesDefaults.getMetricsRollingStatisticalWindowBuckets())
+            .withFallbackEnabled(true)
+            .withExecutionIsolationThreadInterruptOnFutureCancel(true)
+            .withExecutionIsolationThreadInterruptOnTimeout(true)
             .withRequestCacheEnabled(false)
             .withRequestLogEnabled(false);
 
@@ -359,6 +343,11 @@ public class ActionProvider<A, IN, OUT> {
                 .andThreadPoolPropertiesDefaults(threadPoolPropertiesDefaults)
             );
         } else if (action instanceof AbstractObservableAction) {
+            if (commandPropertiesDefaults.getExecutionIsolationSemaphoreMaxConcurrentRequests() != null) {
+                commandProperties.withExecutionIsolationSemaphoreMaxConcurrentRequests(commandPropertiesDefaults.getExecutionIsolationSemaphoreMaxConcurrentRequests());
+                commandProperties.withFallbackIsolationSemaphoreMaxConcurrentRequests(commandPropertiesDefaults.getExecutionIsolationSemaphoreMaxConcurrentRequests());
+            }
+
             ((AbstractObservableAction) action).setCommandSetter(HystrixObservableCommand.Setter
                 .withGroupKey(groupKey)
                 .andCommandKey(commandKey)

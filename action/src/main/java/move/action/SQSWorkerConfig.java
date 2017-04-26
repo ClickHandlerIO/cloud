@@ -59,35 +59,7 @@ public class SQSWorkerConfig {
     * AmazonSQS maxes out at 10.
     */
    @JsonProperty
-   public int batchSize = 1;
-   /**
-    * Number of seconds for the minimum visibility timeout.
-    * When pulling off of the queue the initial visibility timeout
-    * is set to this number of seconds. The visibility timeout is increased
-    * based on a particular Action's "maxExecutionMillis" property in it's
-    * ActionConfig annotation.
-    */
-   @JsonProperty
-   public int minimumVisibility = 45;
-   /**
-    * Number of seconds to add to calculations regarding "ChangeMessageVisibility" calls.
-    * <p>
-    * This can help alleviate / eliminate duplicate message deliveries based
-    * on a race condition to delete a "processed" message before it's visibility timeout is reached.
-    */
-   @JsonProperty
-   public int visibilityBuffer = 5;
-   /**
-    * The amount of extra visibility time to give an Action when the
-    * backlog for that particular Action type is full.
-    */
-   @JsonProperty
-   public double maxVisibilityMultiple = 2.0;
-   /**
-    * Maximum number of messages allowed to be on the server at a given time.
-    */
-   @JsonProperty
-   public int maxInflight = 1;
+   public int batchSize = 10;
    /**
     * S3 Bucket.
     */
@@ -166,26 +138,6 @@ public class SQSWorkerConfig {
 
    public SQSWorkerConfig batchSize(final int batchSize) {
       this.batchSize = batchSize;
-      return this;
-   }
-
-   public SQSWorkerConfig minimumVisibility(final int minimumVisibility) {
-      this.minimumVisibility = minimumVisibility;
-      return this;
-   }
-
-   public SQSWorkerConfig visibilityBuffer(final int visibilityBuffer) {
-      this.visibilityBuffer = visibilityBuffer;
-      return this;
-   }
-
-   public SQSWorkerConfig maxVisibilityMultiple(final double maxVisibilityMultiple) {
-      this.maxVisibilityMultiple = maxVisibilityMultiple;
-      return this;
-   }
-
-   public SQSWorkerConfig maxInflight(final int maxInflight) {
-      this.maxInflight = maxInflight;
       return this;
    }
 

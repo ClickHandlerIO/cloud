@@ -11,9 +11,10 @@ import java.util.function.Consumer;
  *
  */
 public class WorkerActionProvider<A extends Action<IN, Boolean>, IN> extends ActionProvider<A, IN, Boolean> {
-    private WorkerAction workerAction;
-    private WorkerProducer producer;
-    private String name;
+    protected WorkerAction workerAction;
+    protected WorkerProducer producer;
+    protected String name;
+    protected boolean fifo;
 
     @Inject
     public WorkerActionProvider() {
@@ -26,18 +27,8 @@ public class WorkerActionProvider<A extends Action<IN, Boolean>, IN> extends Act
         return name;
     }
 
-    /**
-     * @return
-     */
-    public String getQueueName() {
-        return workerAction != null ? workerAction.queueName() : "";
-    }
-
-    /**
-     * @return
-     */
-    public String getMessageGroupId() {
-        return workerAction != null ? workerAction.messageGroupId() : null;
+    public boolean isFifo() {
+        return fifo;
     }
 
     /**
@@ -58,6 +49,7 @@ public class WorkerActionProvider<A extends Action<IN, Boolean>, IN> extends Act
     protected void init() {
         workerAction = getActionClass().getAnnotation(WorkerAction.class);
         name = getActionClass().getCanonicalName();
+        fifo = workerAction.fifo();
         super.init();
     }
 
@@ -76,18 +68,6 @@ public class WorkerActionProvider<A extends Action<IN, Boolean>, IN> extends Act
      */
     public void send(IN request, int delaySeconds, Consumer<Boolean> callback) {
         send(request, delaySeconds).subscribe(
-            r -> Try.run(() -> callback.accept(r)),
-            e -> Try.run(() -> callback.accept(false))
-        );
-    }
-
-    /**
-     * @param request
-     * @param groupId
-     * @param callback
-     */
-    public void send(IN request, String groupId, Consumer<Boolean> callback) {
-        send(request, groupId).subscribe(
             r -> Try.run(() -> callback.accept(r)),
             e -> Try.run(() -> callback.accept(false))
         );
@@ -114,39 +94,6 @@ public class WorkerActionProvider<A extends Action<IN, Boolean>, IN> extends Act
         return producer.send(new WorkerRequest()
             .actionProvider(this)
             .request(request)
-            .delaySeconds(delaySeconds));
-    }
-
-    /**
-     * @param request
-     * @param groupId
-     * @return
-     */
-    public Observable<Boolean> send(IN request, String groupId) {
-        Preconditions.checkNotNull(
-            producer,
-            "WorkerProducer is null. Ensure ActionManager has been started and all actions have been registered."
-        );
-        return producer.send(new WorkerRequest()
-            .actionProvider(this)
-            .request(request)
-            .groupId(groupId));
-    }
-
-    /**
-     * @param request
-     * @param delaySeconds
-     * @return
-     */
-    public Observable<Boolean> send(IN request, String groupId, int delaySeconds) {
-        Preconditions.checkNotNull(
-            producer,
-            "WorkerProducer is null. Ensure ActionManager has been started and all actions have been registered."
-        );
-        return producer.send(new WorkerRequest()
-            .actionProvider(this)
-            .request(request)
-            .groupId(groupId)
             .delaySeconds(delaySeconds));
     }
 }

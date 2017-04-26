@@ -12,30 +12,13 @@ import java.lang.annotation.*;
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
 public @interface WorkerAction {
-    String DEFAULT = "default";
-    String BACKGROUND = "background";
-
     /**
-     *
-     * @return
-     */
-    String queueName() default DEFAULT;
-
-    /**
-     *
      * @return
      */
     boolean encrypted() default false;
 
     /**
-     *
      * @return
      */
-    boolean dedicated() default false;
-
-   /**
-    *
-    * @return
-    */
-    String messageGroupId() default "";
+    boolean fifo() default false;
 }
