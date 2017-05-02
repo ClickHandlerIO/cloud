@@ -59,7 +59,7 @@ public class SQSWorkerConfig {
     * AmazonSQS maxes out at 10.
     */
    @JsonProperty
-   public int batchSize = 10;
+   public int batchSize = 1;
    /**
     * S3 Bucket.
     */
@@ -81,7 +81,7 @@ public class SQSWorkerConfig {
     * the S3 bucket is encrypted.
     */
    @JsonProperty
-   public boolean alwaysUseS3;
+   public boolean alwaysUseS3 = false;
    /**
     * The size in bytes that determines when to use S3 for message payload.
     * If "alwaysUseS3" is set to true, then this parameter is ignored.
