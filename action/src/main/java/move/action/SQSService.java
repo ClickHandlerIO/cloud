@@ -246,13 +246,23 @@ public class SQSService extends AbstractIdleService implements WorkerService {
 
             actionProvider.setProducer(producer);
 
-            queueMap.put(workerConfig.name, new QueueContext(producer, consumer, sqsSendClient));
+            queueMap.put(workerConfig.name, new QueueContext(producer, consumer, sqsSendClient, workerConfig));
         });
 
         queueMap.values().forEach(queueContext -> {
-            queueContext.sender.startAsync().awaitRunning();
+            try {
+                queueContext.sender.startAsync().awaitRunning();
+            } catch (Throwable e) {
+                LOG.error("Failed to start SQSProducer for '" + queueContext.config.name + "'");
+                throw new RuntimeException(e);
+            }
             if (queueContext.receiver != null) {
-                queueContext.receiver.startAsync().awaitRunning();
+                try {
+                    queueContext.receiver.startAsync().awaitRunning();
+                } catch (Throwable e) {
+                    LOG.error("Failed to start SQSConsumer for '" + queueContext.config.name + "'");
+                    throw new RuntimeException(e);
+                }
             }
         });
     }
@@ -274,11 +284,13 @@ public class SQSService extends AbstractIdleService implements WorkerService {
         final SQSProducer sender;
         final SQSConsumer receiver;
         final AmazonSQS sqsClient;
+        final SQSWorkerConfig config;
 
-        public QueueContext(SQSProducer sender, SQSConsumer receiver, AmazonSQS sqsClient) {
+        public QueueContext(SQSProducer sender, SQSConsumer receiver, AmazonSQS sqsClient, SQSWorkerConfig config) {
             this.sender = sender;
             this.receiver = receiver;
             this.sqsClient = sqsClient;
+            this.config = config;
         }
     }
 }
