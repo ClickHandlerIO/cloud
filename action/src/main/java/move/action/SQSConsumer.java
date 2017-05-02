@@ -44,7 +44,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class SQSConsumer extends AbstractIdleService {
     private static final Logger LOG = LoggerFactory.getLogger(SQSConsumer.class);
     private final Vertx vertx;
-    private final LinkedBlockingDeque<ActionRequest> requestQueue = new LinkedBlockingDeque<>(100);
+    private LinkedBlockingDeque<ActionRequest> requestQueue;
     private SQSWorkerConfig config;
     private AmazonSQS sqsDeleteClient;
     private AmazonSQS sqsReceiveClient;
@@ -128,6 +128,8 @@ public class SQSConsumer extends AbstractIdleService {
         LOG.debug("Starting up SQS service.");
 
         final String name = Strings.nullToEmpty(config.name).trim();
+
+        requestQueue = new LinkedBlockingDeque<>(batchSize);
 
         // Find ActionProvider.
         Preconditions.checkNotNull(actionProvider, "ActionProvider for '" + name + "' was not set.");
