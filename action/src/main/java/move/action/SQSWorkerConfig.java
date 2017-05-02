@@ -21,6 +21,10 @@ public class SQSWorkerConfig {
     */
    public boolean fifo = false;
    /**
+    *
+    */
+   public boolean consumer = false;
+   /**
     * AWS region
     */
    @JsonProperty
@@ -35,31 +39,6 @@ public class SQSWorkerConfig {
     */
    @JsonProperty
    public String secretKey;
-   /**
-    * Number of sender threads.
-    */
-   @JsonProperty
-   public int sendThreads = 1;
-   /**
-    * Number of ReceiveMessageBatch threads.
-    * <p>
-    * If 0, then this node will not consume messages from this queue.
-    */
-   @JsonProperty
-   public int receiveThreads = 1;
-   /**
-    * Number of DeleteMessageBatch threads.
-    * <p>
-    * If 0, then this node will not consume messages from this queue.
-    */
-   @JsonProperty
-   public int deleteThreads = 1;
-   /**
-    * The number of messages to use for batching.
-    * AmazonSQS maxes out at 10.
-    */
-   @JsonProperty
-   public int batchSize = 1;
    /**
     * S3 Bucket.
     */
@@ -91,6 +70,54 @@ public class SQSWorkerConfig {
    @JsonProperty
    public int s3MessageThreshold = 0;
 
+   public String name() {
+      return this.name;
+   }
+
+   public String sqsName() {
+      return this.sqsName;
+   }
+
+   public boolean fifo() {
+      return this.fifo;
+   }
+
+   public boolean consumer() {
+      return this.consumer;
+   }
+
+   public String region() {
+      return this.region;
+   }
+
+   public String accessKey() {
+      return this.accessKey;
+   }
+
+   public String secretKey() {
+      return this.secretKey;
+   }
+
+   public String s3Bucket() {
+      return this.s3Bucket;
+   }
+
+   public String s3AccessKey() {
+      return this.s3AccessKey;
+   }
+
+   public String s3SecretKey() {
+      return this.s3SecretKey;
+   }
+
+   public boolean alwaysUseS3() {
+      return this.alwaysUseS3;
+   }
+
+   public int s3MessageThreshold() {
+      return this.s3MessageThreshold;
+   }
+
    public SQSWorkerConfig name(final String name) {
       this.name = name;
       return this;
@@ -102,9 +129,14 @@ public class SQSWorkerConfig {
    }
 
    public SQSWorkerConfig fifo(final boolean fifo) {
-         this.fifo = fifo;
-         return this;
-      }
+      this.fifo = fifo;
+      return this;
+   }
+
+   public SQSWorkerConfig consumer(final boolean consumer) {
+      this.consumer = consumer;
+      return this;
+   }
 
    public SQSWorkerConfig region(final String region) {
       this.region = region;
@@ -118,26 +150,6 @@ public class SQSWorkerConfig {
 
    public SQSWorkerConfig secretKey(final String secretKey) {
       this.secretKey = secretKey;
-      return this;
-   }
-
-   public SQSWorkerConfig sendThreads(final int sendThreads) {
-      this.sendThreads = sendThreads;
-      return this;
-   }
-
-   public SQSWorkerConfig receiveThreads(final int receiveThreads) {
-      this.receiveThreads = receiveThreads;
-      return this;
-   }
-
-   public SQSWorkerConfig deleteThreads(final int deleteThreads) {
-      this.deleteThreads = deleteThreads;
-      return this;
-   }
-
-   public SQSWorkerConfig batchSize(final int batchSize) {
-      this.batchSize = batchSize;
       return this;
    }
 

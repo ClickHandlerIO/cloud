@@ -38,9 +38,8 @@ public class SQSProducer extends AbstractIdleService implements WorkerProducer {
     private final LinkedBlockingDeque<WorkerRequest> queue = new LinkedBlockingDeque<>();
     private final Vertx vertx;
     private AmazonSQS sqsClient;
-    private SendThread[] sendThreads;
+    private SendThread sendThread;
     private int batchSize;
-    private int threadCount;
     private String queueUrl;
     private SQSWorkerConfig config;
 
@@ -74,10 +73,7 @@ public class SQSProducer extends AbstractIdleService implements WorkerProducer {
      * @param config
      */
     void setConfig(SQSWorkerConfig config) {
-        Preconditions.checkArgument(config.batchSize > 0, "batchSize must be 1-10");
-        Preconditions.checkArgument(config.sendThreads > 0, "sendThreads must be greater than 0");
         this.config = config;
-        this.threadCount = config.sendThreads;
         this.batchSize = 10; // Producer should always be 10.
     }
 
@@ -105,19 +101,13 @@ public class SQSProducer extends AbstractIdleService implements WorkerProducer {
         successCounter = registry.counter(config.name + "-SUCCESS");
         failuresCounter = registry.counter(config.name + "-FAILURE");
 
-        sendThreads = new SendThread[threadCount];
-        for (int i = 0; i < sendThreads.length; i++) {
-            sendThreads[i] = new SendThread();
-            sendThreads[i].startAsync().awaitRunning();
-        }
+        sendThread = new SendThread();
+        sendThread.startAsync().awaitRunning();
     }
 
     @Override
     protected void shutDown() throws Exception {
-        for (SendThread thread : sendThreads) {
-            Try.run(() -> thread.stopAsync().awaitTerminated(5, TimeUnit.SECONDS));
-        }
-
+        Try.run(() -> sendThread.stopAsync().awaitTerminated(5, TimeUnit.SECONDS));
         Try.run(() -> sqsClient.shutdown());
     }
 

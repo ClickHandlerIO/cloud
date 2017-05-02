@@ -138,7 +138,6 @@ public class SQSService extends AbstractIdleService implements WorkerService {
 
             // Create SQSClient.
             final AmazonSQS sqsSendClient;
-            final AmazonSQS sqsDeleteClient;
             final AmazonSQS sqsReceiveClient;
 
             if (awsAccessKey.isEmpty()) {
@@ -149,15 +148,8 @@ public class SQSService extends AbstractIdleService implements WorkerService {
                         extendedClientConfiguration
                     );
 
-                if (workerConfig.receiveThreads > 0) {
+                if (workerConfig.consumer) {
                     sqsReceiveClient = s3Client == null ?
-                        AmazonSQSClient.builder().withRegion(region).build() :
-                        new AmazonSQSExtendedClient(
-                            AmazonSQSClient.builder().withRegion(region).build(),
-                            extendedClientConfiguration
-                        );
-
-                    sqsDeleteClient = s3Client == null ?
                         AmazonSQSClient.builder().withRegion(region).build() :
                         new AmazonSQSExtendedClient(
                             AmazonSQSClient.builder().withRegion(region).build(),
@@ -165,7 +157,6 @@ public class SQSService extends AbstractIdleService implements WorkerService {
                         );
                 } else {
                     sqsReceiveClient = null;
-                    sqsDeleteClient = null;
                 }
             } else {
                 sqsSendClient = s3Client == null ?
@@ -185,23 +176,8 @@ public class SQSService extends AbstractIdleService implements WorkerService {
                         extendedClientConfiguration
                     );
 
-                if (workerConfig.receiveThreads > 0) {
+                if (workerConfig.consumer) {
                     sqsReceiveClient = s3Client == null ?
-                        AmazonSQSClient.builder()
-                            .withRegion(region)
-                            .withCredentials(
-                                new AWSStaticCredentialsProvider(
-                                    new BasicAWSCredentials(awsAccessKey, awsSecretKey)))
-                            .build() :
-                        new AmazonSQSExtendedClient(
-                            AmazonSQSClient.builder()
-                                .withRegion(region)
-                                .withCredentials(
-                                    new AWSStaticCredentialsProvider(
-                                        new BasicAWSCredentials(awsAccessKey, awsSecretKey)))
-                                .build(), extendedClientConfiguration);
-
-                    sqsDeleteClient = s3Client == null ?
                         AmazonSQSClient.builder()
                             .withRegion(region)
                             .withCredentials(
@@ -217,7 +193,6 @@ public class SQSService extends AbstractIdleService implements WorkerService {
                                 .build(), extendedClientConfiguration);
                 } else {
                     sqsReceiveClient = null;
-                    sqsDeleteClient = null;
                 }
             }
 
@@ -232,12 +207,11 @@ public class SQSService extends AbstractIdleService implements WorkerService {
             producer.setConfig(workerConfig);
 
             final SQSConsumer consumer;
-            if (workerConfig.receiveThreads > 0) {
+            if (workerConfig.consumer) {
                 // Create a SQSConsumer to receive Worker Requests.
                 consumer = new SQSConsumer(vertx);
                 consumer.setQueueUrl(queueUrl);
-                consumer.setSqsReceiveClient(sqsReceiveClient);
-                consumer.setSqsDeleteClient(sqsDeleteClient);
+                consumer.setSqlClient(sqsReceiveClient);
                 consumer.setActionProvider(actionProvider);
                 consumer.setConfig(workerConfig);
             } else {
