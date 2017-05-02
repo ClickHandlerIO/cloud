@@ -29,10 +29,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.LinkedBlockingDeque;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -44,7 +41,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class SQSConsumer extends AbstractIdleService {
     private static final Logger LOG = LoggerFactory.getLogger(SQSConsumer.class);
     private final Vertx vertx;
-    private LinkedBlockingDeque<ActionRequest> requestQueue;
+    private Semaphore semaphore;
     private SQSWorkerConfig config;
     private AmazonSQS sqsDeleteClient;
     private AmazonSQS sqsReceiveClient;
@@ -54,7 +51,7 @@ public class SQSConsumer extends AbstractIdleService {
     private WorkerActionProvider actionProvider;
     private String queueUrl;
     private ConcurrentMap<String, ActionRequest> inFlightMap = new ConcurrentHashMap<>();
-    private DispatchService dispatchService;
+    //    private DispatchService dispatchService;
     private TimeoutService timeoutService;
 
     private Gauge<Long> inFlightGauge;
@@ -129,7 +126,7 @@ public class SQSConsumer extends AbstractIdleService {
 
         final String name = Strings.nullToEmpty(config.name).trim();
 
-        requestQueue = new LinkedBlockingDeque<>(batchSize);
+        semaphore = new Semaphore(actionProvider.getMaxConcurrentRequests());
 
         // Find ActionProvider.
         Preconditions.checkNotNull(actionProvider, "ActionProvider for '" + name + "' was not set.");
@@ -153,10 +150,10 @@ public class SQSConsumer extends AbstractIdleService {
         deletesCounter = registry.counter(config.name + "-DELETES");
         deleteFailuresCounter = registry.counter(config.name + "-DELETE_FAILURES");
 
-        dispatchService = new DispatchService();
+//        dispatchService = new DispatchService();
         timeoutService = new TimeoutService();
 
-        dispatchService.startAsync().awaitRunning();
+//        dispatchService.startAsync().awaitRunning();
         timeoutService.startAsync().awaitRunning();
 
         // Start Delete threads.
@@ -362,6 +359,7 @@ public class SQSConsumer extends AbstractIdleService {
                 while (isRunning()) {
                     try {
                         ReceiveMessageResult result = null;
+                        semaphore.acquire(batchSize);
                         try {
                             lastPoll = Math.max(System.currentTimeMillis(), lastPoll);
 
@@ -376,12 +374,15 @@ public class SQSConsumer extends AbstractIdleService {
                             result = receiveMessage(request);
                         } catch (InterruptedException e) {
                             LOG.warn("Interrupted.", e);
+                            semaphore.release(batchSize);
                             return;
                         } catch (Exception e) {
+                            semaphore.release(batchSize);
                             LOG.warn("SQS Consumer Exception", e);
                         }
 
                         if (result == null) {
+                            semaphore.release(batchSize);
                             continue;
                         }
 
@@ -389,13 +390,19 @@ public class SQSConsumer extends AbstractIdleService {
 
                         // Were any messages received?
                         if (messages == null || messages.isEmpty()) {
+                            semaphore.release(batchSize);
                             continue;
                         }
 
                         // Are we still running.
                         if (!isRunning()) {
+                            semaphore.release(batchSize);
                             LOG.warn("Consumer not running when checked.");
                             return;
+                        }
+
+                        if (messages.size() < batchSize) {
+                            semaphore.release(batchSize - messages.size());
                         }
 
                         messages.stream().map(message -> {
@@ -423,16 +430,12 @@ public class SQSConsumer extends AbstractIdleService {
                                     return true;
                                 }
 
+                                semaphore.release(1);
+
                                 return false;
                             }
                         ).forEach(
-                            $ -> {
-                                try {
-                                    requestQueue.put($);
-                                } catch (InterruptedException e) {
-                                    throw new InternalInterruptedException(e);
-                                }
-                            }
+                            ActionRequest::invoke
                         );
                     } catch (Exception e) {
                         if (e instanceof InternalInterruptedException) {
@@ -450,28 +453,28 @@ public class SQSConsumer extends AbstractIdleService {
         }
     }
 
-    /**
-     * Dispatches Action Request.
-     */
-    private final class DispatchService extends AbstractExecutionThreadService {
-        @Override
-        protected void run() throws Exception {
-            while (isRunning()) {
-                try {
-                    final ActionRequest actionRequest = requestQueue.poll(1, TimeUnit.SECONDS);
-                    if (actionRequest == null) {
-                        continue;
-                    }
-
-                    actionRequest.invoke();
-                } catch (Throwable e) {
-                    if (e instanceof InterruptedException) {
-                        return;
-                    }
-                }
-            }
-        }
-    }
+//    /**
+//     * Dispatches Action Request.
+//     */
+//    private final class DispatchService extends AbstractExecutionThreadService {
+//        @Override
+//        protected void run() throws Exception {
+//            while (isRunning()) {
+//                try {
+//                    final ActionRequest actionRequest = requestQueue.poll(1, TimeUnit.SECONDS);
+//                    if (actionRequest == null) {
+//                        continue;
+//                    }
+//
+//                    actionRequest.invoke();
+//                } catch (Throwable e) {
+//                    if (e instanceof InterruptedException) {
+//                        return;
+//                    }
+//                }
+//            }
+//        }
+//    }
 
     /**
      * Ensures In-Flight messages are cleaned up.
@@ -537,6 +540,9 @@ public class SQSConsumer extends AbstractIdleService {
 
             if (now <= timeoutAt) {
                 Try.run(() -> subscription.unsubscribe());
+                if (done.compareAndSet(false, true)) {
+                    Try.run(() -> semaphore.release(1));
+                }
                 return true;
             }
 
@@ -545,41 +551,50 @@ public class SQSConsumer extends AbstractIdleService {
 
         @SuppressWarnings("all")
         void invoke() {
-            subscription = actionProvider.observe(in).subscribe(
-                r -> {
-                    if (done.compareAndSet(false, true)) {
+            try {
+                subscription = actionProvider.observe(in).subscribe(
+                    r -> {
+                        if (done.compareAndSet(false, true)) {
+                            Try.run(() -> semaphore.release(1));
+                            inFlightMap.remove(receiptHandle);
+
+                            try {
+                                if (r == Boolean.TRUE) {
+                                    completesCounter.inc();
+                                    scheduleToDelete(receiptHandle);
+                                } else {
+                                    inCompletesCounter.inc();
+                                }
+                            } finally {
+                                Try.run(() -> subscription.unsubscribe());
+                            }
+                        }
+                    },
+                    e -> {
                         inFlightMap.remove(receiptHandle);
 
-                        try {
-                            if (r == Boolean.TRUE) {
-                                completesCounter.inc();
-                                scheduleToDelete(receiptHandle);
-                            } else {
-                                inCompletesCounter.inc();
+                        if (done.compareAndSet(false, true)) {
+                            Try.run(() -> semaphore.release(1));
+                            try {
+                                if (e instanceof HystrixTimeoutException) {
+                                    timeoutsCounter.inc();
+                                } else {
+                                    exceptionsCounter.inc();
+                                }
+                            } finally {
+                                Try.run(() -> subscription.unsubscribe());
                             }
-                        } finally {
-                            Try.run(() -> subscription.unsubscribe());
                         }
+                        LOG.error(
+                            "Action " + actionProvider.getActionClass().getCanonicalName() + " threw an exception", e);
                     }
-                },
-                e -> {
+                );
+            } catch (Throwable e) {
+                if (done.compareAndSet(false, true)) {
+                    Try.run(() -> semaphore.release(1));
                     inFlightMap.remove(receiptHandle);
-
-                    if (done.compareAndSet(false, true)) {
-                        try {
-                            if (e instanceof HystrixTimeoutException) {
-                                timeoutsCounter.inc();
-                            } else {
-                                exceptionsCounter.inc();
-                            }
-                        } finally {
-                            Try.run(() -> subscription.unsubscribe());
-                        }
-                    }
-                    LOG.error(
-                        "Action " + actionProvider.getActionClass().getCanonicalName() + " threw an exception", e);
                 }
-            );
+            }
         }
     }
 }
