@@ -50,7 +50,7 @@ public class SQSConsumer extends AbstractIdleService {
     private AmazonSQS sqsReceiveClient;
     private ReceiveThread[] receiveThreads;
     private DeleteThread[] deleteThreads;
-    private int batchSize = 10;
+    private int batchSize = 1;
     private WorkerActionProvider actionProvider;
     private String queueUrl;
     private ConcurrentMap<String, ActionRequest> inFlightMap = new ConcurrentHashMap<>();
