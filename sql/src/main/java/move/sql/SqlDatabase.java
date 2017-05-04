@@ -8,15 +8,20 @@ import com.google.common.base.Strings;
 import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.util.concurrent.AbstractExecutionThreadService;
 import com.google.common.util.concurrent.AbstractIdleService;
+import com.google.common.util.concurrent.Service;
 import com.netflix.hystrix.*;
 import com.netflix.hystrix.exception.HystrixTimeoutException;
+import com.nuodb.jdbc.RemConnection;
+import com.nuodb.jdbc.RemStatement;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.rxjava.core.Vertx;
+import javaslang.Tuple2;
 import javaslang.control.Try;
 import move.action.AbstractAction;
 import move.action.ActionContext;
@@ -40,12 +45,10 @@ import javax.sql.DataSource;
 import java.lang.reflect.InvocationTargetException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.Statement;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -74,7 +77,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     private static final int DEV_MYSQL_PREPARE_STMT_CACHE_SQL_LIMIT = 2048;
     private static final String ENTITY_PACKAGE = "move.sql";
     private static final Logger LOG = LoggerFactory.getLogger(SqlDatabase.class);
-    private static final String ACTION_CONTEXT_KEY = "a";
+    private static final String ACTION_KEY = "a";
 
     protected final SqlConfig config;
     protected final String name;
@@ -100,8 +103,11 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     private final HystrixCommandKey writeCommandKey = HystrixCommandKey.Factory.asKey("WRITE");
     private final int readTaskTimout;
     private final int writeTaskTimout;
-    protected HikariConfig hikariConfig;
-    protected HikariConfig hikariReadConfig;
+    private final SQLDialect dialect;
+    private final boolean isNuoDB;
+    private final LinkedBlockingDeque<Tuple2<Statement, Boolean>> rogueStatementQueue = new LinkedBlockingDeque<>();
+    //    protected HikariConfig hikariConfig;
+//    protected HikariConfig hikariReadConfig;
     protected Configuration configuration;
     protected Configuration readConfiguration;
     protected DataSource dataSource;
@@ -110,16 +116,21 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     protected SqlPlatform dbPlatform;
     protected Settings settings;
     protected H2Server h2Server;
+    private Service statementCleanupService;
     private Timer readTimer;
     private Timer writeTimer;
     private Counter readTimeoutsCounter;
     private Counter readExceptionsCounter;
     private Counter writeTimeoutsCounter;
     private Counter writeExceptionsCounter;
-    private MetricRegistry metricRegistry;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////
     // Property Accessors
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    private MetricRegistry metricRegistry;
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Start Up
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
     public SqlDatabase(
@@ -140,6 +151,9 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         this.writeThreadPoolKey = HystrixThreadPoolKey.Factory.asKey("SQL-" + config.getName() + "-WRITE");
 
         this.metricRegistry = Metrics.registry();
+
+        this.isNuoDB = config.getUrl().startsWith("jdbc:com.nuodb");
+        this.dialect = isNuoDB ? SQLDialect.MYSQL : JDBCUtils.dialect(Strings.nullToEmpty(config.getUrl()));
 
         if (config.getReadTaskTimeout() < MINIMUM_TIMEOUT) {
             this.readTaskTimout = MINIMUM_TIMEOUT;
@@ -190,8 +204,9 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         this.entityReflections = entityReflections.toArray(new Reflections[entityReflections.size()]);
     }
 
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Start Up
+    // Shutdown
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
     public static void main(String[] args) {
@@ -229,11 +244,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         }
     }
 
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Shutdown
-    ////////////////////////////////////////////////////////////////////////////////////////////////////
-
     /**
      * @return
      */
@@ -259,13 +269,191 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         return configuration.derive();
     }
 
-    protected HikariDataSource buildWriteDataSource() {
-//        if (config.isUseHikari())
-        return new HikariDataSource(hikariConfig);
+    protected com.nuodb.jdbc.DataSource buildNuoDB(boolean readOnly, int maxConnections) {
+        final String jdbcUrl = Strings.nullToEmpty(readOnly ? config.getReadUrl() : config.getUrl()).trim();
+        final String jdbcUser = Strings.nullToEmpty(readOnly ? config.getReadUser() : config.getUser()).trim();
+        final String jdbcPassword = Strings.nullToEmpty(readOnly ? config.getReadPassword() : config.getPassword()).trim();
+
+        final Properties properties = new Properties();
+        properties.setProperty(com.nuodb.jdbc.DataSource.PROP_URL, jdbcUrl);
+        properties.setProperty(com.nuodb.jdbc.DataSource.PROP_USERNAME, jdbcUser);
+        properties.setProperty(com.nuodb.jdbc.DataSource.PROP_PASSWORD, jdbcPassword);
+
+        if (config.getSchema() != null && config.getSchema().trim().isEmpty()) {
+            properties.setProperty(com.nuodb.jdbc.DataSource.PROP_SCHEMA, config.getSchema().trim());
+        }
+
+        properties.setProperty(com.nuodb.jdbc.DataSource.PROP_DEFAULTREADONLY, Boolean.toString(readOnly && maxConnections == 0));
+        properties.setProperty(com.nuodb.jdbc.DataSource.PROP_DEFAULTAUTOCOMMIT, Boolean.toString(readOnly && maxConnections == 0));
+
+        int maximumPoolSize = maxConnections;
+
+        if (maximumPoolSize == 0) {
+            // Set the default maximum pool size.
+            if (config.isDev()) {
+                maximumPoolSize = Runtime.getRuntime().availableProcessors();
+            } else if (config.isTest()) {
+                maximumPoolSize = Runtime.getRuntime().availableProcessors();
+            } else {
+                maximumPoolSize = Runtime.getRuntime().availableProcessors() * 3;
+            }
+
+            // Sanitize Max Pool size.
+            if (!readOnly) {
+                if (config.getMaxPoolSize() > 0 && config.getMaxPoolSize() <= SANE_MAX) {
+                    maximumPoolSize = config.getMaxPoolSize();
+                } else {
+                    LOG.warn("An Invalid MaxPoolSize value was found. Found '" + config.getMaxPoolSize() + "' but set to a more reasonable '" + SANE_MAX + "'");
+                    maximumPoolSize = SANE_MAX;
+                }
+            } else {
+                if (config.getMaxReadPoolSize() > 0 && config.getMaxReadPoolSize() < SANE_MAX) {
+                    maximumPoolSize = config.getMaxReadPoolSize();
+                } else {
+                    LOG.warn("An Invalid MaxReadPoolSize value was found. Found '" + config.getMaxPoolSize() + "' but set to a more reasonable '" + SANE_MAX + "'");
+                    maximumPoolSize = SANE_MAX;
+                }
+            }
+        }
+
+        properties.setProperty(com.nuodb.jdbc.DataSource.PROP_INITIALSIZE, Integer.toString(maximumPoolSize));
+        properties.setProperty(com.nuodb.jdbc.DataSource.PROP_MINIDLE, Integer.toString(maximumPoolSize));
+        properties.setProperty(com.nuodb.jdbc.DataSource.PROP_MAXACTIVE, Integer.toString(maximumPoolSize));
+        properties.setProperty(com.nuodb.jdbc.DataSource.PROP_MAXIDLE, Integer.toString(maximumPoolSize));
+
+        properties.setProperty(com.nuodb.jdbc.DataSource.PROP_VALIDATIONQUERY, "SELECT 1 FROM DUAL");
+        properties.setProperty(com.nuodb.jdbc.DataSource.PROP_IDLEVALIDATIONINTERVAL, "5000");
+
+        return new com.nuodb.jdbc.DataSource(properties);
     }
 
-    protected HikariDataSource buildReadDataSource() {
-        return new HikariDataSource(hikariReadConfig);
+    protected HikariDataSource buildHikari(boolean readOnly) {
+        final String jdbcUrl = Strings.nullToEmpty(readOnly ? config.getReadUrl() : config.getUrl()).trim();
+        final String jdbcUser = Strings.nullToEmpty(readOnly ? config.getReadUser() : config.getUser()).trim();
+        final String jdbcPassword = Strings.nullToEmpty(readOnly ? config.getReadPassword() : config.getPassword()).trim();
+
+        final HikariConfig hikariConfig = new HikariConfig();
+        hikariConfig.setAutoCommit(readOnly);
+        hikariConfig.setReadOnly(readOnly);
+
+        if (config.getLeakDetectionThreshold() > 0) {
+            hikariConfig.setLeakDetectionThreshold(config.getLeakDetectionThreshold());
+        }
+
+        // Set the default maximum pool size.
+        if (config.isDev()) {
+            hikariConfig.setMaximumPoolSize(Runtime.getRuntime().availableProcessors());
+        } else if (config.isTest()) {
+            hikariConfig.setMaximumPoolSize(Runtime.getRuntime().availableProcessors());
+        } else {
+            hikariConfig.setMaximumPoolSize(Runtime.getRuntime().availableProcessors() * 3);
+        }
+
+        // Sanitize Max Pool size.
+        if (!readOnly) {
+            if (config.getMaxPoolSize() > 0 && config.getMaxPoolSize() <= SANE_MAX) {
+                hikariConfig.setMaximumPoolSize(config.getMaxPoolSize());
+            } else {
+                LOG.warn("An Invalid MaxPoolSize value was found. Found '" + config.getMaxPoolSize() + "' but set to a more reasonable '" + SANE_MAX + "'");
+                hikariConfig.setMaximumPoolSize(SANE_MAX);
+            }
+        } else {
+            if (config.getMaxReadPoolSize() > 0 && config.getMaxReadPoolSize() < SANE_MAX) {
+                hikariConfig.setMaximumPoolSize(config.getMaxReadPoolSize());
+            } else {
+                LOG.warn("An Invalid MaxReadPoolSize value was found. Found '" + config.getMaxPoolSize() + "' but set to a more reasonable '" + SANE_MAX + "'");
+                hikariConfig.setMaximumPoolSize(SANE_MAX);
+            }
+        }
+
+        // Always use READ_COMMITTED.
+        // Persist depends on this isolation level.
+        hikariConfig.setTransactionIsolation("TRANSACTION_READ_COMMITTED");
+        // Set Connection Test Query.
+        // This is valid SQL and is supported by any "ACTUAL" SQL database engine.
+        hikariConfig.setConnectionTestQuery("SELECT 1");
+        hikariConfig.setValidationTimeout(5000);
+        hikariConfig.setPoolName(("sql-" + config.getName() + "-" + (readOnly ? "write" : "read")).toLowerCase());
+        hikariConfig.setMetricRegistry(metricRegistry);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////
+        // SqlDatabase Vendor Specific Configuration
+        ////////////////////////////////////////////////////////////////////////////////////////////////////
+        switch (dialect) {
+            case DEFAULT:
+                break;
+            case CUBRID:
+                break;
+            case DERBY:
+                break;
+            case FIREBIRD:
+                break;
+            case H2:
+                hikariConfig.setDataSourceClassName("org.h2.jdbcx.JdbcDataSource");
+                hikariConfig.addDataSourceProperty("URL", jdbcUrl);
+                hikariConfig.addDataSourceProperty("user", jdbcUser);
+                hikariConfig.addDataSourceProperty("password", jdbcPassword);
+                break;
+            case HSQLDB:
+                break;
+            case MARIADB:
+            case MYSQL:
+                hikariConfig.setUsername(jdbcUser);
+                hikariConfig.setPassword(jdbcPassword);
+                hikariConfig.setDataSourceClassName("com.mysql.jdbc.jdbc2.optional.MysqlDataSource");
+                hikariConfig.addDataSourceProperty("URL", jdbcUrl);
+                hikariConfig.addDataSourceProperty("user", jdbcUser);
+                hikariConfig.addDataSourceProperty("password", jdbcPassword);
+
+                ////////////////////////////////////////////////////////////////////////////////////////////////////
+                // MySQL Performance Configuration
+                ////////////////////////////////////////////////////////////////////////////////////////////////////
+                hikariConfig.addDataSourceProperty("cachePrepStmts", config.isCachePrepStmts());
+                int prepStmtCacheSize = config.getPrepStmtCacheSize();
+                if (prepStmtCacheSize < 1) {
+                    prepStmtCacheSize = config.isProd()
+                        ? PROD_MYSQL_PREPARE_STMT_CACHE_SIZE
+                        : DEV_MYSQL_PREPARE_STMT_CACHE_SIZE;
+                }
+                hikariConfig.addDataSourceProperty("prepStmtCacheSize", prepStmtCacheSize);
+                int prepStmtCacheSqlLimit = config.getPrepStmtCacheSqlLimit();
+                if (prepStmtCacheSqlLimit < 1) {
+                    prepStmtCacheSqlLimit = config.isProd()
+                        ? PROD_MYSQL_PREPARE_STMT_CACHE_SQL_LIMIT
+                        : DEV_MYSQL_PREPARE_STMT_CACHE_SQL_LIMIT;
+                }
+                hikariConfig.addDataSourceProperty("prepStmtCacheSqlLimit", prepStmtCacheSqlLimit);
+                hikariConfig.addDataSourceProperty("useServerPrepStmts", config.isUseServerPrepStmts());
+                break;
+            case POSTGRES:
+            case POSTGRES_9_3:
+            case POSTGRES_9_4:
+//                dbPlatform = new PGPlatform(configuration, config);
+//                settings.setRenderSchema(true);
+//
+//                // Manually create PG DataSource.
+//                org.postgresql.ds.PGSimpleDataSource d = new PGSimpleDataSource();
+//
+//                // Manually parse URL.
+//                Properties props = org.postgresql.Driver.parseURL(jdbcUrl, new Properties());
+//                if (props != null && !props.isEmpty()) {
+//                    // Set parsed Properties.
+//                    d.setProperty(PGProperty.PG_HOST, PGProperty.PG_HOST.get(props));
+//                    d.setProperty(PGProperty.PG_DBNAME, PGProperty.PG_DBNAME.get(props));
+//                    d.setProperty(PGProperty.PG_PORT, PGProperty.PG_PORT.get(props));
+//                }
+//
+//                // Set username and password.
+//                d.setUser(jdbcUser);
+//                d.setPassword(jdbcPassword);
+//                d.setCurrentSchema("public");
+//                hikariConfig.setDataSource(d);
+                break;
+            case SQLITE:
+                break;
+        }
+
+        return new HikariDataSource(hikariConfig);
     }
 
     @Override
@@ -274,81 +462,12 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             final long started = System.currentTimeMillis();
             LOG.info("Starting SqlDatabase...");
 
-            final String jdbcUrl = Strings.nullToEmpty((config.getUrl())).trim();
-            final String jdbcUser = Strings.nullToEmpty((config.getUser()));
-            final String jdbcPassword = Strings.nullToEmpty((config.getPassword()));
-
-            final String jdbcReadUrl = Strings.nullToEmpty((config.getReadUrl()));
-            final String jdbcReadUser = Strings.nullToEmpty((config.getReadUser()));
-            final String jdbcReadPassword = Strings.nullToEmpty((config.getReadPassword()));
-            SQLDialect dialect = JDBCUtils.dialect(jdbcUrl);
-
-            // Configure connection pool.
-            hikariConfig = new HikariConfig();
-            hikariReadConfig = new HikariConfig();
-
-            // Always set auto commit to off.
-            hikariConfig.setAutoCommit(false);
-            hikariConfig.setRegisterMbeans(true);
-
-            hikariReadConfig.setReadOnly(true);
-            hikariReadConfig.setAutoCommit(true);
-            hikariReadConfig.setRegisterMbeans(true);
-
-            if (config.getLeakDetectionThreshold() > 0) {
-                hikariConfig.setLeakDetectionThreshold(config.getLeakDetectionThreshold());
-                hikariReadConfig.setLeakDetectionThreshold(config.getLeakDetectionThreshold());
-            }
-
-            // Set the default maximum pool size.
-            if (config.isDev()) {
-                hikariConfig.setMaximumPoolSize(Runtime.getRuntime().availableProcessors());
-                hikariReadConfig.setMaximumPoolSize(Runtime.getRuntime().availableProcessors());
-            } else if (config.isTest()) {
-                hikariConfig.setMaximumPoolSize(Runtime.getRuntime().availableProcessors());
-                hikariReadConfig.setMaximumPoolSize(Runtime.getRuntime().availableProcessors());
-            } else {
-                hikariConfig.setMaximumPoolSize(Runtime.getRuntime().availableProcessors() * 3);
-                hikariReadConfig.setMaximumPoolSize(Runtime.getRuntime().availableProcessors() * 3);
-            }
-
-            // Sanitize Max Pool size.
-            if (config.getMaxPoolSize() > 0 && config.getMaxPoolSize() <= SANE_MAX) {
-                hikariConfig.setMaximumPoolSize(config.getMaxPoolSize());
-            } else {
-                LOG.warn("An Invalid MaxPoolSize value was found. Found '" + config.getMaxPoolSize() + "' but set to a more reasonable '" + SANE_MAX + "'");
-                hikariConfig.setMaximumPoolSize(SANE_MAX);
-            }
-            if (config.getMaxReadPoolSize() > 0 && config.getMaxReadPoolSize() < SANE_MAX) {
-                hikariReadConfig.setMaximumPoolSize(config.getMaxReadPoolSize());
-            } else {
-                LOG.warn("An Invalid MaxReadPoolSize value was found. Found '" + config.getMaxPoolSize() + "' but set to a more reasonable '" + SANE_MAX + "'");
-                hikariReadConfig.setMaximumPoolSize(SANE_MAX);
-            }
-
-            // Always use READ_COMMITTED.
-            // Persist depends on this isolation level.
-            hikariConfig.setTransactionIsolation("TRANSACTION_READ_COMMITTED");
-            hikariReadConfig.setTransactionIsolation("TRANSACTION_READ_COMMITTED");
-            // Set Connection Test Query.
-            // This is valid SQL and is supported by any "ACTUAL" SQL database engine.
-            hikariConfig.setConnectionTestQuery("SELECT 1");
-            hikariReadConfig.setConnectionTestQuery("SELECT 1");
-            hikariConfig.setValidationTimeout(5000);
-            hikariReadConfig.setValidationTimeout(5000);
-
             readTimer = metricRegistry.timer("SQL-" + config.getName() + "-READ");
             writeTimer = metricRegistry.timer("SQL-" + config.getName() + "-WRITE");
             readTimeoutsCounter = metricRegistry.counter("SQL-" + config.getName() + "-READ_TIMEOUTS");
             writeTimeoutsCounter = metricRegistry.counter("SQL-" + config.getName() + "-WRITE_TIMEOUTS");
             readExceptionsCounter = metricRegistry.counter("SQL-" + config.getName() + "-READ_EXCEPTIONS");
             writeExceptionsCounter = metricRegistry.counter("SQL-" + config.getName() + "-WRITE_EXCEPTIONS");
-
-            hikariConfig.setPoolName(("sql-" + config.getName() + "-master").toLowerCase());
-            hikariReadConfig.setPoolName(("sql-" + config.getName() + "-read").toLowerCase());
-
-            hikariConfig.setMetricRegistry(metricRegistry);
-            hikariReadConfig.setMetricRegistry(metricRegistry);
 
             // Configure jOOQ settings.
             settings = new Settings();
@@ -372,54 +491,10 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
 
             configuration.set(PrettyPrinter::new, TimeoutListener::new);
 
-            if (config.getUrl().startsWith("jdbc:com.nuodb")) {
+            if (isNuoDB) {
                 // Use MySQL Dialect.
                 configuration.set(SQLDialect.MYSQL);
                 dbPlatform = new NuoDBPlatform(configuration, config);
-
-                // NuoDB does not allow "SELECT 1" as a valid SQL statement.
-                // Use the "DUAL" table for the desired result.
-                hikariConfig.setConnectionTestQuery("SELECT 1 FROM DUAL");
-                hikariReadConfig.setConnectionTestQuery("SELECT 1 FROM DUAL");
-
-                hikariConfig.setTransactionIsolation("TRANSACTION_SERIALIZABLE");
-                hikariReadConfig.setTransactionIsolation("TRANSACTION_SERIALIZABLE");
-
-                hikariConfig.setDriverClassName("com.nuodb.jdbc.Driver");
-                hikariConfig.setUsername(config.getUser());
-                hikariConfig.setPassword(config.getPassword());
-                hikariConfig.setJdbcUrl(config.getUrl());
-                hikariConfig.addDataSourceProperty("schema", config.getSchema());
-
-                hikariReadConfig.setDriverClassName("com.nuodb.jdbc.Driver");
-                hikariReadConfig.setUsername(config.getReadUser());
-                hikariReadConfig.setPassword(config.getReadPassword());
-                hikariReadConfig.setJdbcUrl(config.getReadUrl());
-                hikariReadConfig.addDataSourceProperty("schema", config.getSchema());
-
-//                {
-//                    final Properties props = new Properties();
-//                    props.setProperty("url", jdbcUrl);
-//                    props.setProperty("user", jdbcUser);
-//                    props.setProperty("password", jdbcPassword);
-//                    props.setProperty("defaultSchema", config.getSchema());
-//                    props.setProperty("isolation", "consistent_read");
-////                    props.setProperty("isolation", "write_committed");
-//                    final com.nuodb.jdbc.DataSource dataSource = new com.nuodb.jdbc.DataSource(props);
-//                    hikariConfig.setDataSource(dataSource);
-//                }
-//
-//                if (!Strings.nullToEmpty(config.getReadUrl()).trim().isEmpty()) {
-//                    final Properties props = new Properties();
-//                    props.setProperty("url", jdbcReadUrl);
-//                    props.setProperty("user", jdbcReadUser);
-//                    props.setProperty("password", jdbcReadPassword);
-//                    props.setProperty("defaultSchema", config.getSchema());
-//                    props.setProperty("isolation", "consistent_read");
-////                    props.setProperty("isolation", "consistent_read");
-//                    final com.nuodb.jdbc.DataSource dataSource = new com.nuodb.jdbc.DataSource(props);
-//                    hikariReadConfig.setDataSource(dataSource);
-//                }
             } else {
                 configuration.set(dialect);
 
@@ -437,57 +512,12 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                         break;
                     case H2:
                         dbPlatform = new H2Platform(configuration, config);
-                        hikariConfig.setDataSourceClassName("org.h2.jdbcx.JdbcDataSource");
-                        hikariConfig.addDataSourceProperty("URL", jdbcUrl);
-                        hikariConfig.addDataSourceProperty("user", jdbcUser);
-                        hikariConfig.addDataSourceProperty("password", jdbcPassword);
-                        hikariReadConfig.setDataSourceClassName("org.h2.jdbcx.JdbcDataSource");
-                        hikariReadConfig.addDataSourceProperty("URL", jdbcReadUrl);
-                        hikariReadConfig.addDataSourceProperty("user", jdbcReadUser);
-                        hikariReadConfig.addDataSourceProperty("password", jdbcReadPassword);
                         break;
                     case HSQLDB:
                         break;
                     case MARIADB:
                     case MYSQL:
                         dbPlatform = config.isMemSQL() ? new MemSqlPlatform(configuration, config) : new MySqlPlatform(configuration, config);
-                        hikariConfig.setUsername(jdbcUser);
-                        hikariConfig.setPassword(jdbcPassword);
-                        hikariConfig.setDataSourceClassName("com.mysql.jdbc.jdbc2.optional.MysqlDataSource");
-                        hikariConfig.addDataSourceProperty("URL", jdbcUrl);
-                        hikariConfig.addDataSourceProperty("user", jdbcUser);
-                        hikariConfig.addDataSourceProperty("password", jdbcPassword);
-
-                        hikariReadConfig.setUsername(jdbcReadUser);
-                        hikariReadConfig.setPassword(jdbcReadPassword);
-                        hikariReadConfig.setDataSourceClassName("com.mysql.jdbc.jdbc2.optional.MysqlDataSource");
-                        hikariReadConfig.addDataSourceProperty("URL", jdbcReadUrl);
-                        hikariReadConfig.addDataSourceProperty("user", jdbcReadUser);
-                        hikariReadConfig.addDataSourceProperty("password", jdbcReadPassword);
-
-                        ////////////////////////////////////////////////////////////////////////////////////////////////////
-                        // MySQL Performance Configuration
-                        ////////////////////////////////////////////////////////////////////////////////////////////////////
-                        hikariConfig.addDataSourceProperty("cachePrepStmts", config.isCachePrepStmts());
-                        hikariReadConfig.addDataSourceProperty("cachePrepStmts", config.isCachePrepStmts());
-                        int prepStmtCacheSize = config.getPrepStmtCacheSize();
-                        if (prepStmtCacheSize < 1) {
-                            prepStmtCacheSize = config.isProd()
-                                ? PROD_MYSQL_PREPARE_STMT_CACHE_SIZE
-                                : DEV_MYSQL_PREPARE_STMT_CACHE_SIZE;
-                        }
-                        hikariConfig.addDataSourceProperty("prepStmtCacheSize", prepStmtCacheSize);
-                        hikariReadConfig.addDataSourceProperty("prepStmtCacheSize", prepStmtCacheSize);
-                        int prepStmtCacheSqlLimit = config.getPrepStmtCacheSqlLimit();
-                        if (prepStmtCacheSqlLimit < 1) {
-                            prepStmtCacheSqlLimit = config.isProd()
-                                ? PROD_MYSQL_PREPARE_STMT_CACHE_SQL_LIMIT
-                                : DEV_MYSQL_PREPARE_STMT_CACHE_SQL_LIMIT;
-                        }
-                        hikariConfig.addDataSourceProperty("prepStmtCacheSqlLimit", prepStmtCacheSqlLimit);
-                        hikariReadConfig.addDataSourceProperty("prepStmtCacheSqlLimit", prepStmtCacheSqlLimit);
-                        hikariConfig.addDataSourceProperty("useServerPrepStmts", config.isUseServerPrepStmts());
-                        hikariReadConfig.addDataSourceProperty("useServerPrepStmts", config.isUseServerPrepStmts());
                         break;
                     case POSTGRES:
                     case POSTGRES_9_3:
@@ -532,7 +562,16 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
 //        }
 
             try {
-                dataSource = buildWriteDataSource();
+                if (isNuoDB) {
+                    dataSource = buildNuoDB(false, 0);
+                    statementCleanupService = new NuoDBStatementCleaner(
+                        buildNuoDB(false, 1),
+                        buildNuoDB(true, 1)
+                    );
+                } else {
+                    dataSource = buildHikari(false);
+                    statementCleanupService = new StatementCleaner();
+                }
             } catch (Throwable e) {
                 LOG.error("Could not create a Hikari connection pool.", e);
                 throw new PersistException(e);
@@ -540,7 +579,11 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
 
             if (!Strings.nullToEmpty(config.getReadUrl()).trim().isEmpty()) {
                 try {
-                    readDataSource = buildReadDataSource();
+                    if (isNuoDB) {
+                        readDataSource = buildNuoDB(true, 0);
+                    } else {
+                        readDataSource = buildHikari(true);
+                    }
                 } catch (Throwable e) {
                     LOG.error("Could not create a Hikari read connection pool.", e);
                     throw new PersistException(e);
@@ -580,6 +623,8 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 // Validate Table Mapping.
                 tableMappingList.forEach(TableMapping::checkValidity);
             }
+
+            statementCleanupService.startAsync().awaitRunning();
 
             LOG.info("Finished starting SqlDatabase in " + (System.currentTimeMillis() - started) + "ms");
         } catch (Throwable e) {
@@ -673,13 +718,16 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             });
         }
 
+        Try.run(() -> statementCleanupService.stopAsync().awaitTerminated())
+            .onFailure((e) -> LOG.error("Failed to stop " + statementCleanupService.getClass().getCanonicalName(), e));
+
         if (dataSource instanceof HikariDataSource) {
-            Try.run(() -> ((HikariDataSource)dataSource).close())
+            Try.run(() -> ((HikariDataSource) dataSource).close())
                 .onFailure((e) -> LOG.error("Failed to shutdown Hikari Connection Pool", e));
         }
 
         if (readDataSource instanceof HikariDataSource) {
-            Try.run(() -> ((HikariDataSource)readDataSource).close())
+            Try.run(() -> ((HikariDataSource) readDataSource).close())
                 .onFailure((e) -> LOG.error("Failed to shutdown Hikari Connection Pool", e));
         }
 
@@ -689,6 +737,10 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 .onFailure((e) -> LOG.error("Failed to stop H2 Server", e));
         }
     }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Initialize
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
 
     private void buildTableMappings() {
         final Map<Class, TableMapping> mappingMap = Maps.newHashMap();
@@ -709,10 +761,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         // Rebind.
         rebindMappings(mappingMap);
     }
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Initialize
-    ////////////////////////////////////////////////////////////////////////////////////////////////////
 
     private void rebindMappings(Map<Class, TableMapping> mappings) {
         // Add all mappings.
@@ -809,6 +857,11 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
 //        }
     }
 
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Evolution
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+
     /**
      * Build Evolution Plan.
      *
@@ -826,11 +879,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         }
     }
 
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Evolution
-    ////////////////////////////////////////////////////////////////////////////////////////////////////
-
     /**
      * Apply the Evolution.
      *
@@ -842,7 +890,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         final List<EvolutionChangeEntity> changeEntities = new ArrayList<>();
 
         try {
-            executeWrite(session -> {
+            new WriteAction<Object>(writeSetter(100000000, null), null, session -> {
                 evolution.setStarted(LocalDateTime.now());
 
                 boolean failed = false;
@@ -893,7 +941,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 }
 
                 return SqlResult.success(evolution);
-            }, null);
+            }).execute();
         } finally {
             try {
                 // Save if evolution failed since the transaction rolled back.
@@ -901,11 +949,11 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                     if (!config.isGenerateSchema()) {
                         // We need to Insert the Evolution outside of the applier
                         // SQL Transaction since it would be rolled back.
-                        executeWrite(sql -> {
+                        new WriteAction<Object>(writeSetter(100000000, null), null, sql -> {
                             sql.insert(evolution);
                             sql.insert(changeEntities);
                             return SqlResult.success();
-                        }, null);
+                        }).execute();
                     }
                 }
             } catch (Throwable e) {
@@ -914,6 +962,10 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             }
         }
     }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Execution
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
 
     /**
      * @param task
@@ -936,10 +988,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             }
         );
     }
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Execution
-    ////////////////////////////////////////////////////////////////////////////////////////////////////
 
     /**
      * @param entityClass
@@ -1362,7 +1410,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 return;
             }
 
-            new WriteAction<T>(writeSetter(timeoutMillis, actionContext), task, actionContext).observe().subscribe(
+            new WriteAction<T>(writeSetter(timeoutMillis, actionContext), actionContext, task).observe().subscribe(
                 r -> {
                     context.runOnContext(a -> {
                         if (subscriber.isUnsubscribed()) {
@@ -1444,7 +1492,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 return;
             }
 
-            new ReadAction<T>(readSetter(timeoutMillis, actionContext), task, actionContext).observe().subscribe(
+            new ReadAction<T>(readSetter(timeoutMillis, actionContext), actionContext, task).observe().subscribe(
                 r -> {
                     context.runOnContext(a -> {
                         if (subscriber.isUnsubscribed()) {
@@ -1487,7 +1535,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         });
     }
 
-
     /**
      * @param task
      * @param handler
@@ -1518,7 +1565,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      */
     public <T> T readBlocking(SqlReadCallable<T> task, int timeoutMillis) {
         final ActionContext actionContext = ActionProvider.current();
-        return new ReadAction<T>(readSetter(timeoutMillis, actionContext), task, actionContext).execute();
+        return new ReadAction<T>(readSetter(timeoutMillis, actionContext), actionContext, task).execute();
     }
 
     public <T> SqlResult<T> writeBlocking(SqlCallable<T> task) {
@@ -1533,7 +1580,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      */
     public <T> SqlResult<T> writeBlocking(SqlCallable<T> task, int timeoutMillis) {
         final ActionContext actionContext = ActionProvider.current();
-        return new WriteAction<T>(writeSetter(timeoutMillis, actionContext), task, actionContext).execute();
+        return new WriteAction<T>(writeSetter(timeoutMillis, actionContext), actionContext, task).execute();
     }
 
     private Timer getReadTimerFor(ActionContext context) {
@@ -1603,8 +1650,9 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @param <T>
      * @return
      */
-    protected <T> T executeRead(SqlReadCallable<T> callable, ActionContext context) {
+    protected <T> T executeRead(ReadAction<T> action) {
         final Connection connection;
+        final ActionContext context = action.context;
 
         final Timer contextTimer = getReadTimerFor(context);
         final Timer.Context contextTimerContext = contextTimer != null ? contextTimer.time() : null;
@@ -1624,21 +1672,21 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             final Configuration configuration = readConfiguration.derive(connectionProvider);
 
             if (context != null) {
-                configuration.data(ACTION_CONTEXT_KEY, context);
+                configuration.data(ACTION_KEY, action);
             }
 
             try {
                 final T result = DSL.using(configuration).connectionResult(new ConnectionCallable<T>() {
                     @Override
                     public T run(Connection connection) throws Exception {
-                        return callable.call(new SqlSession(SqlDatabase.this, configuration, connection));
+                        return action.callback.call(new SqlSession(SqlDatabase.this, configuration, connection));
                     }
                 });
 
                 return result;
             } finally {
                 if (context != null) {
-                    configuration.data().remove(ACTION_CONTEXT_KEY);
+                    configuration.data().remove(ACTION_KEY);
                 }
             }
         } catch (Throwable e) {
@@ -1659,9 +1707,11 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @param <T>
      * @return
      */
-    protected <T> SqlResult<T> executeWrite(SqlCallable<T> callable, ActionContext context) {
+    protected <T> SqlResult<T> executeWrite(WriteAction<T> action) {
         final AtomicReference<SqlResult<T>> r = new AtomicReference<>();
         final Connection connection;
+
+        final ActionContext context = action.context;
 
         final Timer contextTimer = getWriteTimerFor(context);
         final Timer.Context contextTimerContext = contextTimer != null ? contextTimer.time() : null;
@@ -1682,7 +1732,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             configuration.set(new ThreadLocalTransactionProvider(connectionProvider));
 
             if (context != null) {
-                configuration.data(ACTION_CONTEXT_KEY, context);
+                configuration.data(ACTION_KEY, action);
             }
 
             try {
@@ -1696,7 +1746,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                         SqlResult<T> result = null;
 
                         try {
-                            result = callable.call(session);
+                            result = action.callback.call(session);
 
                             if (result == null) {
                                 result = SqlResult.commit();
@@ -1719,7 +1769,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 });
             } finally {
                 if (context != null && configuration.data() != null) {
-                    configuration.data().remove(ACTION_CONTEXT_KEY);
+                    configuration.data().remove(ACTION_KEY);
                 }
             }
         } catch (RollbackException e) {
@@ -1754,14 +1804,14 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         return mappings.get(cls);
     }
 
-    public TableMapping getMapping(Class cls) {
-        return tableMappings.get(cls);
-    }
-
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////
     // Mappings
     ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    public TableMapping getMapping(Class cls) {
+        return tableMappings.get(cls);
+    }
 
     public <E extends AbstractEntity> TableMapping getMapping(E entity) {
         Preconditions.checkNotNull(entity);
@@ -1938,6 +1988,11 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         return entities;
     }
 
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// jOOQ Impl
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
     public Configuration getReadConfiguration() {
         return readConfiguration;
     }
@@ -2011,17 +2066,22 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         }
     }
 
+    private abstract class SqlAction<T> extends HystrixCommand<T> {
+        private final ActionContext context;
+        protected volatile Statement currentStatement;
 
-    ////////////////////////////////////////////////////////////////////////////////////////////////////
-    // jOOQ Impl
-    ////////////////////////////////////////////////////////////////////////////////////////////////////
+        public SqlAction(Setter setter, ActionContext context) {
+            super(setter);
+            this.context = context;
+        }
+    }
 
-    private class ReadAction<T> extends HystrixCommand<T> {
+    private final class ReadAction<T> extends SqlAction<T> {
         private final SqlReadCallable<T> callback;
         private final ActionContext context;
 
-        public ReadAction(Setter setter, SqlReadCallable<T> callback, ActionContext context) {
-            super(setter);
+        public ReadAction(Setter setter, ActionContext context, SqlReadCallable<T> callback) {
+            super(setter, context);
             this.callback = callback;
             this.context = context;
         }
@@ -2029,8 +2089,12 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         @Override
         protected T run() throws Exception {
             try {
-                return executeRead(callback, context);
+                return executeRead(this);
             } catch (Exception e) {
+                final Statement statement = currentStatement;
+                if (statement != null) {
+                    rogueStatementQueue.add(new Tuple2<>(statement, Boolean.FALSE));
+                }
                 if (e instanceof HystrixTimeoutException || e instanceof InterruptedException) {
                     readTimeoutsCounter.inc();
                 } else {
@@ -2041,12 +2105,12 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         }
     }
 
-    private class WriteAction<T> extends HystrixCommand<SqlResult<T>> {
+    private final class WriteAction<T> extends SqlAction<SqlResult<T>> {
         private final SqlCallable<T> callback;
         private final ActionContext context;
 
-        public WriteAction(Setter setter, SqlCallable<T> callback, ActionContext context) {
-            super(setter);
+        public WriteAction(Setter setter, ActionContext context, SqlCallable<T> callback) {
+            super(setter, context);
             this.callback = callback;
             this.context = context;
         }
@@ -2054,47 +2118,18 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         @Override
         protected SqlResult<T> run() throws Exception {
             try {
-                return executeWrite(callback, context);
+                return executeWrite(this);
             } catch (Exception e) {
+                final Statement statement = currentStatement;
+                if (statement != null) {
+                    rogueStatementQueue.add(new Tuple2<>(statement, Boolean.TRUE));
+                }
                 if (e instanceof HystrixTimeoutException || e instanceof InterruptedException) {
                     writeTimeoutsCounter.inc();
                 } else {
                     writeExceptionsCounter.inc();
                 }
                 throw e;
-            }
-        }
-    }
-
-    public class TimeoutListener extends DefaultExecuteListener {
-        @Override
-        public void executeStart(ExecuteContext ctx) {
-            super.executeStart(ctx);
-            try {
-                if (ctx.statement() != null) {
-                    int queryTimeout = ctx.statement().getQueryTimeout();
-                    final Object ac = ctx.configuration().data(ACTION_CONTEXT_KEY);
-
-                    if (ac != null && ac instanceof ActionContext) {
-                        final ActionContext actionContext = (ActionContext) ac;
-
-                        int timeLeft = (int) (actionContext.timesOutAt - System.currentTimeMillis());
-
-                        if (timeLeft <= 1000) {
-                            queryTimeout = 1;
-                        } else {
-                            queryTimeout = (int) Math.ceil((double) timeLeft / 1000.0);
-                        }
-
-                        ctx.statement().setQueryTimeout(queryTimeout);
-                    } else {
-                        if (queryTimeout < 30) {
-                            ctx.statement().setQueryTimeout(30);
-                        }
-                    }
-                }
-            } catch (Throwable e) {
-                // Ignore.
             }
         }
     }
@@ -2121,6 +2156,65 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
 //    public class DeleteOrUpdateWithoutWhereException extends RuntimeException {
 //    }
 
+    public class TimeoutListener extends DefaultExecuteListener {
+
+        @Override
+        public void executeStart(ExecuteContext ctx) {
+            super.executeStart(ctx);
+            try {
+                if (ctx.statement() != null) {
+                    int queryTimeout = ctx.statement().getQueryTimeout();
+                    final Object actionObj = ctx.configuration().data(ACTION_KEY);
+
+                    if (actionObj != null && actionObj instanceof SqlAction) {
+                        final SqlAction action = (SqlAction) actionObj;
+                        action.currentStatement = ctx.statement();
+                        final ActionContext actionContext = action.context;
+
+                        if (actionContext != null) {
+                            int timeLeft = (int) (actionContext.timesOutAt - System.currentTimeMillis());
+
+                            if (timeLeft <= 1000) {
+                                queryTimeout = 1;
+                            } else {
+                                queryTimeout = (int) Math.ceil((double) timeLeft / 1000.0);
+                            }
+
+                            ctx.statement().setQueryTimeout(queryTimeout);
+                        } else if (queryTimeout < 30) {
+                            ctx.statement().setQueryTimeout(30);
+                        }
+                    } else {
+                        if (queryTimeout < 30) {
+                            ctx.statement().setQueryTimeout(30);
+                        }
+                    }
+                }
+            } catch (Throwable e) {
+                // Ignore.
+            }
+        }
+
+        @Override
+        public void executeEnd(ExecuteContext ctx) {
+            super.executeEnd(ctx);
+
+            try {
+                if (ctx.statement() != null) {
+                    int queryTimeout = ctx.statement().getQueryTimeout();
+                    final Object actionObj = ctx.configuration().data(ACTION_KEY);
+
+                    if (actionObj != null && actionObj instanceof SqlAction) {
+                        final SqlAction action = (SqlAction) actionObj;
+                        action.currentStatement = null;
+                    }
+                }
+            } catch (Throwable e) {
+                // Ignore.
+            }
+        }
+    }
+
     /**
      *
      */
@@ -2138,6 +2232,79 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 return defaultProvider.provide(recordType, type);
             }
             return (RecordMapper<R, E>) mapping.getRecordMapper();
+        }
+    }
+
+    private final class NuoDBStatementCleaner extends AbstractExecutionThreadService {
+        private final DataSource dataSource;
+        private final DataSource readDataSource;
+        private final java.lang.reflect.Field nuoHandleField;
+
+        public NuoDBStatementCleaner(DataSource dataSource, DataSource readDataSource) {
+            this.dataSource = dataSource;
+            this.readDataSource = readDataSource;
+            try {
+                this.nuoHandleField = RemStatement.class.getDeclaredField("handle");
+            } catch (NoSuchFieldException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        @Override
+        protected void run() throws Exception {
+            while (isRunning()) {
+                final Tuple2<Statement, Boolean> request = rogueStatementQueue.poll(2, TimeUnit.SECONDS);
+
+                if (request == null) {
+                    continue;
+                }
+
+                final RemStatement remStatement = (RemStatement) request._1;
+                RemConnection remConnection = (RemConnection) remStatement.getConnection();
+                remConnection.getServerSideConnectionId();
+                final Object handleObj = nuoHandleField.get(remStatement);
+
+                final Connection killConn;
+                if (request._2 == Boolean.TRUE) {
+                    killConn = readDataSource.getConnection();
+                } else {
+                    killConn = dataSource.getConnection();
+                }
+
+                try {
+                    try {
+                        PreparedStatement pstmt = killConn.prepareStatement("KILL STATEMENT connid ? handle ? count -1");
+                        pstmt.setInt(1, remConnection.getServerSideConnectionId());
+                        pstmt.setInt(2, (int) handleObj);
+                        pstmt.execute();
+                    } finally {
+                        killConn.close();
+                    }
+                } catch (Throwable e) {
+                    LOG.error("StatementCleaner service caught an exception while calling KILL STATEMENT ", e);
+                }
+            }
+        }
+    }
+
+    private final class StatementCleaner extends AbstractExecutionThreadService {
+        private java.lang.reflect.Field nuoHandleField;
+
+        @Override
+        protected void run() throws Exception {
+            while (isRunning()) {
+                final Tuple2<Statement, Boolean> request = rogueStatementQueue.poll(2, TimeUnit.SECONDS);
+
+                if (request == null) {
+                    continue;
+                }
+
+                try {
+                    request._1.cancel();
+                } catch (Throwable e) {
+                    LOG.warn("StatementCleaner service caught an exception while calling request.cancel()", e);
+                }
+            }
         }
     }
 }
