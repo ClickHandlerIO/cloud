@@ -279,7 +279,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         properties.setProperty(com.nuodb.jdbc.DataSource.PROP_USERNAME, jdbcUser);
         properties.setProperty(com.nuodb.jdbc.DataSource.PROP_PASSWORD, jdbcPassword);
 
-        if (config.getSchema() != null && config.getSchema().trim().isEmpty()) {
+        if (config.getSchema() != null && !config.getSchema().trim().isEmpty()) {
             properties.setProperty(com.nuodb.jdbc.DataSource.PROP_SCHEMA, config.getSchema().trim());
         }
 
