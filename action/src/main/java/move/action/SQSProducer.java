@@ -14,6 +14,7 @@ import com.google.common.util.concurrent.AbstractIdleService;
 import io.vertx.rxjava.core.Vertx;
 import javaslang.control.Try;
 import move.common.Metrics;
+import move.common.UID;
 import move.common.WireFormat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -227,7 +228,7 @@ public class SQSProducer extends AbstractIdleService implements WorkerProducer {
                             for (int i = 0; i < takeBatch.size(); i++) {
                                 final WorkerRequest workerRequest = takeBatch.get(i);
 
-                                final String id = Integer.toString(i);
+                                final String id = UID.next();
 
                                 if (workerRequest.actionProvider.isFifo()) {
                                     String groupId = config.name;
