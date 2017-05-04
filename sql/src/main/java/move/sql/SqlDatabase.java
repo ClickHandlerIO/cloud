@@ -2075,9 +2075,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                     int queryTimeout = ctx.statement().getQueryTimeout();
                     final Object ac = ctx.configuration().data(ACTION_CONTEXT_KEY);
 
-                    ctx.statement().cancel();
-                    ctx.statement().close();
-
                     if (ac != null && ac instanceof ActionContext) {
                         final ActionContext actionContext = (ActionContext) ac;
 
