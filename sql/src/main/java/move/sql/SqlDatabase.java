@@ -61,8 +61,6 @@ import java.util.stream.Stream;
 public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     private static final int SANE_MAX = 250;
     private static final int TIMEOUT_THRESHOLD = 150;
-    //    private static final int READ_ACTION_TIMEOUT = 30000;
-//    private static final int WRITE_ACTION_TIMEOUT = 30000;
     private static final int MAX_WRITE_TASKS = 2000;
     private static final int MAX_READ_TASKS = 2000;
     private static final int MAX_QUEUE_CAPACITY = 200000;

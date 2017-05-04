@@ -697,7 +697,7 @@ public class SqlSession {
      * @param <E>
      */
     public <E extends AbstractEntity> SqlResult<int[]> insert(List<E> entities) {
-        return insert(entities, 30);
+        return insert(entities, 10*60);
     }
 
     /**
@@ -723,7 +723,7 @@ public class SqlSession {
      * @param <E>
      */
     public <E extends AbstractEntity> SqlResult<int[]> insertAtomic(List<E> entities) {
-        return insertAtomic(entities, 30);
+        return insertAtomic(entities, 10*60);
     }
 
     /**
@@ -874,7 +874,7 @@ public class SqlSession {
      * @return
      */
     public <E extends AbstractEntity, R extends UpdatableRecord<R>> SqlResult<int[]> update(final List<E> entities) {
-        return update(entities, 30);
+        return update(entities, 10*60);
     }
 
     /**
@@ -907,7 +907,7 @@ public class SqlSession {
      * @return
      */
     public <E extends AbstractEntity, R extends UpdatableRecord<R>> SqlResult<int[]> updateAtomic(final List<E> entities) {
-        return updateAtomic(entities, 30);
+        return updateAtomic(entities, 10*60);
     }
 
     /**
@@ -1011,7 +1011,7 @@ public class SqlSession {
      * @return
      */
     public <E extends AbstractEntity, R extends UpdatableRecord<R>> SqlResult<int[]> delete(final List<E> entities) {
-        return delete(entities, 30);
+        return delete(entities, 10*60);
     }
 
     /**
@@ -1044,7 +1044,7 @@ public class SqlSession {
      * @return
      */
     public <E extends AbstractEntity, R extends UpdatableRecord<R>> SqlResult<int[]> deleteAtomic(final List<E> entities) {
-        return deleteAtomic(entities, 30);
+        return deleteAtomic(entities, 10*60);
     }
 
     /**
@@ -1117,7 +1117,7 @@ public class SqlSession {
      * @return
      */
     public SqlResult<int[]> saveAtomic(Stream<? extends Query> queries) {
-        return saveAtomic(queries.collect(Collectors.toList()), 30);
+        return saveAtomic(queries.collect(Collectors.toList()), 10*60);
     }
 
     /**
@@ -1125,7 +1125,7 @@ public class SqlSession {
      * @return
      */
     public SqlResult<int[]> save(Collection<? extends Query> queries) {
-        return save(queries, 30);
+        return save(queries, 10*60);
     }
 
     /**
@@ -1147,7 +1147,7 @@ public class SqlSession {
      * @return
      */
     public SqlResult<int[]> saveAtomic(Collection<? extends Query> queries) {
-        return saveAtomic(queries, 30);
+        return saveAtomic(queries, 10*60);
     }
 
     /**
@@ -1169,7 +1169,7 @@ public class SqlSession {
      * @return
      */
     public SqlResult<int[]> save(List<? extends Query> queries, Logger logger) {
-        return save(queries, 30, logger);
+        return save(queries, 10*60, logger);
     }
 
     /**
@@ -1197,7 +1197,7 @@ public class SqlSession {
      * @return
      */
     public SqlResult<int[]> saveAtomic(List<? extends Query> queries, Logger logger) {
-        return saveAtomic(queries, 30, logger);
+        return saveAtomic(queries, 10*60, logger);
     }
 
     /**

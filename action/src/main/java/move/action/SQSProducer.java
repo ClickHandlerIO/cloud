@@ -228,7 +228,7 @@ public class SQSProducer extends AbstractIdleService implements WorkerProducer {
                             for (int i = 0; i < takeBatch.size(); i++) {
                                 final WorkerRequest workerRequest = takeBatch.get(i);
 
-                                final String id = UID.next();
+                                final String id = String.valueOf(i);
 
                                 if (workerRequest.actionProvider.isFifo()) {
                                     String groupId = config.name;
@@ -240,6 +240,7 @@ public class SQSProducer extends AbstractIdleService implements WorkerProducer {
                                         workerRequest,
                                         new SendMessageBatchRequestEntry()
                                             .withId(id)
+                                            .withMessageDeduplicationId(UID.next())
                                             .withMessageGroupId(groupId)
                                             .withMessageBody(WireFormat.stringify(workerRequest.request))
                                     ));
