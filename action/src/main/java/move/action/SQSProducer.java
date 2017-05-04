@@ -74,7 +74,7 @@ public class SQSProducer extends AbstractIdleService implements WorkerProducer {
      */
     void setConfig(SQSWorkerConfig config) {
         this.config = config;
-        this.batchSize = 10; // Producer should always be 10.
+        this.batchSize = 1; // Producer should always be 1.
     }
 
     /**

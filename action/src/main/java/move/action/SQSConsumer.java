@@ -181,7 +181,6 @@ public class SQSConsumer extends AbstractIdleService {
                                 .withMaxNumberOfMessages(1);
 
                             // Receive a batch of messages.
-                            LOG.info("Trying to get messages");
                             result = receiveMessage(request);
                         } catch (InterruptedException e) {
                             LOG.warn("Interrupted.", e);
