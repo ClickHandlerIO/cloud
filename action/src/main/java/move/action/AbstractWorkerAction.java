@@ -14,4 +14,13 @@ public abstract class AbstractWorkerAction<T> extends AbstractObservableAction<T
     protected void processed() {
         respond(true);
     }
+
+    @Override
+    protected void start(T request) {
+        respond(handle(request));
+    }
+
+    public boolean handle(T request) {
+        return false;
+    }
 }

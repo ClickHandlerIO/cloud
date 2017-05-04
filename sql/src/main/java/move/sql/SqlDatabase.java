@@ -36,6 +36,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import rx.Observable;
 
+import javax.sql.DataSource;
 import java.lang.reflect.InvocationTargetException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -57,7 +58,7 @@ import java.util.stream.Stream;
 public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     private static final int SANE_MAX = 250;
     private static final int TIMEOUT_THRESHOLD = 150;
-//    private static final int READ_ACTION_TIMEOUT = 30000;
+    //    private static final int READ_ACTION_TIMEOUT = 30000;
 //    private static final int WRITE_ACTION_TIMEOUT = 30000;
     private static final int MAX_WRITE_TASKS = 2000;
     private static final int MAX_READ_TASKS = 2000;
@@ -103,8 +104,8 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     protected HikariConfig hikariReadConfig;
     protected Configuration configuration;
     protected Configuration readConfiguration;
-    protected HikariDataSource dataSource;
-    protected HikariDataSource readDataSource;
+    protected DataSource dataSource;
+    protected DataSource readDataSource;
     protected SqlSchema sqlSchema;
     protected SqlPlatform dbPlatform;
     protected Settings settings;
@@ -259,6 +260,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     }
 
     protected HikariDataSource buildWriteDataSource() {
+//        if (config.isUseHikari())
         return new HikariDataSource(hikariConfig);
     }
 
@@ -671,11 +673,15 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             });
         }
 
-        Try.run(() -> dataSource.close())
-            .onFailure((e) -> LOG.error("Failed to shutdown Hikari Connection Pool", e));
+        if (dataSource instanceof HikariDataSource) {
+            Try.run(() -> ((HikariDataSource)dataSource).close())
+                .onFailure((e) -> LOG.error("Failed to shutdown Hikari Connection Pool", e));
+        }
 
-        Try.run(() -> readDataSource.close())
-            .onFailure((e) -> LOG.error("Failed to shutdown Hikari Connection Pool", e));
+        if (readDataSource instanceof HikariDataSource) {
+            Try.run(() -> ((HikariDataSource)readDataSource).close())
+                .onFailure((e) -> LOG.error("Failed to shutdown Hikari Connection Pool", e));
+        }
 
         // Stop H2 TCP Server if necessary.
         if (h2Server != null) {
@@ -2068,6 +2074,9 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 if (ctx.statement() != null) {
                     int queryTimeout = ctx.statement().getQueryTimeout();
                     final Object ac = ctx.configuration().data(ACTION_CONTEXT_KEY);
+
+                    ctx.statement().cancel();
+                    ctx.statement().close();
 
                     if (ac != null && ac instanceof ActionContext) {
                         final ActionContext actionContext = (ActionContext) ac;
