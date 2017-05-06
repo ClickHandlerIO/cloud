@@ -121,6 +121,10 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     private Counter readExceptionsCounter;
     private Counter writeTimeoutsCounter;
     private Counter writeExceptionsCounter;
+    private Counter rogueStatementsCounter;
+    private Counter rogueWriteStatementsCounter;
+    private Counter rogueReadStatementsCounter;
+    private Counter rogueStatementExceptionsCounter;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////
     // Property Accessors
@@ -166,15 +170,15 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
         }
 
         this.readThreadPoolPropertiesDefaults = HystrixThreadPoolProperties.Setter()
-            .withCoreSize(ensureThreads(config.getReadThreads(), config.getMaxReadPoolSize()))
-            .withAllowMaximumSizeToDivergeFromCoreSize(false)
+            .withCoreSize(ensureThreads(config.getReadThreads(), config.isProd() ? config.getMaxReadPoolSize() : 0))
+            .withAllowMaximumSizeToDivergeFromCoreSize(!config.isProd())
             .withMaximumSize(ensureThreads(config.getReadThreads(), config.getMaxReadPoolSize()))
             .withMaxQueueSize(MAX_QUEUE_CAPACITY)
             .withQueueSizeRejectionThreshold(config.getMaxReadTasks() <= 0 ? MAX_READ_TASKS : config.getMaxReadTasks());
 
         this.writeThreadPoolPropertiesDefaults = HystrixThreadPoolProperties.Setter()
-            .withCoreSize(ensureThreads(config.getWriteThreads(), config.getMaxPoolSize()))
-            .withAllowMaximumSizeToDivergeFromCoreSize(false)
+            .withCoreSize(ensureThreads(config.getWriteThreads(), config.isProd() ? config.getMaxPoolSize() : 0))
+            .withAllowMaximumSizeToDivergeFromCoreSize(!config.isProd())
             .withMaximumSize(ensureThreads(config.getWriteThreads(), config.getMaxPoolSize()))
             .withMaxQueueSize(MAX_QUEUE_CAPACITY)
             .withQueueSizeRejectionThreshold(config.getMaxWriteTasks() <= 0 ? MAX_WRITE_TASKS : config.getMaxWriteTasks());
@@ -314,8 +318,13 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             }
         }
 
-        properties.setProperty(com.nuodb.jdbc.DataSource.PROP_INITIALSIZE, Integer.toString(maximumPoolSize));
-        properties.setProperty(com.nuodb.jdbc.DataSource.PROP_MINIDLE, Integer.toString(maximumPoolSize));
+        int initialSize = maximumPoolSize;
+        if (!config.isProd()) {
+            initialSize = 0;
+        }
+
+        properties.setProperty(com.nuodb.jdbc.DataSource.PROP_INITIALSIZE, Integer.toString(initialSize));
+        properties.setProperty(com.nuodb.jdbc.DataSource.PROP_MINIDLE, Integer.toString(initialSize));
         properties.setProperty(com.nuodb.jdbc.DataSource.PROP_MAXACTIVE, Integer.toString(maximumPoolSize));
         properties.setProperty(com.nuodb.jdbc.DataSource.PROP_MAXIDLE, Integer.toString(maximumPoolSize));
 
@@ -466,6 +475,9 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             writeTimeoutsCounter = metricRegistry.counter("SQL-" + config.getName() + "-WRITE_TIMEOUTS");
             readExceptionsCounter = metricRegistry.counter("SQL-" + config.getName() + "-READ_EXCEPTIONS");
             writeExceptionsCounter = metricRegistry.counter("SQL-" + config.getName() + "-WRITE_EXCEPTIONS");
+            rogueStatementsCounter = metricRegistry.counter("SQL-" + config.getName() + "-ROGUES");
+            rogueReadStatementsCounter = metricRegistry.counter("SQL-" + config.getName() + "-READ_ROGUES");
+            rogueReadStatementsCounter = metricRegistry.counter("SQL-" + config.getName() + "-READ_ROGUES");
 
             // Configure jOOQ settings.
             settings = new Settings();
@@ -593,14 +605,20 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 readConfiguration = configuration;
             }
 
-            if (!config.isProd() || config.isEvolutionEnabled()) {
+            if (config.isEvolutionEnabled()) {
                 // Detect changes.
                 List<SchemaInspector.Change> changes = buildEvolution();
 
                 // Are there schema changes that need to be applied?
-                if (changes == null || !changes.isEmpty()) {
+                if (changes != null && !changes.isEmpty()) {
+                    if (config.isProd()) {
+                        throw new PersistException("Schema is not in sync and 'prod' mode does not allow evolutions");
+                    }
+
+                    // Evolve the schema.
                     applyEvolution(changes);
 
+                    // Check if we are in sync now.
                     changes = buildEvolution();
 
                     // Detect changes.
@@ -616,7 +634,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 return;
             }
 
-            if (!config.isProd() || config.isEvolutionEnabled()) {
+            if (config.isEvolutionEnabled()) {
                 // Finish initializing Table Mappings and atomic Validity.
                 // Validate Table Mapping.
                 tableMappingList.forEach(TableMapping::checkValidity);
@@ -2257,6 +2275,8 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                     continue;
                 }
 
+                rogueStatementsCounter.inc();
+
                 final RemStatement remStatement = (RemStatement) request._1;
                 RemConnection remConnection = (RemConnection) remStatement.getConnection();
                 remConnection.getServerSideConnectionId();
@@ -2265,8 +2285,10 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 final Connection killConn;
                 if (request._2 == Boolean.TRUE) {
                     killConn = readDataSource.getConnection();
+                    rogueReadStatementsCounter.inc();
                 } else {
                     killConn = dataSource.getConnection();
+                    rogueWriteStatementsCounter.inc();
                 }
 
                 try {
@@ -2280,6 +2302,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                     }
                 } catch (Throwable e) {
                     LOG.error("StatementCleaner service caught an exception while calling KILL STATEMENT ", e);
+                    rogueStatementExceptionsCounter.inc();
                 }
             }
         }
@@ -2297,10 +2320,19 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                     continue;
                 }
 
+                rogueStatementsCounter.inc();
+
+                if (request._2 == Boolean.TRUE) {
+                    rogueReadStatementsCounter.inc();
+                } else {
+                    rogueWriteStatementsCounter.inc();
+                }
+
                 try {
                     request._1.cancel();
                 } catch (Throwable e) {
                     LOG.warn("StatementCleaner service caught an exception while calling request.cancel()", e);
+                    rogueStatementExceptionsCounter.inc();
                 }
             }
         }

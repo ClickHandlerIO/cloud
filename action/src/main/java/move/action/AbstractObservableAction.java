@@ -18,7 +18,6 @@ public abstract class AbstractObservableAction<IN, OUT>
 
     private HystrixObservableCommand<OUT> command;
     private HystrixObservableCommand.Setter setter;
-
     private SingleSubscriber<? super OUT> subscriber;
     private Context ctx;
     private boolean fallback;

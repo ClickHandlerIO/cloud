@@ -146,7 +146,7 @@ public class ActionProvider<A, IN, OUT> {
     protected void init() {
         inited = true;
 
-        vertxCore = (io.vertx.core.Vertx) vertx.getDelegate();
+        vertxCore = vertx.getDelegate();
 
         // Get default config.
         actionConfig = actionClass.getAnnotation(ActionConfig.class);
@@ -281,7 +281,7 @@ public class ActionProvider<A, IN, OUT> {
         // Default Scheduled Actions to run in thread pools.
         if (AbstractScheduledAction.class.isAssignableFrom(actionClass)
             || AbstractBlockingScheduledAction.class.isAssignableFrom(actionClass)) {
-            return HystrixCommandProperties.ExecutionIsolationStrategy.THREAD;
+            return HystrixCommandProperties.ExecutionIsolationStrategy.SEMAPHORE;
         }
 
         // Default Blocking Actions to run on a Thread Pool.
@@ -290,8 +290,7 @@ public class ActionProvider<A, IN, OUT> {
         }
 
         // Default Worker Actions to run in thread pools.
-        else if (AbstractWorkerAction.class.isAssignableFrom(actionClass)
-            || AbstractBlockingWorkerAction.class.isAssignableFrom(actionClass)) {
+        else if (AbstractBlockingWorkerAction.class.isAssignableFrom(actionClass)) {
             return HystrixCommandProperties.ExecutionIsolationStrategy.THREAD;
         }
 
@@ -326,7 +325,7 @@ public class ActionProvider<A, IN, OUT> {
         // Clone command properties from default and adjust the timeout.
         final HystrixCommandProperties.Setter commandProperties = HystrixCommandProperties.Setter()
             .withExecutionIsolationStrategy(commandPropertiesDefaults.getExecutionIsolationStrategy())
-            .withExecutionTimeoutEnabled(commandPropertiesDefaults.getExecutionTimeoutEnabled() == Boolean.TRUE)
+            .withExecutionTimeoutEnabled(true)
             .withExecutionTimeoutInMilliseconds((int) maxMillis)
             .withFallbackEnabled(true)
             .withExecutionIsolationThreadInterruptOnFutureCancel(true)
