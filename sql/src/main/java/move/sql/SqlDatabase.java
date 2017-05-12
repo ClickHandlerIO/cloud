@@ -476,8 +476,8 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             readExceptionsCounter = metricRegistry.counter("SQL-" + config.getName() + "-READ_EXCEPTIONS");
             writeExceptionsCounter = metricRegistry.counter("SQL-" + config.getName() + "-WRITE_EXCEPTIONS");
             rogueStatementsCounter = metricRegistry.counter("SQL-" + config.getName() + "-ROGUES");
-            rogueReadStatementsCounter = metricRegistry.counter("SQL-" + config.getName() + "-READ_ROGUES");
-            rogueReadStatementsCounter = metricRegistry.counter("SQL-" + config.getName() + "-READ_ROGUES");
+            rogueWriteStatementsCounter = metricRegistry.counter("SQL-" + config.getName() + "-ROGUE_WRITES");
+            rogueReadStatementsCounter = metricRegistry.counter("SQL-" + config.getName() + "-ROGUE_READS");
 
             // Configure jOOQ settings.
             settings = new Settings();
@@ -489,7 +489,9 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             settings.setParamType(ParamType.INDEXED);
             settings.setAttachRecords(true);
             settings.setUpdatablePrimaryKeys(false);
-            settings.setQueryTimeout(config.getDefaultQueryTimeoutInSeconds());
+            if (!isNuoDB) {
+                settings.setQueryTimeout(config.getDefaultQueryTimeoutInSeconds());
+            }
             settings.setBackslashEscaping(BackslashEscaping.DEFAULT);
             settings.setStatementType(StatementType.PREPARED_STATEMENT);
 
@@ -859,18 +861,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                 Throwables.propagate(e);
             }
         }
-
-//        for (Reflections reflections : jooqReflections) {
-//            final Set<Class<? extends TableImpl>> jooqTables = reflections.getSubTypesOf(TableImpl.class);
-//            for (Class<? extends Table> jooqTableClass : jooqTables) {
-//                try {
-//                    final Table jooqTable = jooqTableClass.newInstance();
-//                    jooqMap.put(Strings.nullToEmpty(jooqTable.getName()).trim().toLowerCase(), jooqTable);
-//                } catch (Exception e) {
-//                    throw new PersistException("Failed to instantiate an instance of jOOQ Table Class [" + jooqTableClass.getCanonicalName() + "]");
-//                }
-//            }
-//        }
     }
 
 
@@ -1726,9 +1716,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     protected <T> SqlResult<T> executeWrite(WriteAction<T> action) {
         final AtomicReference<SqlResult<T>> r = new AtomicReference<>();
         final Connection connection;
-
         final ActionContext context = action.context;
-
         final Timer contextTimer = getWriteTimerFor(context);
         final Timer.Context contextTimerContext = contextTimer != null ? contextTimer.time() : null;
         final Timer.Context timerContext = writeTimer.time();
@@ -1790,13 +1778,16 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             }
         } catch (RollbackException e) {
             if (r.get().getReason() != null) {
-                Throwables.propagate(r.get().getReason());
+                final Throwable cause = r.get().getReason();
+                Throwables.throwIfUnchecked(cause);
+                throw new RuntimeException(cause);
             } else {
                 return r.get();
             }
         } catch (Throwable e) {
             LOG.info("write() threw an exception", e);
-            Throwables.propagate(e);
+            Throwables.throwIfUnchecked(e);
+            throw new RuntimeException(e);
         } finally {
             Try.run(() -> connection.close()).onFailure(e -> LOG.error("Failed to close connection", e));
             if (contextTimerContext != null) {
@@ -1804,12 +1795,6 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             }
             timerContext.stop();
         }
-
-        if (r.get().getReason() != null) {
-            Throwables.propagate(r.get().getReason());
-        }
-
-        return r.get();
     }
 
     /**
@@ -2187,22 +2172,26 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                         action.currentStatement = ctx.statement();
                         final ActionContext actionContext = action.context;
 
-                        if (actionContext != null) {
-                            int timeLeft = (int) (actionContext.timesOutAt - System.currentTimeMillis());
+                        if (!isNuoDB) {
+                            if (actionContext != null) {
+                                int timeLeft = (int) (actionContext.timesOutAt - System.currentTimeMillis());
 
-                            if (timeLeft <= 1000) {
-                                queryTimeout = 1;
-                            } else {
-                                queryTimeout = (int) Math.ceil((double) timeLeft / 1000.0);
+                                if (timeLeft <= 1000) {
+                                    queryTimeout = 1;
+                                } else {
+                                    queryTimeout = (int) Math.ceil((double) timeLeft / 1000.0);
+                                }
+
+                                ctx.statement().setQueryTimeout(queryTimeout);
+                            } else if (queryTimeout < 30) {
+                                ctx.statement().setQueryTimeout(30);
                             }
-
-                            ctx.statement().setQueryTimeout(queryTimeout);
-                        } else if (queryTimeout < 30) {
-                            ctx.statement().setQueryTimeout(30);
                         }
                     } else {
-                        if (queryTimeout < 30) {
-                            ctx.statement().setQueryTimeout(30);
+                        if (!isNuoDB) {
+                            if (queryTimeout < 30) {
+                                ctx.statement().setQueryTimeout(30);
+                            }
                         }
                     }
                 }
@@ -2275,20 +2264,41 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                     continue;
                 }
 
-                rogueStatementsCounter.inc();
+                Try.run(
+                    () -> rogueStatementsCounter.inc()
+                ).onFailure(
+                    e -> LOG.error("rogueStatementsCounter.inc() threw an exception", e)
+                );
 
                 final RemStatement remStatement = (RemStatement) request._1;
                 RemConnection remConnection = (RemConnection) remStatement.getConnection();
                 remConnection.getServerSideConnectionId();
                 final Object handleObj = nuoHandleField.get(remStatement);
 
-                final Connection killConn;
+                Connection killConn = null;
                 if (request._2 == Boolean.TRUE) {
-                    killConn = readDataSource.getConnection();
-                    rogueReadStatementsCounter.inc();
+                    try {
+                        killConn = readDataSource.getConnection();
+                    } catch (Throwable e) {
+                        LOG.error("NuoDBStatementCleaner.readDataSource.getConnection() threw an exception", e);
+                    }
+                    Try.run(
+                        () -> rogueReadStatementsCounter.inc()
+                    ).onFailure(e -> LOG.error("rogueReadStatementsCounter.inc() threw an exception", e));
                 } else {
-                    killConn = dataSource.getConnection();
-                    rogueWriteStatementsCounter.inc();
+                    try {
+                        killConn = dataSource.getConnection();
+                    } catch (Throwable e) {
+                        LOG.error("NuoDBStatementCleaner.dataSource.getConnection() threw an exception", e);
+                    }
+                    Try.run(
+                        () -> rogueWriteStatementsCounter.inc()
+                    ).onFailure(e -> LOG.error("rogueWriteStatementsCounter.inc() threw an exception", e));
+                }
+
+                if (killConn == null) {
+                    rogueStatementQueue.add(request);
+                    continue;
                 }
 
                 try {
@@ -2302,7 +2312,9 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                     }
                 } catch (Throwable e) {
                     LOG.error("StatementCleaner service caught an exception while calling KILL STATEMENT ", e);
-                    rogueStatementExceptionsCounter.inc();
+                    Try.run(
+                        () -> rogueStatementExceptionsCounter.inc()
+                    ).onFailure(e2 -> LOG.error("rogueWriteStatementsCounter.inc() threw an exception", e2));
                 }
             }
         }
@@ -2320,19 +2332,29 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                     continue;
                 }
 
-                rogueStatementsCounter.inc();
+                Try.run(
+                    () -> rogueStatementsCounter.inc()
+                ).onFailure(
+                    e -> LOG.error("rogueStatementsCounter.inc() threw an exception", e)
+                );
 
                 if (request._2 == Boolean.TRUE) {
-                    rogueReadStatementsCounter.inc();
+                    Try.run(
+                        () -> rogueReadStatementsCounter.inc()
+                    ).onFailure(e -> LOG.error("rogueReadStatementsCounter.inc() threw an exception", e));
                 } else {
-                    rogueWriteStatementsCounter.inc();
+                    Try.run(
+                        () -> rogueWriteStatementsCounter.inc()
+                    ).onFailure(e -> LOG.error("rogueWriteStatementsCounter.inc() threw an exception", e));
                 }
 
                 try {
                     request._1.cancel();
                 } catch (Throwable e) {
                     LOG.warn("StatementCleaner service caught an exception while calling request.cancel()", e);
-                    rogueStatementExceptionsCounter.inc();
+                    Try.run(
+                        () -> rogueStatementExceptionsCounter.inc()
+                    ).onFailure(e2 -> LOG.error("rogueWriteStatementsCounter.inc() threw an exception", e2));
                 }
             }
         }
