@@ -60,6 +60,7 @@ public class SQSService extends AbstractIdleService implements WorkerService {
     protected void startUp() throws Exception {
         Preconditions.checkNotNull(config, "config must be set.");
 
+        // AmazonHttpClient is vary chatty with log output. Shut it up.
         final Logger amazonClientLogger = LoggerFactory.getLogger(AmazonHttpClient.class);
         Try.run(() -> {
             final Class param = Class.forName("ch.qos.logback.classic.Level");

@@ -54,4 +54,14 @@ public @interface Column {
      *
      */
     boolean embeddedName() default false;
+
+    /**
+     * @return
+     */
+    int precision() default 18;
+
+    /**
+     * @return
+     */
+    int scale() default 2;
 }

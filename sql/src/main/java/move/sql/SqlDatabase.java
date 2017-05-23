@@ -2291,26 +2291,21 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                     rogueWriteStatementsCounter.inc();
                 }
 
-                try {
-                    try {
-                        PreparedStatement pstmt = killConn.prepareStatement("KILL STATEMENT connid ? handle ? count -1");
-                        pstmt.setInt(1, remConnection.getServerSideConnectionId());
-                        pstmt.setInt(2, (int) handleObj);
-                        pstmt.execute();
-                    } finally {
-                        killConn.close();
-                    }
+                try (PreparedStatement pstmt = killConn.prepareStatement("KILL STATEMENT connid ? handle ? count -1")) {
+                    pstmt.setInt(1, remConnection.getServerSideConnectionId());
+                    pstmt.setInt(2, (int) handleObj);
+                    pstmt.execute();
                 } catch (Throwable e) {
                     LOG.error("StatementCleaner service caught an exception while calling KILL STATEMENT ", e);
                     rogueStatementExceptionsCounter.inc();
+                } finally {
+                    Try.run(() -> killConn.close());
                 }
             }
         }
     }
 
     private final class StatementCleaner extends AbstractExecutionThreadService {
-        private java.lang.reflect.Field nuoHandleField;
-
         @Override
         protected void run() throws Exception {
             while (isRunning()) {

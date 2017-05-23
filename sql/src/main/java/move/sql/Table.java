@@ -28,13 +28,13 @@ public @interface Table {
     String[] shardKey() default {};
 
     /**
-     *
      * @return
      */
     String[] columnStoreKey() default {};
 
     /**
      * Reference tables are
+     *
      * @return
      */
     boolean reference() default false;
@@ -43,4 +43,19 @@ public @interface Table {
      * @return
      */
     boolean columnStore() default false;
+
+    /**
+     * @return
+     */
+    UniquePolicy[] uniquePolicies() default {@UniquePolicy(strategy = UniqueConflictStrategy.MERGE)};
+
+    /**
+     * @return
+     */
+    FieldPolicy[] fieldPolicies() default {};
+
+    /**
+     * @return
+     */
+    DeleteConflictStrategy deletePolicy() default DeleteConflictStrategy.DELETE_LOSES;
 }

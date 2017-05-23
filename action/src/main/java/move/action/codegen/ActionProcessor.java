@@ -58,7 +58,7 @@ public class ActionProcessor extends AbstractProcessor {
      */
     @Override
     public Set<String> getSupportedAnnotationTypes() {
-        Set<String> annotataions = new LinkedHashSet<>();
+        final Set<String> annotataions = new LinkedHashSet<>();
         annotataions.add(RemoteAction.class.getCanonicalName());
         annotataions.add(InternalAction.class.getCanonicalName());
         annotataions.add(WorkerAction.class.getCanonicalName());

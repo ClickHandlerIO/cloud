@@ -5,6 +5,7 @@ import org.jooq.DataType;
 import org.jooq.SQLDialect;
 import org.jooq.conf.ParamType;
 import org.jooq.util.h2.H2DataType;
+import org.jooq.util.mysql.MySQLDataType;
 
 /**
  *
@@ -30,7 +31,7 @@ public class H2Platform extends SqlPlatform {
         return create().createIndex(name).on(mapping.getTableName(), index.columnNames).getSQL(ParamType.INLINED);
     }
 
-    public DataType fromJdbcType(int type) {
+    public DataType fromJdbcType(int type, TableMapping.Property property) {
         switch (type) {
             case DBTypes.ENUM:
                 return H2DataType.VARCHAR.length(128);
@@ -57,11 +58,20 @@ public class H2Platform extends SqlPlatform {
             case DBTypes.DATE:
                 return H2DataType.DATE;
             case DBTypes.DECIMAL:
-                return H2DataType.DECIMAL;
+                if (property.columnAnnotation != null && property.columnAnnotation.precision() > 0)
+                    return H2DataType.DECIMAL.precision(property.columnAnnotation.precision(), property.columnAnnotation.scale());
+                else
+                    return H2DataType.DECIMAL;
             case DBTypes.DOUBLE:
-                return H2DataType.DOUBLE;
+                if (property.columnAnnotation != null && property.columnAnnotation.precision() > 0)
+                    return H2DataType.DOUBLE.precision(property.columnAnnotation.precision(), property.columnAnnotation.scale());
+                else
+                    return H2DataType.DOUBLE;
             case DBTypes.FLOAT:
-                return H2DataType.FLOAT;
+                if (property.columnAnnotation != null && property.columnAnnotation.precision() > 0)
+                    return H2DataType.FLOAT.precision(property.columnAnnotation.precision(), property.columnAnnotation.scale());
+                else
+                    return H2DataType.FLOAT;
             case DBTypes.INTEGER:
                 return H2DataType.INTEGER;
             case DBTypes.CHAR:

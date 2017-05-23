@@ -2,6 +2,7 @@ package move.sql;
 
 import org.jooq.Configuration;
 import org.jooq.DataType;
+import org.jooq.util.h2.H2DataType;
 
 /**
  * NuoDB platform.
@@ -38,12 +39,15 @@ public class NuoDBPlatform extends SqlPlatform {
      * @param type
      * @return
      */
-    public DataType fromJdbcType(int type) {
+    public DataType fromJdbcType(int type, TableMapping.Property property) {
         switch (type) {
             case DBTypes.ENUM:
                 return NuoDBDataType.STRING;
             case DBTypes.NUMERIC:
-                return NuoDBDataType.NUMERIC;
+                if (property.columnAnnotation != null && property.columnAnnotation.precision() > 0)
+                    return NuoDBDataType.NUMERIC.precision(property.columnAnnotation.precision(), property.columnAnnotation.scale());
+                else
+                    return NuoDBDataType.NUMERIC;
             case DBTypes.BIGINT:
                 return NuoDBDataType.BIGINT;
             case DBTypes.BOOLEAN:
@@ -66,11 +70,20 @@ public class NuoDBPlatform extends SqlPlatform {
             case DBTypes.DATE:
                 return NuoDBDataType.DATE;
             case DBTypes.DECIMAL:
-                return NuoDBDataType.DECIMAL;
+                if (property.columnAnnotation != null && property.columnAnnotation.precision() > 0)
+                    return NuoDBDataType.DECIMAL.precision(property.columnAnnotation.precision(), property.columnAnnotation.scale());
+                else
+                    return NuoDBDataType.DECIMAL;
             case DBTypes.DOUBLE:
-                return NuoDBDataType.NUMERIC;
+                if (property.columnAnnotation != null && property.columnAnnotation.precision() > 0)
+                    return NuoDBDataType.NUMERIC.precision(property.columnAnnotation.precision(), property.columnAnnotation.scale());
+                else
+                    return NuoDBDataType.NUMERIC;
             case DBTypes.FLOAT:
-                return NuoDBDataType.NUMERIC;
+                if (property.columnAnnotation != null && property.columnAnnotation.precision() > 0)
+                    return NuoDBDataType.NUMERIC.precision(property.columnAnnotation.precision(), property.columnAnnotation.scale());
+                else
+                    return NuoDBDataType.NUMERIC;
             case DBTypes.INTEGER:
                 return NuoDBDataType.INTEGER;
             case DBTypes.CHAR:

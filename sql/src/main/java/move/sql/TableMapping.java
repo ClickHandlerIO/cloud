@@ -616,6 +616,7 @@ public class TableMapping {
             if (property.nullable && property.type.isPrimitive()) {
                 property.nullable = false;
             }
+            property.columnAnnotation = columnAnnotation;
             property.getter = FastClass.create(getter.getDeclaringClass()).getMethod(getter);
             property.setter = FastClass.create(setter.getDeclaringClass()).getMethod(setter);
             property.dbType = columnAnnotation.dbType();
@@ -764,6 +765,7 @@ public class TableMapping {
         private boolean nullable;
         private boolean primaryKey;
         private boolean shardKey;
+        public Column columnAnnotation;
 
         public Property getParent() {
             return parent;
@@ -903,7 +905,7 @@ public class TableMapping {
                 return null;
             }
 
-            DataType dataType = dbPlatform.fromJdbcType(column.dataType);
+            DataType dataType = dbPlatform.fromJdbcType(column.dataType, this);
             if (dataType == null) {
                 return null;
             }
@@ -915,7 +917,7 @@ public class TableMapping {
         }
 
         public DataType fieldDataType() {
-            DataType dataType = dbPlatform.fromJdbcType(dbType);
+            DataType dataType = dbPlatform.fromJdbcType(dbType, this);
             if (dataType == null) {
                 return null;
             }

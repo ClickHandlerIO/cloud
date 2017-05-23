@@ -226,7 +226,7 @@ public class SqlPlatform {
      * @param type
      * @return
      */
-    public DataType fromJdbcType(int type) {
+    public DataType fromJdbcType(int type, TableMapping.Property property) {
         switch (type) {
             case DBTypes.ENUM:
                 return SQLDataType.VARCHAR.length(128);
@@ -253,11 +253,20 @@ public class SqlPlatform {
             case DBTypes.DATE:
                 return SQLDataType.DATE;
             case DBTypes.DECIMAL:
-                return SQLDataType.DECIMAL;
+                if (property.columnAnnotation != null && property.columnAnnotation.precision() > 0)
+                    return SQLDataType.DECIMAL(property.columnAnnotation.precision(), property.columnAnnotation.scale());
+                else
+                    return SQLDataType.DECIMAL;
             case DBTypes.DOUBLE:
-                return SQLDataType.DOUBLE;
+                if (property.columnAnnotation != null && property.columnAnnotation.precision() > 0)
+                    return SQLDataType.DOUBLE.precision(property.columnAnnotation.precision(), property.columnAnnotation.scale());
+                else
+                    return SQLDataType.DOUBLE;
             case DBTypes.FLOAT:
-                return SQLDataType.FLOAT;
+                if (property.columnAnnotation != null && property.columnAnnotation.precision() > 0)
+                    return SQLDataType.FLOAT.precision(property.columnAnnotation.precision(), property.columnAnnotation.scale());
+                else
+                    return SQLDataType.FLOAT;
             case DBTypes.INTEGER:
                 return SQLDataType.INTEGER;
             case DBTypes.CHAR:
