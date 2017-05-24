@@ -3,7 +3,6 @@ package move.sql;
 import com.google.common.base.Strings;
 import org.jooq.Configuration;
 import org.jooq.DataType;
-import org.jooq.impl.SQLDataType;
 import org.jooq.util.mysql.MySQLDataType;
 
 /**
@@ -81,20 +80,11 @@ public class MySqlPlatform extends SqlPlatform {
             case DBTypes.DATE:
                 return MySQLDataType.DATE;
             case DBTypes.DECIMAL:
-                if (property.columnAnnotation != null && property.columnAnnotation.precision() > 0)
-                    return MySQLDataType.DECIMAL.precision(property.columnAnnotation.precision(), property.columnAnnotation.scale());
-                else
-                    return MySQLDataType.DECIMAL;
+                return MySQLDataType.DOUBLE;
             case DBTypes.DOUBLE:
-                if (property.columnAnnotation != null && property.columnAnnotation.precision() > 0)
-                    return MySQLDataType.DOUBLE.precision(property.columnAnnotation.precision(), property.columnAnnotation.scale());
-                else
-                    return MySQLDataType.DOUBLE;
+                return MySQLDataType.DOUBLE;
             case DBTypes.FLOAT:
-                if (property.columnAnnotation != null && property.columnAnnotation.precision() > 0)
-                    return MySQLDataType.FLOAT.precision(property.columnAnnotation.precision(), property.columnAnnotation.scale());
-                else
-                    return MySQLDataType.FLOAT;
+                return MySQLDataType.FLOAT;
             case DBTypes.INTEGER:
                 return MySQLDataType.INTEGER;
             case DBTypes.CHAR:

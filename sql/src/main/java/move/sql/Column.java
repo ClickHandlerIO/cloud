@@ -63,5 +63,5 @@ public @interface Column {
     /**
      * @return
      */
-    int scale() default 2;
+    int scale() default 4;
 }

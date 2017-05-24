@@ -44,10 +44,7 @@ public class NuoDBPlatform extends SqlPlatform {
             case DBTypes.ENUM:
                 return NuoDBDataType.STRING;
             case DBTypes.NUMERIC:
-                if (property.columnAnnotation != null && property.columnAnnotation.precision() > 0)
-                    return NuoDBDataType.NUMERIC.precision(property.columnAnnotation.precision(), property.columnAnnotation.scale());
-                else
-                    return NuoDBDataType.NUMERIC;
+                return NuoDBDataType.DOUBLE;
             case DBTypes.BIGINT:
                 return NuoDBDataType.BIGINT;
             case DBTypes.BOOLEAN:
@@ -70,20 +67,11 @@ public class NuoDBPlatform extends SqlPlatform {
             case DBTypes.DATE:
                 return NuoDBDataType.DATE;
             case DBTypes.DECIMAL:
-                if (property.columnAnnotation != null && property.columnAnnotation.precision() > 0)
-                    return NuoDBDataType.DECIMAL.precision(property.columnAnnotation.precision(), property.columnAnnotation.scale());
-                else
-                    return NuoDBDataType.DECIMAL;
+                return NuoDBDataType.DOUBLE;
             case DBTypes.DOUBLE:
-                if (property.columnAnnotation != null && property.columnAnnotation.precision() > 0)
-                    return NuoDBDataType.NUMERIC.precision(property.columnAnnotation.precision(), property.columnAnnotation.scale());
-                else
-                    return NuoDBDataType.NUMERIC;
+                return NuoDBDataType.DOUBLE;
             case DBTypes.FLOAT:
-                if (property.columnAnnotation != null && property.columnAnnotation.precision() > 0)
-                    return NuoDBDataType.NUMERIC.precision(property.columnAnnotation.precision(), property.columnAnnotation.scale());
-                else
-                    return NuoDBDataType.NUMERIC;
+                return NuoDBDataType.DOUBLE;
             case DBTypes.INTEGER:
                 return NuoDBDataType.INTEGER;
             case DBTypes.CHAR:

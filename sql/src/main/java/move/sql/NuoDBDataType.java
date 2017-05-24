@@ -2,8 +2,8 @@ package move.sql;
 
 import org.jooq.DataType;
 import org.jooq.SQLDialect;
-import org.jooq.impl.DefaultDataType;
-import org.jooq.impl.SQLDataType;
+import org.jooq.impl.*;
+import org.jooq.impl.PrecisionDataType;
 
 import java.math.BigDecimal;
 import java.sql.Date;
@@ -27,8 +27,9 @@ public class NuoDBDataType {
     public static final DataType<Short> SMALLINT = new DefaultDataType<>(SQLDialect.MYSQL, SQLDataType.SMALLINT, "smallint", "smallint");
     public static final DataType<Integer> INTEGER = new DefaultDataType<>(SQLDialect.MYSQL, SQLDataType.INTEGER, "integer", "integer");
     public static final DataType<Long> BIGINT = new DefaultDataType<Long>(SQLDialect.MYSQL, SQLDataType.BIGINT, "bigint", "bigint");
-    public static final DataType<BigDecimal> DECIMAL = new DefaultDataType<>(SQLDialect.MYSQL, SQLDataType.DECIMAL, "decimal", "decimal");
-    public static final DataType<Double> NUMERIC = new DefaultDataType<>(SQLDialect.MYSQL, SQLDataType.DOUBLE, "numeric", "numeric");
+    public static final DataType<Double> DOUBLE = new DefaultDataType<>(SQLDialect.MYSQL, SQLDataType.DOUBLE, "double", "double");
+    public static final DataType<BigDecimal> DECIMAL = new PrecisionDataType<>(SQLDialect.MYSQL, SQLDataType.DECIMAL, "decimal", "decimal");
+    public static final DataType<Double> NUMERIC = new PrecisionDataType<>(SQLDialect.MYSQL, SQLDataType.DOUBLE, "numeric", "numeric");
 
     public static final DataType<Boolean> BOOLEAN = new DefaultDataType<Boolean>(SQLDialect.MYSQL, SQLDataType.BOOLEAN, "boolean", "boolean");
     public static final DataType<byte[]> VARBINARY = new DefaultDataType<byte[]>(SQLDialect.MYSQL, SQLDataType.VARBINARY, "varbinary", "varbinary");
