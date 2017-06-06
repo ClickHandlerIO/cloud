@@ -8,7 +8,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  */
 public abstract class AbstractBlockingAction<IN, OUT>
-    extends AbstractAction<IN, OUT> {
+    extends BaseBlockingAction<IN, OUT> {
     private final AtomicReference<HystrixCommand<OUT>> command = new AtomicReference<>();
     private HystrixCommand.Setter setter;
 

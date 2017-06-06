@@ -16,6 +16,8 @@ import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
 import javax.tools.FileObject;
 import javax.tools.StandardLocation;
+import javax.validation.constraints.NotNull;
+import java.lang.reflect.Array;
 import java.util.*;
 
 /**
@@ -30,6 +32,7 @@ public class ActionProcessor extends AbstractProcessor {
     private final TreeMap<String, ActionHolder> actionMap = new TreeMap<>();
     private final Pkg rootPackage = new Pkg("Action", "");
     private final HashMap<String, ActionHolder> remoteActionMap = new HashMap<>();
+    private final ArrayList<ActionPackage> actionPackages = new ArrayList<>();
 
     private Types typeUtils;
     private Elements elementUtils;
@@ -59,6 +62,7 @@ public class ActionProcessor extends AbstractProcessor {
     @Override
     public Set<String> getSupportedAnnotationTypes() {
         final Set<String> annotataions = new LinkedHashSet<>();
+        annotataions.add(ActionPackage.class.getCanonicalName());
         annotataions.add(RemoteAction.class.getCanonicalName());
         annotataions.add(InternalAction.class.getCanonicalName());
         annotataions.add(WorkerAction.class.getCanonicalName());
@@ -93,6 +97,22 @@ public class ActionProcessor extends AbstractProcessor {
             if (scheduledElements != null) {
                 elements.addAll(scheduledElements);
             }
+
+//            final Set<? extends Element> packageElements = roundEnv.getElementsAnnotatedWith(ActionPackage.class);
+//
+//            if (packageElements != null) {
+//                packageElements.forEach(e -> actionPackages.add(e.getAnnotation(ActionPackage.class)));
+//            }
+//
+//            if (roundEnv.processingOver() && actionPackages.isEmpty() && !actionMap.isEmpty()) {
+////                messager.printMessage(Diagnostic.Kind.ERROR, "@ActionPackage on package-info.java not found");
+//            }
+//
+//            if (packageElements != null) {
+//
+//                messager.printMessage(Diagnostic.Kind.WARNING, packageElements.size() + " @ActionPackage found");
+//                packageElements.forEach(p -> messager.printMessage(Diagnostic.Kind.WARNING, "@ActionPackage(" + p.getAnnotation(ActionPackage.class).value() + ")"));
+//            }
 
             boolean allGood = true;
             for (Element annotatedElement : elements) {
@@ -139,10 +159,18 @@ public class ActionProcessor extends AbstractProcessor {
 
                 // Ensure only 1 action annotation was used.
                 int actionAnnotationCount = 0;
-                if (holder.remoteAction != null) actionAnnotationCount++;
-                if (holder.internalAction != null) actionAnnotationCount++;
-                if (holder.workerAction != null) actionAnnotationCount++;
-                if (holder.scheduledAction != null) actionAnnotationCount++;
+                if (holder.remoteAction != null) {
+                    actionAnnotationCount++;
+                }
+                if (holder.internalAction != null) {
+                    actionAnnotationCount++;
+                }
+                if (holder.workerAction != null) {
+                    actionAnnotationCount++;
+                }
+                if (holder.scheduledAction != null) {
+                    actionAnnotationCount++;
+                }
                 if (actionAnnotationCount > 1) {
                     messager.printMessage(
                         Diagnostic.Kind.ERROR,
@@ -196,7 +224,8 @@ public class ActionProcessor extends AbstractProcessor {
                 // Is it a Root Action?
                 if (parts.length == 1 && firstName.isEmpty()) {
                     rootPackage.actions.put(actionHolder.getName(), actionHolder);
-                } else {
+                }
+                else {
                     // Let's find it's Package and construct the tree as needed during the process.
                     Pkg parent = rootPackage;
                     for (int i = 0; i < parts.length; i++) {
@@ -204,8 +233,8 @@ public class ActionProcessor extends AbstractProcessor {
                         Pkg next = parent.children.get(nextName);
                         if (next == null) {
                             next = new Pkg(nextName, parent.path == null || parent.path.isEmpty()
-                                ? nextName
-                                : parent.path + "." + nextName, parent);
+                                                     ? nextName
+                                                     : parent.path + "." + nextName, parent);
                             parent.children.put(nextName, next);
                         }
                         parent = next;
@@ -217,7 +246,8 @@ public class ActionProcessor extends AbstractProcessor {
             }
 
             rootPackage.generateJava();
-        } catch (Throwable e) {
+        }
+        catch (Throwable e) {
             error(null, e.getMessage());
         }
 
@@ -260,7 +290,8 @@ public class ActionProcessor extends AbstractProcessor {
         public String getFullPath() {
             if (path == null || path.isEmpty()) {
                 return getClassName();
-            } else {
+            }
+            else {
                 return path + "." + getClassName();
             }
         }
@@ -268,17 +299,21 @@ public class ActionProcessor extends AbstractProcessor {
         public String getClassName() {
 //            return "Action_Locator";
             return name == null || name.isEmpty()
-                ? "Root"
-                : Character.toUpperCase(name.charAt(0)) + name.substring(1) + (root ? LOCATOR_ROOT : LOCATOR);
+                   ? "Root"
+                   : Character.toUpperCase(name.charAt(0)) + name.substring(1) + (root
+                                                                                  ? LOCATOR_ROOT
+                                                                                  : LOCATOR);
         }
 
         public void generateJava() {
-            if (processed)
+            if (processed) {
                 return;
+            }
 
             if (root) {
-                if (children.isEmpty())
+                if (children.isEmpty()) {
                     return;
+                }
 
                 path = children.values().iterator().next().path;
             }
@@ -286,17 +321,15 @@ public class ActionProcessor extends AbstractProcessor {
             processed = true;
 
             // Build empty @Inject constructor.
-            final MethodSpec ctor = MethodSpec.constructorBuilder()
-                .addAnnotation(Inject.class)
-                .addModifiers(Modifier.PUBLIC)
-                .build();
+            final MethodSpec.Builder ctor = MethodSpec.constructorBuilder()
+                .addAnnotation(Inject.class);
+//                .addModifiers(Modifier.PUBLIC, Modifier.FINAL);
 
             // Init Class.
             final TypeSpec.Builder type = TypeSpec.classBuilder(getClassName())
                 .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                 .superclass(TypeName.get(ActionLocator.class))
-                .addAnnotation(Singleton.class)
-                .addMethod(ctor);
+                .addAnnotation(Singleton.class);
 
             // We generate the code for "initActions()" and "initChildren()" as we process.
             final CodeBlock.Builder initActionsCode = CodeBlock.builder();
@@ -310,9 +343,16 @@ public class ActionProcessor extends AbstractProcessor {
                 // Add field.
                 type.addField(
                     FieldSpec.builder(typeName, childPackage.name)
-                        .addAnnotation(Inject.class)
+                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+//                        .addAnnotation(Inject.class)
                         .build()
                 );
+
+                ctor.addParameter(
+                    ParameterSpec.builder(typeName, childPackage.name, Modifier.FINAL).build()
+                );
+
+                ctor.addStatement("this.$L = $L", childPackage.name, childPackage.name);
 
                 // Add code to initChildren() code.
                 initChildrenCode.addStatement("children.add($L)", childPackage.name);
@@ -344,12 +384,14 @@ public class ActionProcessor extends AbstractProcessor {
                         actionName,
                         inName
                     );
-                } else if (action.isScheduled()) {
+                }
+                else if (action.isScheduled()) {
                     actionProviderBuilder = ParameterizedTypeName.get(
                         action.getProviderTypeName(),
                         actionName
                     );
-                } else {
+                }
+                else {
                     // Get Action IN resolved name.
                     ClassName inName = ClassName.get(action.inType.getResolvedElement());
                     // Get Action OUT resolved name.
@@ -365,15 +407,24 @@ public class ActionProcessor extends AbstractProcessor {
 
                 type.addField(
                     FieldSpec.builder(actionProviderBuilder, action.getFieldName())
-                        .addAnnotation(Inject.class)
+//                        .addAnnotation(Inject.class)
+                        .addAnnotation(NotNull.class)
+                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                         .build()
                 );
+
+                ctor.addParameter(
+                    ParameterSpec.builder(actionProviderBuilder, action.getFieldName(), Modifier.FINAL).build()
+                );
+
+                ctor.addStatement("this.$L = $L", action.getFieldName(), action.getFieldName());
 
                 initActionsCode.addStatement("actionMap.put($T.class, $L)", action.type, action.getFieldName());
 
                 type.addMethod(
                     MethodSpec.methodBuilder(action.getFieldName())
-                        .addModifiers(Modifier.PUBLIC)
+                        .addAnnotation(NotNull.class)
+                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                         .returns(actionProviderBuilder)
                         .addStatement("return " + action.getFieldName())
                         .build()
@@ -420,7 +471,8 @@ public class ActionProcessor extends AbstractProcessor {
                                     );
                                     return;
                                 }
-                            } else if (action.isRemote()) {
+                            }
+                            else if (action.isRemote()) {
                                 if (!contents.contains("RemoteActionProvider<" + action.type.getSimpleName())) {
                                     messager.printMessage(
                                         Diagnostic.Kind.ERROR,
@@ -430,7 +482,8 @@ public class ActionProcessor extends AbstractProcessor {
                                     );
                                     return;
                                 }
-                            } else if (action.isWorker()) {
+                            }
+                            else if (action.isWorker()) {
                                 if (!contents.contains("WorkerActionProvider<" + action.type.getSimpleName())) {
                                     messager.printMessage(
                                         Diagnostic.Kind.ERROR,
@@ -440,7 +493,8 @@ public class ActionProcessor extends AbstractProcessor {
                                     );
                                     return;
                                 }
-                            } else if (action.isScheduled()) {
+                            }
+                            else if (action.isScheduled()) {
                                 if (!contents.contains("ScheduledActionProvider<" + action.type.getSimpleName())) {
                                     messager.printMessage(
                                         Diagnostic.Kind.ERROR,
@@ -467,7 +521,8 @@ public class ActionProcessor extends AbstractProcessor {
 
                         return;
                     }
-                } catch (Throwable e) {
+                }
+                catch (Throwable e) {
                     // Ignore.
                 }
             }
@@ -508,10 +563,13 @@ public class ActionProcessor extends AbstractProcessor {
 
                         return;
                     }
-                } catch (Throwable e) {
+                }
+                catch (Throwable e) {
                     // Ignore.
                 }
             }
+
+            type.addMethod(ctor.build());
 
 //            if (actions.isEmpty() && children.isEmpty()) {
             // Build java file.
@@ -520,7 +578,8 @@ public class ActionProcessor extends AbstractProcessor {
             try {
                 // Write .java source code file.
                 javaFile.writeTo(filer);
-            } catch (Throwable e) {
+            }
+            catch (Throwable e) {
                 // Ignore.
                 messager.printMessage(Diagnostic.Kind.ERROR, "Failed to generate Source File: " + e.getMessage());
             }

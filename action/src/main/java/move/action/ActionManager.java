@@ -67,6 +67,10 @@ public class ActionManager extends AbstractIdleService {
         return Collections.unmodifiableMap(workerActionMap);
     }
 
+    public static Map<Object, WorkerActionProvider<?, ?>> workerActionMap() {
+        return Collections.unmodifiableMap(workerActionMap);
+    }
+
     public static Map<Object, ScheduledActionProvider<?>> getScheduledActionMap() {
         return Collections.unmodifiableMap(scheduledActionMap);
     }

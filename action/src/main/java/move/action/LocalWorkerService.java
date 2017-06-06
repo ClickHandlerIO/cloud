@@ -6,7 +6,7 @@ import io.vertx.rxjava.core.Vertx;
 import javaslang.control.Try;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import rx.Observable;
+import rx.Single;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -42,19 +42,19 @@ public class LocalWorkerService extends AbstractIdleService implements WorkerSer
     }
 
     @Override
-    public Observable<Boolean> send(WorkerRequest request) {
-        return Observable.create(subscriber -> {
+    public Single<Boolean> send(WorkerRequest request) {
+        return Single.create(subscriber -> {
             if (request.delaySeconds > 0) {
                 vertx.setTimer(
                     TimeUnit.SECONDS.toMillis(request.delaySeconds),
                     event -> queue.add(request)
                 );
-            } else {
+            }
+            else {
                 queue.add(request);
             }
 
-            subscriber.onNext(true);
-            subscriber.onCompleted();
+            subscriber.onSuccess(true);
         });
     }
 
@@ -73,9 +73,11 @@ public class LocalWorkerService extends AbstractIdleService implements WorkerSer
             while (isRunning()) {
                 try {
                     doRun();
-                } catch (InterruptedException e) {
+                }
+                catch (InterruptedException e) {
                     return;
-                } catch (Throwable e) {
+                }
+                catch (Throwable e) {
                     // Ignore.
                     LOG.error("Unexpected exception", e);
                 }
@@ -84,8 +86,9 @@ public class LocalWorkerService extends AbstractIdleService implements WorkerSer
 
         protected void doRun() throws InterruptedException {
             final WorkerRequest request = queue.take();
-            if (request == null)
+            if (request == null) {
                 return;
+            }
 
             request.actionProvider.execute(request.request);
         }

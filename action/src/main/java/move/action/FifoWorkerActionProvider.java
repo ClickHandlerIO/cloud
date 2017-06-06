@@ -2,7 +2,7 @@ package move.action;
 
 import com.google.common.base.Preconditions;
 import javaslang.control.Try;
-import rx.Observable;
+import rx.Single;
 
 import javax.inject.Inject;
 import java.util.function.Consumer;
@@ -51,7 +51,7 @@ public class FifoWorkerActionProvider<A extends Action<IN, Boolean>, IN> extends
      * @param request
      * @return
      */
-    public Observable<Boolean> send(IN request) {
+    public Single<Boolean> send(IN request) {
         return send(request, 0);
     }
 
@@ -60,7 +60,7 @@ public class FifoWorkerActionProvider<A extends Action<IN, Boolean>, IN> extends
      * @param delaySeconds
      * @return
      */
-    public Observable<Boolean> send(IN request, int delaySeconds) {
+    public Single<Boolean> send(IN request, int delaySeconds) {
         Preconditions.checkNotNull(
             producer,
             "WorkerProducer is null. Ensure ActionManager has been started and all actions have been registered."
@@ -76,7 +76,7 @@ public class FifoWorkerActionProvider<A extends Action<IN, Boolean>, IN> extends
      * @param groupId
      * @return
      */
-    public Observable<Boolean> send(IN request, String groupId) {
+    public Single<Boolean> send(IN request, String groupId) {
         Preconditions.checkNotNull(
             producer,
             "WorkerProducer is null. Ensure ActionManager has been started and all actions have been registered."
@@ -92,7 +92,7 @@ public class FifoWorkerActionProvider<A extends Action<IN, Boolean>, IN> extends
      * @param delaySeconds
      * @return
      */
-    public Observable<Boolean> send(IN request, String groupId, int delaySeconds) {
+    public Single<Boolean> send(IN request, String groupId, int delaySeconds) {
         Preconditions.checkNotNull(
             producer,
             "WorkerProducer is null. Ensure ActionManager has been started and all actions have been registered."

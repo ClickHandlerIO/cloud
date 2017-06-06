@@ -13,6 +13,10 @@ public abstract class AbstractAction<IN, OUT> implements Action<IN, OUT> {
     private IN request;
     private ActionContext context;
 
+    public boolean isFallbackEnabled() {
+        return false;
+    }
+
     public ActionContext actionContext() {
         return context;
     }

@@ -322,32 +322,37 @@ public class ActionProvider<A, IN, OUT> {
             maxMillis = MIN_TIMEOUT_MILLIS;
         }
 
+        boolean fallbackEnabled = false;
+        if (action instanceof AbstractAction) {
+            fallbackEnabled = ((AbstractAction) action).isFallbackEnabled();
+        }
+
         // Clone command properties from default and adjust the timeout.
         final HystrixCommandProperties.Setter commandProperties = HystrixCommandProperties.Setter()
             .withExecutionIsolationStrategy(commandPropertiesDefaults.getExecutionIsolationStrategy())
             .withExecutionTimeoutEnabled(true)
             .withExecutionTimeoutInMilliseconds((int) maxMillis)
-            .withFallbackEnabled(true)
+            .withFallbackEnabled(fallbackEnabled)
             .withExecutionIsolationThreadInterruptOnFutureCancel(true)
             .withExecutionIsolationThreadInterruptOnTimeout(true)
             .withRequestCacheEnabled(false)
             .withRequestLogEnabled(false);
 
-        if (action instanceof AbstractBlockingAction) {
-            ((AbstractBlockingAction) action).setCommandSetter(HystrixCommand.Setter
+        if (action instanceof BaseBlockingAction) {
+            ((BaseBlockingAction) action).setCommandSetter(HystrixCommand.Setter
                 .withGroupKey(groupKey)
                 .andCommandKey(commandKey)
                 .andCommandPropertiesDefaults(commandProperties)
                 .andThreadPoolKey(threadPoolKey)
                 .andThreadPoolPropertiesDefaults(threadPoolPropertiesDefaults)
             );
-        } else if (action instanceof AbstractObservableAction) {
+        } else if (action instanceof BaseObservableAction) {
             if (commandPropertiesDefaults.getExecutionIsolationSemaphoreMaxConcurrentRequests() != null) {
                 commandProperties.withExecutionIsolationSemaphoreMaxConcurrentRequests(commandPropertiesDefaults.getExecutionIsolationSemaphoreMaxConcurrentRequests());
                 commandProperties.withFallbackIsolationSemaphoreMaxConcurrentRequests(commandPropertiesDefaults.getExecutionIsolationSemaphoreMaxConcurrentRequests());
             }
 
-            ((AbstractObservableAction) action).setCommandSetter(HystrixObservableCommand.Setter
+            ((BaseObservableAction) action).setCommandSetter(HystrixObservableCommand.Setter
                 .withGroupKey(groupKey)
                 .andCommandKey(commandKey)
                 .andCommandPropertiesDefaults(commandProperties)

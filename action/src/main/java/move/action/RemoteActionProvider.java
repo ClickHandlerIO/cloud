@@ -1,6 +1,7 @@
 package move.action;
 
 import rx.Observable;
+import rx.Single;
 
 import javax.inject.Inject;
 import java.util.function.Consumer;
@@ -46,6 +47,10 @@ public class RemoteActionProvider<A extends Action<IN, OUT>, IN, OUT> extends Ac
         return super.observe(callback);
     }
 
+    public Single<OUT> single(final Consumer<IN> callback) {
+        return observe(callback).toSingle();
+    }
+
     /**
      * @param request
      * @return
@@ -55,6 +60,10 @@ public class RemoteActionProvider<A extends Action<IN, OUT>, IN, OUT> extends Ac
             request,
             create()
         );
+    }
+
+    public Single<OUT> single(final IN request) {
+        return observe(request).toSingle();
     }
 
     public Observable<OUT> observe(final Object data, final IN request) {
@@ -73,11 +82,19 @@ public class RemoteActionProvider<A extends Action<IN, OUT>, IN, OUT> extends Ac
         );
     }
 
+    public Single<OUT> single(final Object data, final IN request) {
+        return observe(data, request).toSingle();
+    }
+
     public Observable<OUT> observe(final IN request, final Consumer<A> actionCallback) {
         final A action = create(request);
         if (actionCallback != null) {
             actionCallback.accept(action);
         }
         return observe0(request, action);
+    }
+
+    public Single<OUT> single(final IN request, final Consumer<A> actionCallback) {
+        return observe(request, actionCallback).toSingle();
     }
 }

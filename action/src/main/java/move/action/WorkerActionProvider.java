@@ -3,6 +3,7 @@ package move.action;
 import com.google.common.base.Preconditions;
 import javaslang.control.Try;
 import rx.Observable;
+import rx.Single;
 
 import javax.inject.Inject;
 import java.util.function.Consumer;
@@ -15,6 +16,8 @@ public class WorkerActionProvider<A extends Action<IN, Boolean>, IN> extends Act
     protected WorkerProducer producer;
     protected String name;
     protected boolean fifo;
+    protected String queueName;
+    protected String queueUrl;
 
     @Inject
     public WorkerActionProvider() {
@@ -50,6 +53,7 @@ public class WorkerActionProvider<A extends Action<IN, Boolean>, IN> extends Act
         workerAction = getActionClass().getAnnotation(WorkerAction.class);
         name = getActionClass().getCanonicalName();
         fifo = workerAction.fifo();
+        queueName = name.replace(".", "-");
         super.init();
     }
 
@@ -77,7 +81,7 @@ public class WorkerActionProvider<A extends Action<IN, Boolean>, IN> extends Act
      * @param request
      * @return
      */
-    public Observable<Boolean> send(IN request) {
+    public Single<Boolean> send(IN request) {
         return send(request, 0);
     }
 
@@ -86,7 +90,7 @@ public class WorkerActionProvider<A extends Action<IN, Boolean>, IN> extends Act
      * @param delaySeconds
      * @return
      */
-    public Observable<Boolean> send(IN request, int delaySeconds) {
+    public Single<Boolean> send(IN request, int delaySeconds) {
         Preconditions.checkNotNull(
             producer,
             "WorkerProducer is null. Ensure ActionManager has been started and all actions have been registered."

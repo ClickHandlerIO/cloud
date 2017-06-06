@@ -13,7 +13,7 @@ import java.util.function.Consumer;
  * @author Clay Molocznik
  */
 public abstract class AbstractObservableAction<IN, OUT>
-    extends AbstractAction<IN, OUT>
+    extends BaseObservableAction<IN, OUT>
     implements ObservableAction<IN, OUT> {
 
     private HystrixObservableCommand<OUT> command;

@@ -21,15 +21,10 @@ public class HystrixTester {
         ) {
             @Override
             protected Observable<String> construct() {
-                return Observable.create(new Observable.OnSubscribe<String>() {
-                    @Override
-                    public void call(Subscriber<? super String> subscriber) {
-                        vertx.setTimer(5000, event -> {
-                            subscriber.onNext("Done");
-                            subscriber.onCompleted();
-                        });
-                    }
-                });
+                return Observable.unsafeCreate(subscriber -> vertx.setTimer(5000, event -> {
+                    subscriber.onNext("Done");
+                    subscriber.onCompleted();
+                }));
             }
         };
 

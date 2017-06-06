@@ -9,6 +9,8 @@ import javax.inject.Inject;
 @ActionConfig
 //@RemoteAction(path = "/some/path")
 public class AllocateInventory2 extends AbstractBlockingAction<String, String> {
+    MyScheduledAction2 a;
+
     @Inject
     public AllocateInventory2() {
     }
