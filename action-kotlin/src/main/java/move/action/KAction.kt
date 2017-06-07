@@ -84,16 +84,51 @@ abstract class KAction<IN, OUT> : BaseObservableAction<IN, OUT>() {
         }
 
         override fun construct(): Observable<OUT>? {
-            ctx = Vertx.currentContext()
-            val pool: CoroutineDispatcher = let {
-                if (ctx == null)
-                    Unconfined
-                else
-                    VertxContextDispatcher(ctx!!)
+            val vertx = vertx()
+            var ctx = Vertx.currentContext()
+
+            if (ctx == null && isForceAsync && vertx != null) {
+                ctx = vertx.orCreateContext
             }
 
-            return hystrixSingle(pool) {
-                AbstractAction.contextLocal.set(actionContext())
+            val actionContext = actionContext()
+            if (ctx == null) {
+                return Single.create<OUT> { subscriber ->
+                    runBlocking {
+                        AbstractAction.contextLocal.set(actionContext)
+                        try {
+                            subscriber.onSuccess(execute(request))
+                        } catch (e: Throwable) {
+                            this@KAction.executeException = let {
+                                if (this@Command.executionException == null)
+                                    e
+                                else
+                                    this@Command.executionException
+                            }
+
+                            this@KAction.executeCause = Throwables.getRootCause(this@KAction.executeException)
+
+                            if (isActionTimeout(this@KAction.executeCause!!)) {
+                                subscriber.onError(this@KAction.executeCause!!)
+                            } else {
+                                if (isFallbackEnabled && shouldExecuteFallback(this@KAction.executeException!!, this@KAction.executeCause!!)) {
+                                    subscriber.onError(this@KAction.executeException!!)
+                                } else {
+                                    try {
+                                        subscriber.onSuccess(handleException(this@KAction.executeException!!, this@KAction.executeCause!!, false))
+                                    } catch (e2: Throwable) {
+                                        subscriber.onError(e2)
+                                    }
+                                }
+                            }
+                        } finally {
+                            AbstractAction.contextLocal.remove()
+                        }
+                    }
+                }.toObservable()
+            }
+
+            return hystrixSingle(VertxContextDispatcher(actionContext, ctx)) {
                 try {
                     execute(request)
                 } catch (e: Throwable) {
@@ -106,27 +141,71 @@ abstract class KAction<IN, OUT> : BaseObservableAction<IN, OUT>() {
 
                     this@KAction.executeCause = Throwables.getRootCause(this@KAction.executeException)
 
-                    if (shouldExecuteFallback(this@KAction.executeException!!, this@KAction.executeCause!!)) {
+                    if (isActionTimeout(this@KAction.executeCause!!)) {
+                        throw this@KAction.executeCause!!
+                    }
+
+                    if (isFallbackEnabled && shouldExecuteFallback(this@KAction.executeException!!, this@KAction.executeCause!!)) {
                         throw this@KAction.executeException!!
                     } else {
                         handleException(this@KAction.executeException!!, this@KAction.executeCause!!, false)
                     }
-                } finally {
-                    AbstractAction.contextLocal.remove()
                 }
             }.toObservable()
         }
 
         override fun resumeWithFallback(): Observable<OUT> {
-            val pool: CoroutineDispatcher = let {
-                if (ctx == null)
-                    Unconfined
-                else
-                    VertxContextDispatcher(ctx!!)
+            val vertx = vertx()
+            var ctx = Vertx.currentContext()
+
+            if (ctx == null && isForceAsync && vertx != null) {
+                ctx = vertx.orCreateContext
             }
 
-            return hystrixSingle(pool) {
-                AbstractAction.contextLocal.set(actionContext())
+            val actionContext = actionContext()
+
+            if (ctx == null) {
+                return Single.create<OUT> { subscriber ->
+                    runBlocking {
+                        AbstractAction.contextLocal.set(actionContext)
+                        try {
+                            if (!isFallbackEnabled || !shouldExecuteFallback(this@KAction.executeException!!, this@KAction.executeCause!!)) {
+                                val e = ActionFallbackException()
+                                try {
+                                    subscriber.onSuccess(handleException(e, e, true))
+                                } catch (e: Exception) {
+                                    throw e
+                                }
+                            } else {
+                                subscriber.onSuccess(executeFallback(request, this@KAction.executeException, this@KAction.executeCause))
+                            }
+                        } catch (e: Throwable) {
+                            this@KAction.fallbackException = let {
+                                if (this@Command.executionException == null)
+                                    e
+                                else
+                                    this@Command.executionException
+                            }
+
+                            this@KAction.fallbackCause = Throwables.getRootCause(this@KAction.fallbackException)
+
+                            if (isActionTimeout(this@KAction.fallbackCause!!)) {
+                                subscriber.onError(this@KAction.fallbackCause!!)
+                            }
+
+                            try {
+                                subscriber.onSuccess(handleException(this@KAction.fallbackException!!, this@KAction.fallbackCause!!, true))
+                            } catch (e2: Throwable) {
+                                subscriber.onError(e2)
+                            }
+                        } finally {
+                            AbstractAction.contextLocal.remove()
+                        }
+                    }
+                }.toObservable()
+            }
+
+            return hystrixSingle(VertxContextDispatcher(actionContext, ctx)) {
                 try {
                     if (!isFallbackEnabled || !shouldExecuteFallback(this@KAction.executeException!!, this@KAction.executeCause!!)) {
                         val e = ActionFallbackException()
@@ -148,13 +227,15 @@ abstract class KAction<IN, OUT> : BaseObservableAction<IN, OUT>() {
 
                     this@KAction.fallbackCause = Throwables.getRootCause(this@KAction.fallbackException)
 
+                    if (isActionTimeout(this@KAction.fallbackCause!!)) {
+                        throw this@KAction.fallbackCause!!
+                    }
+
                     try {
                         handleException(this@KAction.fallbackException!!, this@KAction.fallbackCause!!, true)
                     } catch (e2: Throwable) {
                         throw e2
                     }
-                } finally {
-                    AbstractAction.contextLocal.remove()
                 }
             }.toObservable()
         }

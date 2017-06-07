@@ -25,9 +25,9 @@ abstract class KBlockingAction<IN, OUT> : BaseBlockingAction<IN, OUT>() {
 
     inner class Command(setter: HystrixCommand.Setter?) : HystrixCommand<OUT>(setter) {
         override fun run(): OUT {
-            return runBlocking {
-                AbstractAction.contextLocal.set(actionContext())
-
+            val actionContext = actionContext()
+            val result = runBlocking {
+                AbstractAction.contextLocal.set(actionContext)
                 try {
                     this@KBlockingAction.execute(request)
                 } catch (e: Throwable) {
@@ -39,8 +39,11 @@ abstract class KBlockingAction<IN, OUT> : BaseBlockingAction<IN, OUT>() {
                     }
 
                     this@KBlockingAction.executeCause = Throwables.getRootCause(this@KBlockingAction.executeException)
+                    if (isActionTimeout(this@KBlockingAction.executeCause!!)) {
+                        throw this@KBlockingAction.executeCause!!
+                    }
 
-                    if (shouldExecuteFallback(this@KBlockingAction.executeException!!, this@KBlockingAction.executeCause!!)) {
+                    if (isFallbackEnabled && shouldExecuteFallback(this@KBlockingAction.executeException!!, this@KBlockingAction.executeCause!!)) {
                         throw this@KBlockingAction.executeException!!
                     } else {
                         handleException(this@KBlockingAction.executeException!!, this@KBlockingAction.executeCause!!, false)
@@ -49,11 +52,14 @@ abstract class KBlockingAction<IN, OUT> : BaseBlockingAction<IN, OUT>() {
                     AbstractAction.contextLocal.remove()
                 }
             }
+
+            return result
         }
 
         override fun getFallback(): OUT {
+            val actionContext = actionContext()
             return runBlocking {
-                AbstractAction.contextLocal.set(actionContext())
+                AbstractAction.contextLocal.set(actionContext)
                 try {
                     if (!isFallbackEnabled || !shouldExecuteFallback(this@KBlockingAction.executeException!!, this@KBlockingAction.executeCause!!)) {
                         val e = ActionFallbackException()
@@ -74,6 +80,9 @@ abstract class KBlockingAction<IN, OUT> : BaseBlockingAction<IN, OUT>() {
                     }
 
                     this@KBlockingAction.fallbackCause = Throwables.getRootCause(this@KBlockingAction.fallbackException)
+                    if (isActionTimeout(this@KBlockingAction.fallbackCause!!)) {
+                        throw this@KBlockingAction.fallbackCause!!
+                    }
 
                     try {
                         handleException(this@KBlockingAction.fallbackException!!, this@KBlockingAction.fallbackCause!!, true)

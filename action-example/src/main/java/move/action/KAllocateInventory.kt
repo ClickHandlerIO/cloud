@@ -14,14 +14,15 @@ constructor() :
     override fun isFallbackEnabled() = true
 
     suspend override fun execute(request: Request): Response {
-        delay(1500)
-        throw RuntimeException("Hahahaha")
-//        println(javaClass.simpleName + ": " + Thread.currentThread().name)
+        delay(500)
+        println(actionContext())
+//        throw IllegalArgumentException("Hahahaha")
+        println(javaClass.simpleName + ": " + Thread.currentThread().name)
 //        delay(4500)
 ////        Thread.sleep(4500L)
 //        println(javaClass.simpleName + ": " + Thread.currentThread().name)
 //
-//        return Response().apply { code = "Back At Cha!" }
+        return Response().apply { code = "Back At Cha!" }
     }
 
     suspend override fun handleException(caught: Throwable, cause: Throwable, isFallback: Boolean): Response {

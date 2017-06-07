@@ -22,6 +22,10 @@ suspend fun <A : Action<IN, OUT>, IN, OUT> InternalActionProvider<A, IN, OUT>.aw
     return this.single(request).await()
 }
 
+suspend fun <A : Action<IN, OUT>, IN, OUT> InternalActionProvider<A, IN, OUT>.awaitAsync(request: IN): OUT {
+    return this.singleAsync(request).await()
+}
+
 suspend fun <A : Action<IN, OUT>, IN, OUT> InternalActionProvider<A, IN, OUT>.await(data: Any?, request: IN): OUT {
     return this.single(data, request).await()
 }
@@ -105,8 +109,16 @@ fun <R> zip(ws: Iterable<Observable<R>>?): Observable<List<R>> {
     }
 }
 
-class VertxContextDispatcher(val ctx: Context) : CoroutineDispatcher() {
+class VertxContextDispatcher(val actionContext: ActionContext?, val ctx: Context) : CoroutineDispatcher() {
     override fun dispatch(context: CoroutineContext, block: Runnable) {
-        ctx.runOnContext { block.run() }
+        ctx.runOnContext {
+            // Scope Action Context
+            AbstractAction.contextLocal.set(actionContext)
+            try {
+                block.run()
+            } finally {
+                AbstractAction.contextLocal.remove()
+            }
+        }
     }
 }

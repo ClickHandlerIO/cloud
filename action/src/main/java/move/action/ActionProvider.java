@@ -361,6 +361,10 @@ public class ActionProvider<A, IN, OUT> {
     }
 
     protected A create() {
+        return create(false);
+    }
+
+    protected A create(boolean forceAsync) {
         // Create new Action instance.
         final A action = actionProvider.get();
 
@@ -371,7 +375,9 @@ public class ActionProvider<A, IN, OUT> {
             if (context == null) {
                 context = new ActionContext(timeoutMillis, this, io.vertx.core.Vertx.currentContext());
             }
-            ((AbstractAction) action).setContext(context);
+            final AbstractAction a = (AbstractAction) action;
+            a.setContext(context);
+            a.setForceAsync(forceAsync);
         } else {
             context = new ActionContext(timeoutMillis, this, io.vertx.core.Vertx.currentContext());
         }
@@ -521,5 +527,12 @@ public class ActionProvider<A, IN, OUT> {
                     );
                 }
             ).toObservable();
+    }
+
+    public Single<OUT> singleAsync(IN request) {
+        return observe0(
+            request,
+            create(true)
+        ).toSingle();
     }
 }

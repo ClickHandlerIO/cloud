@@ -21,4 +21,15 @@ public class ActionContext {
     public <T> T data() {
         return (T) data;
     }
+
+    @Override
+    public String toString() {
+        return "ActionContext{" +
+            "started=" + started +
+            ", timesOutAt=" + timesOutAt +
+            ", entry=" + entry + "[" + entry.getActionClass().getCanonicalName() + "]" +
+            ", context=" + context +
+            ", data=" + data +
+            '}';
+    }
 }

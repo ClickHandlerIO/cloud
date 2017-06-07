@@ -1,6 +1,7 @@
 package move.action;
 
 import com.netflix.hystrix.HystrixObservable;
+import io.vertx.rxjava.core.Vertx;
 import rx.Observable;
 import rx.Single;
 
@@ -12,6 +13,7 @@ public abstract class AbstractAction<IN, OUT> implements Action<IN, OUT> {
 
     private IN request;
     private ActionContext context;
+    private boolean forceAsync;
 
     public boolean isFallbackEnabled() {
         return false;
@@ -23,6 +25,22 @@ public abstract class AbstractAction<IN, OUT> implements Action<IN, OUT> {
 
     void setContext(ActionContext context) {
         this.context = context;
+    }
+
+    public boolean isForceAsync() {
+        return forceAsync;
+    }
+
+    void setForceAsync(boolean forceAsync) {
+        this.forceAsync = forceAsync;
+    }
+
+    public Vertx vertx() {
+        if (context == null) {
+            return null;
+        } else {
+            return context.entry.vertx;
+        }
     }
 
     /**

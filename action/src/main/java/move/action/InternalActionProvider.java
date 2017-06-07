@@ -86,4 +86,12 @@ public class InternalActionProvider<A extends Action<IN, OUT>, IN, OUT> extends 
             create()
         ).toSingle();
     }
+
+    /**
+     * @param request
+     * @return
+     */
+    public Single<OUT> singleParallel(final IN request) {
+        return singleAsync(request);
+    }
 }
