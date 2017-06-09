@@ -2,6 +2,7 @@ package move.action
 
 import com.google.common.base.Throwables
 import com.netflix.hystrix.HystrixObservableCommand
+import com.netflix.hystrix.exception.HystrixRuntimeException
 import com.netflix.hystrix.exception.HystrixTimeoutException
 import com.netflix.hystrix.isTimedOut
 import io.vertx.rxjava.core.WorkerExecutor
@@ -160,6 +161,8 @@ abstract class KAction<IN, OUT> : BaseAsyncAction<IN, OUT>() {
                     try {
                         recover(this@KAction.fallbackException!!, this@KAction.fallbackCause!!, true)
                     } catch (e2: Throwable) {
+                        if (e2 is HystrixRuntimeException && e2.cause != null)
+                            throw e2.cause!!
                         throw e2
                     }
                 }

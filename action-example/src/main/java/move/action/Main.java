@@ -9,6 +9,7 @@ import io.vertx.core.Handler;
 import io.vertx.rxjava.core.Future;
 import io.vertx.rxjava.core.Vertx;
 import move.Action_LocatorRoot;
+import move.action.model.DB;
 import move.cluster.HazelcastProvider;
 import org.apache.pdfbox.io.MemoryUsageSetting;
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -82,7 +83,7 @@ public class Main {
 
         ActionManager actionManager();
 
-        KAllocateInventoryBlockingProvider action1();
+        DB db();
 
 //        Set<? extends ActionProvider> actionProviders();
     }

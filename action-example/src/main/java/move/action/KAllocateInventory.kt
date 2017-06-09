@@ -1,7 +1,8 @@
 package move.action
 
+import com.google.common.base.Throwables
 import kotlinx.coroutines.experimental.delay
-import move.rx.MoreSingles
+import move.common.WireFormat
 import move.rx.ordered
 import move.rx.parallel
 import javax.inject.Inject
@@ -12,17 +13,29 @@ import javax.inject.Inject
 @ActionConfig(maxExecutionMillis = 1500000)
 @InternalAction
 class KAllocateInventory @Inject
-constructor(val allocate: javax.inject.Provider<Allocate>) :
+constructor() :
         KAction<KAllocateInventory.Request, KAllocateInventory.Reply>() {
     override fun isFallbackEnabled() = true
 
+    suspend override fun recover(caught: Throwable, cause: Throwable, isFallback: Boolean): Reply {
+        if (isFallback)
+            throw cause
+
+        return reply { code = cause.javaClass.simpleName }
+    }
+
     suspend override fun execute(request: Request): Reply {
+//        if (true) {
+//            throw RuntimeException("Hahahaha")
+//        }
+
         // Inline blocking block being run asynchronously
         val s = blocking {
-            println(javaClass.simpleName + ": WORKER = " + Thread.currentThread().name)
+            javaClass.simpleName + ": WORKER = " + Thread.currentThread().name
         }
+        println(s)
 
-        val zipped = MoreSingles.zip(
+        val blockingParallel = parallel(
                 worker {
                     delay(1000)
                     println("Worker 1")
@@ -37,22 +50,32 @@ constructor(val allocate: javax.inject.Provider<Allocate>) :
                     delay(1000)
                     println("Worker 3")
                     Thread.currentThread().name
-                },
+                }
+        )
+
+        println(blockingParallel)
+
+        val blockingOrdered = ordered(
                 worker {
                     delay(1000)
-                    println("Worker 4")
+                    println("Worker 1")
                     Thread.currentThread().name
                 },
                 worker {
                     delay(1000)
-                    println("Worker 5")
+                    println("Worker 2")
+                    Thread.currentThread().name
+                },
+                worker {
+                    delay(1000)
+                    println("Worker 3")
                     Thread.currentThread().name
                 }
         )
 
-        println(zipped)
+        println(blockingOrdered)
 
-        val asyncZipped =
+        val asyncParallel =
                 parallel(
                         single {
                             delay(1000)
@@ -68,20 +91,10 @@ constructor(val allocate: javax.inject.Provider<Allocate>) :
                             delay(1000)
                             println("Async 3")
                             Thread.currentThread().name
-                        },
-                        single {
-                            delay(1000)
-                            println("Async 4")
-                            Thread.currentThread().name
-                        },
-                        single {
-                            delay(1000)
-                            println("Async 5")
-                            Thread.currentThread().name
                         }
                 )
 
-        println(asyncZipped)
+        println(asyncParallel)
 
         val asyncOrdered = ordered(
                 single {
@@ -98,33 +111,27 @@ constructor(val allocate: javax.inject.Provider<Allocate>) :
                     delay(1000)
                     println("Async 3")
                     Thread.currentThread().name
-                },
-                single {
-                    delay(1000)
-                    println("Async 4")
-                    Thread.currentThread().name
-                },
-                single {
-                    delay(1000)
-                    println("Async 5")
-                    Thread.currentThread().name
                 }
         )
 
         println(asyncOrdered)
+
+
+        val x = WireFormat.parse(Reply::class.java, "{\"code\":\"TEST\"}")
+        println(x)
 
         return reply {
             code = "Back At Cha!"
         }
     }
 
-    suspend override fun recover(caught: Throwable, cause: Throwable, isFallback: Boolean): Reply {
-        return reply { code = cause.javaClass.simpleName }
-    }
-
     class Request @Inject constructor()
 
     class Reply @Inject constructor() {
         var code: String? = null
+
+        override fun toString(): String {
+            return "Reply(code=$code)"
+        }
     }
 }

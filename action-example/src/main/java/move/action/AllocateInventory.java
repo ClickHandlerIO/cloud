@@ -11,7 +11,7 @@ import javax.inject.Inject;
 //@RemoteAction(path = "/some/path")
 public class AllocateInventory extends AbstractAsyncAction<String, String> {
     @Inject
-    AllocateProvider allocateProviderr;
+    AllocateAction allocateProviderr;
 
     @Inject
     public AllocateInventory() {

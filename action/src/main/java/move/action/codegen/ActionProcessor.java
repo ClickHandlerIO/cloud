@@ -415,7 +415,7 @@ public class ActionProcessor extends AbstractProcessor {
 
 
                 // Init Class.
-                final TypeSpec.Builder providerType = TypeSpec.classBuilder(action.type.getSimpleName() + "Provider")
+                final TypeSpec.Builder providerType = TypeSpec.classBuilder(action.type.getSimpleName() + "Action")
                     .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                     .superclass(actionProviderBuilder)
                     .addAnnotation(Singleton.class);
