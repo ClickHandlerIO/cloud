@@ -3,7 +3,9 @@ package move.action;
 /**
  *
  */
-public abstract class AbstractScheduledAction extends AbstractObservableAction<Object, Object> {
+public abstract class AbstractScheduledAction extends AbstractAsyncAction<Object, Object> {
+    public static final Object RESULT = new Object();
+
     public AbstractScheduledAction() {
     }
 
@@ -15,6 +17,6 @@ public abstract class AbstractScheduledAction extends AbstractObservableAction<O
     protected abstract void start();
 
     protected void done() {
-        respond(null);
+        respond(RESULT);
     }
 }

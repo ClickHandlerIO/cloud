@@ -69,11 +69,9 @@ public class RemoteActionProvider<A extends Action<IN, OUT>, IN, OUT> extends Ac
     public Observable<OUT> observe(final Object data, final IN request) {
         final A action = create(request);
 
-        if (action instanceof AbstractAction) {
-            final ActionContext actionContext = ((AbstractAction)action).actionContext();
-            if (actionContext != null) {
-                actionContext.data = data;
-            }
+        final ActionContext actionContext = action.actionContext();
+        if (actionContext != null) {
+            actionContext.data = data;
         }
 
         return observe0(

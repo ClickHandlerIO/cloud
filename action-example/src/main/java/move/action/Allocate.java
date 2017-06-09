@@ -9,12 +9,9 @@ import javax.inject.Inject;
  */
 @InternalAction
 //@RemoteAction(path = "/some/path")
-public class AllocateInventory extends AbstractAsyncAction<String, String> {
+public class Allocate extends AbstractAsyncAction<String, String> {
     @Inject
-    AllocateProvider allocateProviderr;
-
-    @Inject
-    public AllocateInventory() {
+    public Allocate() {
     }
 
     @Override

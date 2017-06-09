@@ -40,6 +40,12 @@
             <artifactId>dagger</artifactId>
         </dependency>
         <!--<dependency>-->
+            <!--<groupId>org.projectlombok</groupId>-->
+            <!--<artifactId>lombok</artifactId>-->
+            <!--<version>1.16.16</version>-->
+            <!--<scope>provided</scope>-->
+        <!--</dependency>-->
+        <!--<dependency>-->
         <!--<groupId>com.google.dagger</groupId>-->
         <!--<artifactId>dagger-compiler</artifactId>-->
         <!--</dependency>-->
@@ -55,10 +61,6 @@
             <groupId>io.clickhandler</groupId>
             <artifactId>sql</artifactId>
         </dependency>
-        <!--<dependency>-->
-        <!--<groupId>io.clickhandler</groupId>-->
-        <!--<artifactId>action-compiler</artifactId>-->
-        <!--</dependency>-->
         <dependency>
             <groupId>com.netflix.hystrix</groupId>
             <artifactId>hystrix-core</artifactId>
@@ -70,17 +72,6 @@
         <dependency>
             <groupId>com.amazonaws</groupId>
             <artifactId>amazon-sqs-java-extended-client-lib</artifactId>
-        </dependency>
-
-        <!-- Auto service annotation processor -->
-        <dependency>
-            <groupId>com.squareup</groupId>
-            <artifactId>javapoet</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.google.auto.service</groupId>
-            <artifactId>auto-service</artifactId>
-            <optional>true</optional>
         </dependency>
 
         <dependency>
@@ -98,6 +89,27 @@
             <groupId>org.jetbrains.kotlinx</groupId>
             <artifactId>kotlinx-coroutines-rx1</artifactId>
             <version>${kotlinx-coroutines.version}</version>
+        </dependency>
+
+        <!--<dependency>-->
+        <!--<groupId>com.sun</groupId>-->
+        <!--<artifactId>tools</artifactId>-->
+        <!--<scope>system</scope>-->
+        <!--<version>1</version>-->
+        <!--<systemPath>${java.home}/../lib/tools.jar</systemPath>-->
+        <!--</dependency>-->
+
+        <!--<dependency>-->
+        <!--<groupId>org.projectlombok</groupId>-->
+        <!--<artifactId>lombok</artifactId>-->
+        <!--<version>1.16.8</version>-->
+        <!--<scope>provided</scope>-->
+        <!--</dependency>-->
+
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>2.0.6</version>
         </dependency>
 
         <dependency>

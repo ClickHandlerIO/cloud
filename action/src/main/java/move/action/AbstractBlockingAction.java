@@ -12,7 +12,7 @@ public abstract class AbstractBlockingAction<IN, OUT>
     private final AtomicReference<HystrixCommand<OUT>> command = new AtomicReference<>();
     private HystrixCommand.Setter setter;
 
-    void setCommandSetter(HystrixCommand.Setter setter) {
+    void configureCommand(HystrixCommand.Setter setter) {
         this.setter = setter;
     }
 
@@ -43,7 +43,7 @@ public abstract class AbstractBlockingAction<IN, OUT>
     /**
      * @return
      */
-    protected final HystrixCommand<OUT> getCommand() {
+    public final HystrixCommand<OUT> command() {
         final HystrixCommand<OUT> existing = command.get();
         if (existing != null) {
             return existing;

@@ -12,9 +12,8 @@ import java.util.function.Consumer;
 /**
  * @author Clay Molocznik
  */
-public abstract class AbstractObservableAction<IN, OUT>
-    extends BaseObservableAction<IN, OUT>
-    implements ObservableAction<IN, OUT> {
+public abstract class AbstractAsyncAction<IN, OUT>
+    extends BaseAsyncAction<IN, OUT> {
 
     private HystrixObservableCommand<OUT> command;
     private HystrixObservableCommand.Setter setter;
@@ -30,7 +29,7 @@ public abstract class AbstractObservableAction<IN, OUT>
         return setter;
     }
 
-    void setCommandSetter(HystrixObservableCommand.Setter setter) {
+    void configureCommand(HystrixObservableCommand.Setter setter) {
         this.setter = setter;
     }
 
@@ -41,7 +40,7 @@ public abstract class AbstractObservableAction<IN, OUT>
         return new HystrixObservableCommand<OUT>(getCommandSetter()) {
             @Override
             protected Observable<OUT> construct() {
-                return AbstractObservableAction.this.construct();
+                return AbstractAsyncAction.this.construct();
             }
 
             @Override
@@ -103,7 +102,7 @@ public abstract class AbstractObservableAction<IN, OUT>
     /**
      * @return
      */
-    protected final HystrixObservableCommand<OUT> getCommand() {
+    final HystrixObservableCommand<OUT> command() {
         if (command != null) {
             return command;
         }
@@ -168,27 +167,5 @@ public abstract class AbstractObservableAction<IN, OUT>
         } catch (Exception e) {
             subscriber.onError(e);
         }
-    }
-
-    @Deprecated
-    protected <A extends Action<I, O>, I, O> Observable<O> pipe(ActionProvider<A, I, O> provider,
-                                                                Consumer<I> inCallback) {
-        final I in = provider.getInProvider().get();
-        if (inCallback != null) inCallback.accept(in);
-        return observe(provider, in);
-    }
-
-    @Deprecated
-    protected <A extends Action<I, O>, I, O> Observable<O> observeWithSupplier(ActionProvider<A, I, O> provider,
-                                                                               Consumer<I> inCallback) {
-        final I in = provider.getInProvider().get();
-        if (inCallback != null) inCallback.accept(in);
-        return observe(provider, in);
-    }
-
-    @Deprecated
-    protected <A extends Action<I, O>, I, O> Observable<O> observe(ActionProvider<A, I, O> provider,
-                                                                   I in) {
-        return provider.observe(in);
     }
 }

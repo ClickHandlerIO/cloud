@@ -3,7 +3,7 @@ package move.action;
 /**
  *
  */
-public abstract class AbstractWorkerAction<T> extends AbstractObservableAction<T, Boolean> {
+public abstract class AbstractWorkerAction<T> extends AbstractAsyncAction<T, Boolean> {
     public AbstractWorkerAction() {
     }
 

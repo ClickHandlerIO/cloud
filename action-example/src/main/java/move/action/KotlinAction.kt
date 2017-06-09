@@ -2,6 +2,7 @@ package move.action
 
 import io.vertx.core.VertxOptions
 import io.vertx.rxjava.core.Vertx
+import kotlinx.coroutines.experimental.Unconfined
 import kotlinx.coroutines.experimental.async
 import move.sql.SqlDatabase
 
@@ -22,7 +23,7 @@ object KotlinAction {
 //            println("Dispatched")
 //            println(Thread.currentThread().name)
 //        })
-
+//
 //        vertx.runOnContext {
 //            async(VertxContextDispatcher(Vertx.currentContext())) {
 //                try {
@@ -52,8 +53,9 @@ object KotlinAction {
 //            }
 //        }
 
-        async(VertxContextDispatcher(null, vertx.orCreateContext)) {
-            Main.actions().kAllocateInventoryBlocking.await(KAllocateInventoryBlocking.Request())
+        async(Unconfined) {
+//            Main.actions().kAllocateInventoryBlocking.await(KAllocateInventoryBlocking.Request())
+            Main.actions().kAllocateInventory.observe(KAllocateInventory.Request()).subscribe()
 
 //            try {
 //                val result = Single.zip(

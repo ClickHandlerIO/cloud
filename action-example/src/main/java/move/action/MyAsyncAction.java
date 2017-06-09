@@ -7,7 +7,7 @@ import javax.inject.Inject;
  */
 @InternalAction
 @ActionConfig(maxExecutionMillis = 500)
-public class MyAsyncAction extends AbstractObservableAction<String, String> {
+public class MyAsyncAction extends AbstractAsyncAction<String, String> {
     @Inject
     public MyAsyncAction() {
     }

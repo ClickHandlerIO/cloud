@@ -1,42 +1,126 @@
 package move.action
 
+import kotlinx.coroutines.experimental.CoroutineScope
 import kotlinx.coroutines.experimental.delay
+import kotlinx.coroutines.experimental.rx1.await
+import move.rx.MoreSingles.zip
 import javax.inject.Inject
 
 /**
  *
  */
-@ActionConfig(maxExecutionMillis = 1000)
+@ActionConfig(maxExecutionMillis = 1500000)
 @InternalAction
 class KAllocateInventory @Inject
-constructor() :
-        KAction<KAllocateInventory.Request, KAllocateInventory.Response>() {
+constructor(val allocate: javax.inject.Provider<Allocate>) :
+        KAction<KAllocateInventory.Request, KAllocateInventory.Reply>() {
     override fun isFallbackEnabled() = true
 
-    suspend override fun execute(request: Request): Response {
-        delay(500)
-        println(actionContext())
-//        throw IllegalArgumentException("Hahahaha")
-        println(javaClass.simpleName + ": " + Thread.currentThread().name)
-//        delay(4500)
-////        Thread.sleep(4500L)
-//        println(javaClass.simpleName + ": " + Thread.currentThread().name)
-//
-        return Response().apply { code = "Back At Cha!" }
+    suspend override fun execute(request: Request): Reply {
+        // Inline blocking block being run asynchronously
+        val s = blocking {
+            println(javaClass.simpleName + ": WORKER = " + Thread.currentThread().name)
+        }
+
+        val zipped = zip(
+                worker {
+                    delay(1000)
+                    println("Worker 1")
+                    Thread.currentThread().name
+                },
+                worker {
+                    delay(1000)
+                    println("Worker 2")
+                    Thread.currentThread().name
+                },
+                worker {
+                    delay(1000)
+                    println("Worker 3")
+                    Thread.currentThread().name
+                },
+                worker {
+                    delay(1000)
+                    println("Worker 4")
+                    Thread.currentThread().name
+                },
+                worker {
+                    delay(1000)
+                    println("Worker 5")
+                    Thread.currentThread().name
+                }
+        ).await()
+
+        println(zipped)
+
+        val or =
+                ordered(
+                        single {
+                            delay(1000)
+                            println("Async 1")
+                            Thread.currentThread().name
+                        },
+                        single {
+                            delay(1000)
+                            println("Async 2")
+                            Thread.currentThread().name
+                        },
+                        single {
+                            delay(1000)
+                            println("Async 3")
+                            Thread.currentThread().name
+                        },
+                        single {
+                            delay(1000)
+                            println("Async 4")
+                            Thread.currentThread().name
+                        },
+                        single {
+                            delay(1000)
+                            println("Async 5")
+                            Thread.currentThread().name
+                        }
+                )
+
+        println(ordered(
+                single {
+                    delay(1000)
+                    println("Async 1")
+                    Thread.currentThread().name
+                },
+                single {
+                    delay(1000)
+                    println("Async 2")
+                    Thread.currentThread().name
+                },
+                single {
+                    delay(1000)
+                    println("Async 3")
+                    Thread.currentThread().name
+                },
+                single {
+                    delay(1000)
+                    println("Async 4")
+                    Thread.currentThread().name
+                },
+                single {
+                    delay(1000)
+                    println("Async 5")
+                    Thread.currentThread().name
+                }
+        ))
+
+        return reply {
+            code = "Back At Cha!"
+        }
     }
 
-    suspend override fun handleException(caught: Throwable, cause: Throwable, isFallback: Boolean): Response {
-//        throw cause
-        return Response().apply { code = cause.javaClass.simpleName }
+    suspend override fun recover(caught: Throwable, cause: Throwable, isFallback: Boolean): Reply {
+        return reply { code = cause.javaClass.simpleName }
     }
 
     class Request @Inject constructor()
 
-    class Response @Inject constructor() {
+    class Reply @Inject constructor() {
         var code: String? = null
-
-        override fun toString(): String {
-            return "Response(code=$code)"
-        }
     }
 }

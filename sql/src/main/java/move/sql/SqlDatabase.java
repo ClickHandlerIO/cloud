@@ -23,7 +23,7 @@ import io.vertx.core.Handler;
 import io.vertx.rxjava.core.Vertx;
 import javaslang.Tuple2;
 import javaslang.control.Try;
-import move.action.AbstractAction;
+import move.action.Action;
 import move.action.ActionContext;
 import move.action.ActionProvider;
 import move.common.Metrics;
@@ -1436,12 +1436,12 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                         }
 
                         if (actionContext != null) {
-                            AbstractAction.contextLocal.set(actionContext);
+                            Action.contextLocal.set(actionContext);
                             try {
                                 subscriber.onNext(r);
                                 subscriber.onCompleted();
                             } finally {
-                                AbstractAction.contextLocal.remove();
+                                Action.contextLocal.remove();
                             }
                         } else {
                             subscriber.onNext(r);
@@ -1456,11 +1456,11 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                         }
 
                         if (actionContext != null) {
-                            AbstractAction.contextLocal.set(actionContext);
+                            Action.contextLocal.set(actionContext);
                             try {
                                 subscriber.onError(e);
                             } finally {
-                                AbstractAction.contextLocal.remove();
+                                Action.contextLocal.remove();
                             }
                         } else {
                             subscriber.onError(e);
@@ -1518,12 +1518,12 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                         }
 
                         if (actionContext != null) {
-                            AbstractAction.contextLocal.set(actionContext);
+                            Action.contextLocal.set(actionContext);
                             try {
                                 subscriber.onNext(r);
                                 subscriber.onCompleted();
                             } finally {
-                                AbstractAction.contextLocal.remove();
+                                Action.contextLocal.remove();
                             }
                         } else {
                             subscriber.onNext(r);
@@ -1538,11 +1538,11 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                         }
 
                         if (actionContext != null) {
-                            AbstractAction.contextLocal.set(actionContext);
+                            Action.contextLocal.set(actionContext);
                             try {
                                 subscriber.onError(e);
                             } finally {
-                                AbstractAction.contextLocal.remove();
+                                Action.contextLocal.remove();
                             }
                         } else {
                             subscriber.onError(e);

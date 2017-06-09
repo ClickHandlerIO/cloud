@@ -16,12 +16,15 @@ import java.util.function.Consumer;
  *
  * @author Clay Molocznik
  */
-public class ActionProvider<A, IN, OUT> {
+public class ActionProvider<A extends Action<IN, OUT>, IN, OUT> {
     static final int DEFAULT_TIMEOUT_MILLIS = 5000;
     static final int MIN_TIMEOUT_MILLIS = 200;
 
-    private final HystrixCommandProperties.Setter commandPropertiesDefaults = HystrixCommandProperties.Setter();
-    private final HystrixThreadPoolProperties.Setter threadPoolPropertiesDefaults = HystrixThreadPoolProperties.Setter();
+    private final HystrixCommandProperties.Setter commandPropertiesDefaults =
+        HystrixCommandProperties.Setter();
+    private final HystrixThreadPoolProperties.Setter threadPoolPropertiesDefaults =
+        HystrixThreadPoolProperties.Setter();
+
     @Inject
     Vertx vertx;
     private io.vertx.core.Vertx vertxCore;
@@ -50,7 +53,7 @@ public class ActionProvider<A, IN, OUT> {
     }
 
     public static ActionContext current() {
-        return AbstractAction.contextLocal.get();
+        return Action.currentContext();
     }
 
     public ActionConfig getActionConfig() {
@@ -82,13 +85,16 @@ public class ActionProvider<A, IN, OUT> {
     public void setExecutionTimeoutEnabled(boolean enabled) {
         commandPropertiesDefaults.withExecutionTimeoutEnabled(enabled);
 
-        if (!inited)
+        if (!inited) {
             init();
+        }
 
-        if (defaultObservableSetter != null)
+        if (defaultObservableSetter != null) {
             defaultObservableSetter.andCommandPropertiesDefaults(commandPropertiesDefaults);
-        else if (defaultSetter != null)
+        }
+        else if (defaultSetter != null) {
             defaultSetter.andCommandPropertiesDefaults(commandPropertiesDefaults);
+        }
     }
 
     public long getTimeoutMillis() {
@@ -103,8 +109,12 @@ public class ActionProvider<A, IN, OUT> {
     void setInProvider(@Nullable Provider<IN> inProvider) {
         this.inProvider = inProvider;
         this.inSet = true;
-        final IN in = inProvider != null ? inProvider.get() : null;
-        this.inClass = in != null ? (Class<IN>) in.getClass() : null;
+        final IN in = inProvider != null
+                      ? inProvider.get()
+                      : null;
+        this.inClass = in != null
+                       ? (Class<IN>) in.getClass()
+                       : null;
 
         if (actionProvider != null && outSet) {
             init();
@@ -119,8 +129,12 @@ public class ActionProvider<A, IN, OUT> {
     void setOutProvider(@Nullable Provider<OUT> outProvider) {
         this.outProvider = outProvider;
         this.outSet = true;
-        final OUT out = outProvider != null ? outProvider.get() : null;
-        this.outClass = out != null ? (Class<OUT>) out.getClass() : null;
+        final OUT out = outProvider != null
+                        ? outProvider.get()
+                        : null;
+        this.outClass = out != null
+                        ? (Class<OUT>) out.getClass()
+                        : null;
 
         if (actionProvider != null && inSet) {
             init();
@@ -151,7 +165,9 @@ public class ActionProvider<A, IN, OUT> {
         // Get default config.
         actionConfig = actionClass.getAnnotation(ActionConfig.class);
 
-        final String groupKey = actionConfig != null ? actionConfig.groupKey() : "";
+        final String groupKey = actionConfig != null
+                                ? actionConfig.groupKey()
+                                : "";
 
         this.groupKey = HystrixCommandGroupKey.Factory.asKey(groupKey);
         this.threadPoolKey = HystrixThreadPoolKey.Factory.asKey(groupKey);
@@ -162,7 +178,8 @@ public class ActionProvider<A, IN, OUT> {
         if (actionConfig != null) {
             if (actionConfig.maxExecutionMillis() == 0) {
                 timeoutMillis = 0;
-            } else if (actionConfig.maxExecutionMillis() > 0) {
+            }
+            else if (actionConfig.maxExecutionMillis() > 0) {
                 timeoutMillis = actionConfig.maxExecutionMillis();
             }
         }
@@ -174,7 +191,8 @@ public class ActionProvider<A, IN, OUT> {
             if (timeoutMillis < 100) {
                 // Looks like somebody decided to put seconds instead of milliseconds.
                 timeoutMillis = timeoutMillis * 1000;
-            } else if (timeoutMillis < 1000) {
+            }
+            else if (timeoutMillis < 1000) {
                 timeoutMillis = DEFAULT_TIMEOUT_MILLIS;
             }
 
@@ -187,10 +205,10 @@ public class ActionProvider<A, IN, OUT> {
 
         // Default isolation strategy.
         final ExecutionIsolationStrategy isolationStrategy = actionConfig != null
-            ? actionConfig.isolationStrategy()
-            : ExecutionIsolationStrategy.BEST;
+                                                             ? actionConfig.isolationStrategy()
+                                                             : ExecutionIsolationStrategy.BEST;
 
-        if (ObservableAction.class.isAssignableFrom(actionClass)) {
+        if (BaseAsyncAction.class.isAssignableFrom(actionClass)) {
             // Determine Hystrix isolation strategy.
             HystrixCommandProperties.ExecutionIsolationStrategy hystrixIsolation;
             switch (isolationStrategy) {
@@ -230,8 +248,8 @@ public class ActionProvider<A, IN, OUT> {
         }
 
 
-        // Is it a blocking action?
-        else if (AbstractBlockingAction.class.isAssignableFrom(actionClass)) {
+        // Otherwise, treat it as a standard blocking command.
+        else {
             HystrixCommandProperties.ExecutionIsolationStrategy hystrixIsolation;
             switch (isolationStrategy) {
                 case SEMAPHORE:
@@ -256,10 +274,11 @@ public class ActionProvider<A, IN, OUT> {
 
             if (threadPoolConfig == null) {
                 threadPoolPropertiesDefaults
-                    .withCoreSize(10)
+                    .withCoreSize(0)
                     .withAllowMaximumSizeToDivergeFromCoreSize(true)
                     .withMaximumSize(25);
-            } else {
+            }
+            else {
                 threadPoolPropertiesDefaults
                     .withCoreSize(threadPoolConfig.coreSize())
                     .withAllowMaximumSizeToDivergeFromCoreSize(true)
@@ -289,11 +308,6 @@ public class ActionProvider<A, IN, OUT> {
             return HystrixCommandProperties.ExecutionIsolationStrategy.THREAD;
         }
 
-        // Default Worker Actions to run in thread pools.
-        else if (AbstractBlockingWorkerAction.class.isAssignableFrom(actionClass)) {
-            return HystrixCommandProperties.ExecutionIsolationStrategy.THREAD;
-        }
-
         // Default non-blocking remote and internal Actions to run on the calling thread (vertx event loop).
         else {
             return HystrixCommandProperties.ExecutionIsolationStrategy.SEMAPHORE;
@@ -302,16 +316,18 @@ public class ActionProvider<A, IN, OUT> {
 
     protected String commandKey(ActionConfig config, Class actionClass) {
         if (config != null) {
-            if (config.commandKey().isEmpty())
+            if (config.commandKey().isEmpty()) {
                 return actionClass.getName();
-            else
+            }
+            else {
                 return config.commandKey();
+            }
         }
 
         return actionClass.getName();
     }
 
-    protected <A> void setCommandSetter(A action, ActionContext context) {
+    protected void configureCommand(A action, ActionContext context) {
         // Calculate max execution millis.
         long maxMillis = timeoutMillis;
         final long now = System.currentTimeMillis();
@@ -322,37 +338,33 @@ public class ActionProvider<A, IN, OUT> {
             maxMillis = MIN_TIMEOUT_MILLIS;
         }
 
-        boolean fallbackEnabled = false;
-        if (action instanceof AbstractAction) {
-            fallbackEnabled = ((AbstractAction) action).isFallbackEnabled();
-        }
-
         // Clone command properties from default and adjust the timeout.
         final HystrixCommandProperties.Setter commandProperties = HystrixCommandProperties.Setter()
             .withExecutionIsolationStrategy(commandPropertiesDefaults.getExecutionIsolationStrategy())
             .withExecutionTimeoutEnabled(true)
             .withExecutionTimeoutInMilliseconds((int) maxMillis)
-            .withFallbackEnabled(fallbackEnabled)
+            .withFallbackEnabled(action.isFallbackEnabled())
             .withExecutionIsolationThreadInterruptOnFutureCancel(true)
             .withExecutionIsolationThreadInterruptOnTimeout(true)
             .withRequestCacheEnabled(false)
             .withRequestLogEnabled(false);
 
         if (action instanceof BaseBlockingAction) {
-            ((BaseBlockingAction) action).setCommandSetter(HystrixCommand.Setter
+            ((BaseBlockingAction) action).configureCommand(HystrixCommand.Setter
                 .withGroupKey(groupKey)
                 .andCommandKey(commandKey)
                 .andCommandPropertiesDefaults(commandProperties)
                 .andThreadPoolKey(threadPoolKey)
                 .andThreadPoolPropertiesDefaults(threadPoolPropertiesDefaults)
             );
-        } else if (action instanceof BaseObservableAction) {
+        }
+        else if (action instanceof BaseAsyncAction) {
             if (commandPropertiesDefaults.getExecutionIsolationSemaphoreMaxConcurrentRequests() != null) {
                 commandProperties.withExecutionIsolationSemaphoreMaxConcurrentRequests(commandPropertiesDefaults.getExecutionIsolationSemaphoreMaxConcurrentRequests());
                 commandProperties.withFallbackIsolationSemaphoreMaxConcurrentRequests(commandPropertiesDefaults.getExecutionIsolationSemaphoreMaxConcurrentRequests());
             }
 
-            ((BaseObservableAction) action).setCommandSetter(HystrixObservableCommand.Setter
+            ((BaseAsyncAction) action).configureCommand(HystrixObservableCommand.Setter
                 .withGroupKey(groupKey)
                 .andCommandKey(commandKey)
                 .andCommandPropertiesDefaults(commandProperties)
@@ -361,29 +373,18 @@ public class ActionProvider<A, IN, OUT> {
     }
 
     protected A create() {
-        return create(false);
-    }
-
-    protected A create(boolean forceAsync) {
         // Create new Action instance.
         final A action = actionProvider.get();
 
         // Get or create ActionContext.
-        ActionContext context;
-        if (action instanceof AbstractAction) {
-            context = AbstractAction.contextLocal.get();
-            if (context == null) {
-                context = new ActionContext(timeoutMillis, this, io.vertx.core.Vertx.currentContext());
-            }
-            final AbstractAction a = (AbstractAction) action;
-            a.setContext(context);
-            a.setForceAsync(forceAsync);
-        } else {
+        ActionContext context = Action.contextLocal.get();
+        if (context == null) {
             context = new ActionContext(timeoutMillis, this, io.vertx.core.Vertx.currentContext());
         }
+        action.init(vertx, context, inProvider, outProvider);
 
         // Set the command setter.
-        setCommandSetter(action, context);
+        configureCommand(action, context);
 
         // Return action instance.
         return action;
@@ -395,7 +396,16 @@ public class ActionProvider<A, IN, OUT> {
     public OUT execute(final Try.CheckedConsumer<IN> callable) {
         final IN in = inProvider.get();
         Try.run(() -> callable.accept(in));
-        return execute(in);
+        return waitForResponse(in);
+    }
+
+    /**
+     * @return
+     */
+    public OUT waitForResponse(final Try.CheckedConsumer<IN> callable) {
+        final IN in = inProvider.get();
+        Try.run(() -> callable.accept(in));
+        return waitForResponse(in);
     }
 
     /**
@@ -404,10 +414,7 @@ public class ActionProvider<A, IN, OUT> {
      */
     public A create(final IN request) {
         A action = create();
-
-        final AbstractAction<IN, OUT> abstractAction = (AbstractAction<IN, OUT>) action;
-        abstractAction.setRequest(request);
-
+        action.setRequest(request);
         return action;
     }
 
@@ -415,13 +422,31 @@ public class ActionProvider<A, IN, OUT> {
      * @param request
      * @return
      */
+    @Deprecated
     public OUT execute(final IN request) {
         try {
             return observe0(
                 request,
                 create()
             ).toBlocking().toFuture().get();
-        } catch (Throwable e) {
+        }
+        catch (Throwable e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * @param request
+     * @return
+     */
+    public OUT waitForResponse(final IN request) {
+        try {
+            return observe0(
+                request,
+                create()
+            ).toBlocking().toFuture().get();
+        }
+        catch (Throwable e) {
             throw new RuntimeException(e);
         }
     }
@@ -451,16 +476,34 @@ public class ActionProvider<A, IN, OUT> {
     }
 
     /**
+     * @param request
+     */
+    public void fireAndForget(final IN request) {
+        observe(request).subscribe();
+    }
+
+    /**
+     * @param callback
+     * @return
+     */
+    public void fireAndForget(final Consumer<IN> callback) {
+        final IN in = inProvider.get();
+        if (callback != null) {
+            callback.accept(in);
+        }
+        observe(in).subscribe();
+    }
+
+    /**
      * @param request\
      */
     protected Observable<OUT> observe0(
         final IN request,
         final A action) {
-        final AbstractAction<IN, OUT> abstractAction;
         try {
-            abstractAction = (AbstractAction<IN, OUT>) action;
-            abstractAction.setRequest(request);
-        } catch (Exception e) {
+            action.setRequest(request);
+        }
+        catch (Exception e) {
             // Ignore.
             return Observable.error(e);
         }
@@ -469,70 +512,73 @@ public class ActionProvider<A, IN, OUT> {
             Single.<OUT>create(
                 subscriber -> {
                     // Build observable.
-                    final Observable<OUT> observable = abstractAction.toObservable();
+                    final Observable<OUT> observable = action.toObservable();
                     final io.vertx.core.Context ctx = io.vertx.core.Vertx.currentContext();
-                    final ActionContext actionContext = abstractAction.actionContext();
+                    final ActionContext actionContext = action.actionContext();
 
                     observable.subscribe(
                         r -> {
-                            if (subscriber.isUnsubscribed())
+                            if (subscriber.isUnsubscribed()) {
                                 return;
+                            }
 
-                            if (ctx != null) {
+                            if (ctx != null && Vertx.currentContext() != ctx) {
                                 ctx.runOnContext(a -> {
-                                    if (subscriber.isUnsubscribed())
+                                    if (subscriber.isUnsubscribed()) {
                                         return;
+                                    }
 
-                                    AbstractAction.contextLocal.set(actionContext);
+                                    Action.contextLocal.set(actionContext);
                                     try {
                                         subscriber.onSuccess(r);
-                                    } finally {
-                                        AbstractAction.contextLocal.remove();
+                                    }
+                                    finally {
+                                        Action.contextLocal.remove();
                                     }
                                 });
-                            } else {
-                                AbstractAction.contextLocal.set(actionContext);
+                            }
+                            else {
+                                Action.contextLocal.set(actionContext);
                                 try {
                                     subscriber.onSuccess(r);
-                                } finally {
-                                    AbstractAction.contextLocal.remove();
+                                }
+                                finally {
+                                    Action.contextLocal.remove();
                                 }
                             }
                         },
                         e -> {
-                            if (subscriber.isUnsubscribed())
+                            if (subscriber.isUnsubscribed()) {
                                 return;
+                            }
 
-                            if (ctx != null) {
+                            if (ctx != null && Vertx.currentContext() != ctx) {
                                 ctx.runOnContext(a -> {
-                                    if (subscriber.isUnsubscribed())
+                                    if (subscriber.isUnsubscribed()) {
                                         return;
+                                    }
 
-                                    AbstractAction.contextLocal.set(actionContext);
+                                    Action.contextLocal.set(actionContext);
                                     try {
                                         subscriber.onError(e);
-                                    } finally {
-                                        AbstractAction.contextLocal.remove();
+                                    }
+                                    finally {
+                                        Action.contextLocal.remove();
                                     }
                                 });
-                            } else {
-                                AbstractAction.contextLocal.set(actionContext);
+                            }
+                            else {
+                                Action.contextLocal.set(actionContext);
                                 try {
                                     subscriber.onError(e);
-                                } finally {
-                                    AbstractAction.contextLocal.remove();
+                                }
+                                finally {
+                                    Action.contextLocal.remove();
                                 }
                             }
                         }
                     );
                 }
             ).toObservable();
-    }
-
-    public Single<OUT> singleAsync(IN request) {
-        return observe0(
-            request,
-            create(true)
-        ).toSingle();
     }
 }

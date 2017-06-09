@@ -24,3 +24,10 @@ out/*
 
 # NPM
 node_modules
+
+
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/captures

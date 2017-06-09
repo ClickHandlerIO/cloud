@@ -48,8 +48,8 @@ public class InternalActionProvider<A extends Action<IN, OUT>, IN, OUT> extends 
     public Observable<OUT> observe(final Object data, final IN request) {
         final A action = create(request);
 
-        if (action instanceof AbstractAction) {
-            final ActionContext actionContext = ((AbstractAction)action).actionContext();
+        if (action instanceof Action) {
+            final ActionContext actionContext = ((Action)action).actionContext();
             if (actionContext != null) {
                 actionContext.data = data;
             }
@@ -85,13 +85,5 @@ public class InternalActionProvider<A extends Action<IN, OUT>, IN, OUT> extends 
             request,
             create()
         ).toSingle();
-    }
-
-    /**
-     * @param request
-     * @return
-     */
-    public Single<OUT> singleParallel(final IN request) {
-        return singleAsync(request);
     }
 }

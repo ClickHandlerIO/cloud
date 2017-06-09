@@ -48,6 +48,11 @@
             <artifactId>action</artifactId>
         </dependency>
         <!--<dependency>-->
+            <!--<groupId>io.reactivex</groupId>-->
+            <!--<artifactId>rxkotlin</artifactId>-->
+            <!--<version>1.0.0</version>-->
+        <!--</dependency>-->
+        <!--<dependency>-->
         <!--<groupId>io.clickhandler</groupId>-->
         <!--<artifactId>action-compiler</artifactId>-->
         <!--</dependency>-->

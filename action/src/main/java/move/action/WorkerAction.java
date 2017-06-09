@@ -21,4 +21,10 @@ public @interface WorkerAction {
      * @return
      */
     boolean fifo() default false;
+
+    /**
+     *
+     * @return
+     */
+    boolean buffered() default false;
 }
