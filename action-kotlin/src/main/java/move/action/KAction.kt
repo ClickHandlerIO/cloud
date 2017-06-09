@@ -8,7 +8,6 @@ import io.vertx.rxjava.core.WorkerExecutor
 import kotlinx.coroutines.experimental.*
 import kotlinx.coroutines.experimental.rx1.await
 import kotlinx.coroutines.experimental.rx1.rxSingle
-import move.rx.MoreSingles
 import rx.Observable
 import rx.Single
 import rx.SingleSubscriber
@@ -17,7 +16,7 @@ import java.util.concurrent.TimeoutException
 import kotlin.coroutines.experimental.CoroutineContext
 import kotlin.coroutines.experimental.startCoroutine
 
-abstract class KAction<IN, OUT> : BaseAsyncAction<IN, OUT>(), MoreSingles {
+abstract class KAction<IN, OUT> : BaseAsyncAction<IN, OUT>() {
     private var command: HystrixObservableCommand<OUT>? = null
     private var setter: HystrixObservableCommand.Setter? = null
     private var ctx: io.vertx.rxjava.core.Context? = null

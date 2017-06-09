@@ -1,9 +1,9 @@
 package move.action
 
-import kotlinx.coroutines.experimental.CoroutineScope
 import kotlinx.coroutines.experimental.delay
-import kotlinx.coroutines.experimental.rx1.await
-import move.rx.MoreSingles.zip
+import move.rx.MoreSingles
+import move.rx.ordered
+import move.rx.parallel
 import javax.inject.Inject
 
 /**
@@ -22,7 +22,7 @@ constructor(val allocate: javax.inject.Provider<Allocate>) :
             println(javaClass.simpleName + ": WORKER = " + Thread.currentThread().name)
         }
 
-        val zipped = zip(
+        val zipped = MoreSingles.zip(
                 worker {
                     delay(1000)
                     println("Worker 1")
@@ -48,12 +48,12 @@ constructor(val allocate: javax.inject.Provider<Allocate>) :
                     println("Worker 5")
                     Thread.currentThread().name
                 }
-        ).await()
+        )
 
         println(zipped)
 
-        val or =
-                ordered(
+        val asyncZipped =
+                parallel(
                         single {
                             delay(1000)
                             println("Async 1")
@@ -81,7 +81,9 @@ constructor(val allocate: javax.inject.Provider<Allocate>) :
                         }
                 )
 
-        println(ordered(
+        println(asyncZipped)
+
+        val asyncOrdered = ordered(
                 single {
                     delay(1000)
                     println("Async 1")
@@ -107,7 +109,9 @@ constructor(val allocate: javax.inject.Provider<Allocate>) :
                     println("Async 5")
                     Thread.currentThread().name
                 }
-        ))
+        )
+
+        println(asyncOrdered)
 
         return reply {
             code = "Back At Cha!"
