@@ -5,7 +5,6 @@ import io.vertx.rxjava.core.Vertx
 import kotlinx.coroutines.experimental.Unconfined
 import kotlinx.coroutines.experimental.async
 import kotlinx.coroutines.experimental.rx1.awaitFirst
-import move.action.Main.actions
 import move.sql.AbstractEntity
 import move.sql.SqlDatabase
 import move.sql.SqlResult
@@ -53,15 +52,23 @@ object KotlinAction {
         System.setProperty("java.net.preferIPv6Addresses", "false")
         System.setProperty("java.net.preferIPv4Stack", "true")
 
-        actions().register()
+//        actions().register()
 
         async(Unconfined) {
             try {
-//            Main.actions().kAllocateInventoryBlocking.await(KAllocateInventoryBlocking.Request())
-                Main.actions().kAllocateInventory.await(KAllocateInventory.Request())
+//            Main.actions().kAllocateInventoryBlocking.await(BaseAllocateInventoryBlocking.Request())
+//                val result = Main.actions().kAllocateInventory.await(AllocateInventory.Request())
+//                println(result)
             } catch (e: Throwable) {
                 e.printStackTrace()
             }
         }
+    }
+}
+
+object Another {
+    @JvmStatic
+    fun main(args: Array<String>) {
+        println("")
     }
 }

@@ -1,6 +1,6 @@
 package move.action
 
-abstract class KScheduledAction : KAction<Any, Any>() {
+abstract class BaseScheduledAction : BaseAction<Any, Any>() {
     companion object {
         @JvmStatic
         val RESULT = Any()

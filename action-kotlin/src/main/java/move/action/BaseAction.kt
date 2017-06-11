@@ -17,7 +17,7 @@ import java.util.concurrent.TimeoutException
 import kotlin.coroutines.experimental.CoroutineContext
 import kotlin.coroutines.experimental.startCoroutine
 
-abstract class KAction<IN, OUT> : BaseAsyncAction<IN, OUT>() {
+abstract class BaseAction<IN, OUT> : BaseAsyncAction<IN, OUT>() {
     private var command: HystrixObservableCommand<OUT>? = null
     private var setter: HystrixObservableCommand.Setter? = null
     private var ctx: io.vertx.rxjava.core.Context? = null
@@ -109,23 +109,23 @@ abstract class KAction<IN, OUT> : BaseAsyncAction<IN, OUT>() {
                 try {
                     execute(request)
                 } catch (e: Throwable) {
-                    this@KAction.executeException = let {
+                    this@BaseAction.executeException = let {
                         if (this@Command.executionException == null)
                             e
                         else
                             this@Command.executionException
                     }
 
-                    this@KAction.executeCause = Throwables.getRootCause(this@KAction.executeException)
+                    this@BaseAction.executeCause = Throwables.getRootCause(this@BaseAction.executeException)
 
-                    if (isActionTimeout(this@KAction.executeCause!!)) {
-                        throw this@KAction.executeCause!!
+                    if (isActionTimeout(this@BaseAction.executeCause!!)) {
+                        throw this@BaseAction.executeCause!!
                     }
 
-                    if (isFallbackEnabled && shouldExecuteFallback(this@KAction.executeException!!, this@KAction.executeCause!!)) {
-                        throw this@KAction.executeException!!
+                    if (isFallbackEnabled && shouldExecuteFallback(this@BaseAction.executeException!!, this@BaseAction.executeCause!!)) {
+                        throw this@BaseAction.executeException!!
                     } else {
-                        recover(this@KAction.executeException!!, this@KAction.executeCause!!, false)
+                        recover(this@BaseAction.executeException!!, this@BaseAction.executeCause!!, false)
                     }
                 }
             }.toObservable()
@@ -134,7 +134,7 @@ abstract class KAction<IN, OUT> : BaseAsyncAction<IN, OUT>() {
         override fun resumeWithFallback(): Observable<OUT> {
             return hystrixSingle(dispatcher!!) {
                 try {
-                    if (!isFallbackEnabled || !shouldExecuteFallback(this@KAction.executeException!!, this@KAction.executeCause!!)) {
+                    if (!isFallbackEnabled || !shouldExecuteFallback(this@BaseAction.executeException!!, this@BaseAction.executeCause!!)) {
                         val e = ActionFallbackException()
                         try {
                             recover(e, e, true)
@@ -142,24 +142,24 @@ abstract class KAction<IN, OUT> : BaseAsyncAction<IN, OUT>() {
                             throw e
                         }
                     } else {
-                        executeFallback(request, this@KAction.executeException, this@KAction.executeCause)
+                        executeFallback(request, this@BaseAction.executeException, this@BaseAction.executeCause)
                     }
                 } catch (e: Throwable) {
-                    this@KAction.fallbackException = let {
+                    this@BaseAction.fallbackException = let {
                         if (this@Command.executionException == null)
                             e
                         else
                             this@Command.executionException
                     }
 
-                    this@KAction.fallbackCause = Throwables.getRootCause(this@KAction.fallbackException)
+                    this@BaseAction.fallbackCause = Throwables.getRootCause(this@BaseAction.fallbackException)
 
-                    if (isActionTimeout(this@KAction.fallbackCause!!)) {
-                        throw this@KAction.fallbackCause!!
+                    if (isActionTimeout(this@BaseAction.fallbackCause!!)) {
+                        throw this@BaseAction.fallbackCause!!
                     }
 
                     try {
-                        recover(this@KAction.fallbackException!!, this@KAction.fallbackCause!!, true)
+                        recover(this@BaseAction.fallbackException!!, this@BaseAction.fallbackCause!!, true)
                     } catch (e2: Throwable) {
                         if (e2 is HystrixRuntimeException && e2.cause != null)
                             throw e2.cause!!

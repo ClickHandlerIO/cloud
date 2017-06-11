@@ -1,6 +1,5 @@
 package move.action
 
-import com.google.common.base.Throwables
 import kotlinx.coroutines.experimental.delay
 import move.common.WireFormat
 import move.rx.ordered
@@ -12,9 +11,9 @@ import javax.inject.Inject
  */
 @ActionConfig(maxExecutionMillis = 1500000)
 @InternalAction
-class KAllocateInventory @Inject
+class AllocateInventory @Inject
 constructor() :
-        KAction<KAllocateInventory.Request, KAllocateInventory.Reply>() {
+        BaseAction<AllocateInventory.Request, AllocateInventory.Reply>() {
     override fun isFallbackEnabled() = true
 
     suspend override fun recover(caught: Throwable, cause: Throwable, isFallback: Boolean): Reply {
@@ -25,10 +24,6 @@ constructor() :
     }
 
     suspend override fun execute(request: Request): Reply {
-//        if (true) {
-//            throw RuntimeException("Hahahaha")
-//        }
-
         // Inline blocking block being run asynchronously
         val s = blocking {
             javaClass.simpleName + ": WORKER = " + Thread.currentThread().name
@@ -115,7 +110,6 @@ constructor() :
         )
 
         println(asyncOrdered)
-
 
         val x = WireFormat.parse(Reply::class.java, "{\"code\":\"TEST\"}")
         println(x)

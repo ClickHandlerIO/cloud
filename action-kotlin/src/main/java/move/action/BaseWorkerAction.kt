@@ -1,6 +1,6 @@
 package move.action
 
-abstract class KWorkerAction<T> : KAction<T, Boolean>() {
+abstract class BaseWorkerAction<T> : BaseAction<T, Boolean>() {
     companion object {
         @JvmStatic
         val RESULT = Any()
