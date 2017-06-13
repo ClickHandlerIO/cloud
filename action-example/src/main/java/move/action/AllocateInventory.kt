@@ -13,8 +13,8 @@ import javax.inject.Inject
 @InternalAction
 class AllocateInventory @Inject
 constructor() :
-        BaseAction<AllocateInventory.Request, AllocateInventory.Reply>() {
-    override fun isFallbackEnabled() = true
+        Action<AllocateInventory.Request, AllocateInventory.Reply>() {
+    override val isFallbackEnabled = true
 
     suspend override fun recover(caught: Throwable, cause: Throwable, isFallback: Boolean): Reply {
         if (isFallback)
@@ -29,6 +29,9 @@ constructor() :
             javaClass.simpleName + ": WORKER = " + Thread.currentThread().name
         }
         println(s)
+
+//        val ar = AppComponent.instance.actions().move.action.allocate("Hi")
+//        println(ar)
 
         val blockingParallel = parallel(
                 worker {
@@ -119,7 +122,9 @@ constructor() :
         }
     }
 
-    class Request @Inject constructor()
+    class Request @Inject constructor() {
+        var id: String? = null
+    }
 
     class Reply @Inject constructor() {
         var code: String? = null

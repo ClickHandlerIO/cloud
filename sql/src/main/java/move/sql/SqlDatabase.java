@@ -1420,7 +1420,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     }
 
     public <T> Observable<SqlResult<T>> writeObservable(SqlCallable<T> task, int timeoutMillis) {
-        final ActionContext actionContext = ActionProvider.current();
+        final ActionContext actionContext = ActionProvider.Companion.current();
         final io.vertx.rxjava.core.Context context = vertx.getOrCreateContext();
 
         return Observable.create(subscriber -> {
@@ -1436,12 +1436,12 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                         }
 
                         if (actionContext != null) {
-                            Action.contextLocal.set(actionContext);
+                            Action.Companion.getContextLocal().set(actionContext);
                             try {
                                 subscriber.onNext(r);
                                 subscriber.onCompleted();
                             } finally {
-                                Action.contextLocal.remove();
+                                Action.Companion.getContextLocal().remove();
                             }
                         } else {
                             subscriber.onNext(r);
@@ -1456,11 +1456,11 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                         }
 
                         if (actionContext != null) {
-                            Action.contextLocal.set(actionContext);
+                            Action.Companion.getContextLocal().set(actionContext);
                             try {
                                 subscriber.onError(e);
                             } finally {
-                                Action.contextLocal.remove();
+                                Action.Companion.getContextLocal().remove();
                             }
                         } else {
                             subscriber.onError(e);
@@ -1502,7 +1502,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
     }
 
     public <T> Observable<T> readObservable(SqlReadCallable<T> task, int timeoutMillis) {
-        final ActionContext actionContext = ActionProvider.current();
+        final ActionContext actionContext = ActionProvider.Companion.current();
         final io.vertx.rxjava.core.Context context = vertx.getOrCreateContext();
 
         return Observable.create(subscriber -> {
@@ -1518,12 +1518,12 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                         }
 
                         if (actionContext != null) {
-                            Action.contextLocal.set(actionContext);
+                            Action.Companion.getContextLocal().set(actionContext);
                             try {
                                 subscriber.onNext(r);
                                 subscriber.onCompleted();
                             } finally {
-                                Action.contextLocal.remove();
+                                Action.Companion.getContextLocal().remove();
                             }
                         } else {
                             subscriber.onNext(r);
@@ -1538,11 +1538,11 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
                         }
 
                         if (actionContext != null) {
-                            Action.contextLocal.set(actionContext);
+                            Action.Companion.getContextLocal().set(actionContext);
                             try {
                                 subscriber.onError(e);
                             } finally {
-                                Action.contextLocal.remove();
+                                Action.Companion.getContextLocal().remove();
                             }
                         } else {
                             subscriber.onError(e);
@@ -1582,7 +1582,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @throws InterruptedException
      */
     public <T> T readBlocking(SqlReadCallable<T> task, int timeoutMillis) {
-        final ActionContext actionContext = ActionProvider.current();
+        final ActionContext actionContext = ActionProvider.Companion.current();
         return new ReadAction<T>(readSetter(timeoutMillis, actionContext), actionContext, task).execute();
     }
 
@@ -1597,7 +1597,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
      * @throws InterruptedException
      */
     public <T> SqlResult<T> writeBlocking(SqlCallable<T> task, int timeoutMillis) {
-        final ActionContext actionContext = ActionProvider.current();
+        final ActionContext actionContext = ActionProvider.Companion.current();
         return new WriteAction<T>(writeSetter(timeoutMillis, actionContext), actionContext, task).execute();
     }
 

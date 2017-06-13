@@ -22,34 +22,12 @@
 
     <dependencies>
         <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-jdk14</artifactId>
-            <version>1.5.6</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
             <groupId>com.google.dagger</groupId>
             <artifactId>dagger</artifactId>
         </dependency>
-        <!--<dependency>-->
-        <!--<groupId>com.google.dagger</groupId>-->
-        <!--<artifactId>dagcodegeniler</artifactId>-->
-        <!--</dependency>-->
         <dependency>
             <groupId>io.clickhandler</groupId>
             <artifactId>action</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.netflix.hystrix</groupId>
-            <artifactId>hystrix-core</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.amazonaws</groupId>
-            <artifactId>aws-java-sdk-sqs</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.amazonaws</groupId>
-            <artifactId>amazon-sqs-java-extended-client-lib</artifactId>
         </dependency>
 
         <!--<dependency>-->
@@ -103,13 +81,13 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>${maven-compiler-plugin.version}</version>
-                <dependencies>
-                    <dependency>
-                        <groupId>com.google.dagger</groupId>
-                        <artifactId>dagger-compiler</artifactId>
-                        <version>${dagger.version}</version>
-                    </dependency>
-                </dependencies>
+                <!--<dependencies>-->
+                    <!--<dependency>-->
+                        <!--<groupId>com.google.dagger</groupId>-->
+                        <!--<artifactId>dagger-compiler</artifactId>-->
+                        <!--<version>${dagger.version}</version>-->
+                    <!--</dependency>-->
+                <!--</dependencies>-->
                 <configuration>
                     <source>1.8</source>
                     <target>1.8</target>

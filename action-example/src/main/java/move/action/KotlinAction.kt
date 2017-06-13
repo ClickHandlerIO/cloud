@@ -1,7 +1,5 @@
 package move.action
 
-import io.vertx.core.VertxOptions
-import io.vertx.rxjava.core.Vertx
 import kotlinx.coroutines.experimental.Unconfined
 import kotlinx.coroutines.experimental.async
 import kotlinx.coroutines.experimental.rx1.awaitFirst
@@ -40,10 +38,6 @@ class KSqlDatabase(val db: SqlDatabase) {
  * @author Clay Molocznik
  */
 object KotlinAction {
-    val options = VertxOptions()//.setBlockedThreadCheckInterval(6000000)
-    val vertx = Vertx.vertx(options)
-    val sql: SqlDatabase? = null
-
     @JvmStatic
     fun main(args: Array<String>) {
         // Setup JBoss logging provider for Undertow.
@@ -52,19 +46,29 @@ object KotlinAction {
         System.setProperty("java.net.preferIPv6Addresses", "false")
         System.setProperty("java.net.preferIPv4Stack", "true")
 
+        val Actions: Action_Locator = AppComponent.instance.actions().move.action
+
 //        actions().register()
 
         async(Unconfined) {
             try {
 //            Main.actions().kAllocateInventoryBlocking.await(BaseAllocateInventoryBlocking.Request())
-//                val result = Main.actions().kAllocateInventory.await(AllocateInventory.Request())
-//                println(result)
+
+
+
+                val result = Actions.allocateInventory {
+                    id = ""
+                }
+
+                println(result.code)
             } catch (e: Throwable) {
                 e.printStackTrace()
             }
         }
     }
 }
+
+
 
 object Another {
     @JvmStatic

@@ -1,11 +1,9 @@
 package move.action;
 
-import com.amazonaws.services.s3.event.S3EventNotification;
 import dagger.Module;
 import dagger.Provides;
 
 import javax.annotation.Nullable;
-import java.util.Collections;
 
 /**
  *
@@ -24,7 +22,12 @@ public class ActionModule {
     }
 
     @Provides
-    S3EventNotification s3EventNotification() {
-        return new S3EventNotification(Collections.emptyList());
+    Object any() {
+        return new Object();
     }
+//
+//    @Provides
+//    S3EventNotification s3EventNotification() {
+//        return new S3EventNotification(Collections.emptyList());
+//    }
 }

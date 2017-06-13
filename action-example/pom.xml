@@ -54,7 +54,11 @@
         </dependency>
         <dependency>
             <groupId>io.clickhandler</groupId>
-            <artifactId>action-kotlin</artifactId>
+            <artifactId>action-sqs</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.clickhandler</groupId>
+            <artifactId>action-compiler</artifactId>
         </dependency>
         <dependency>
             <groupId>io.clickhandler</groupId>

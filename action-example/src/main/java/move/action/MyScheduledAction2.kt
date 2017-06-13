@@ -8,10 +8,12 @@ import javax.inject.Inject
 @ActionConfig(maxExecutionMillis = 10000, maxConcurrentRequests = 1)
 @ScheduledAction(intervalSeconds = 1000, type = ScheduledActionType.CLUSTER_SINGLETON)
 class MyScheduledAction2 @Inject
-constructor() : AbstractBlockingScheduledAction() {
+constructor() : BaseScheduledAction() {
+    suspend override fun recover(caught: Throwable, cause: Throwable, isFallback: Boolean): Any {
+        throw cause
+    }
 
-    override fun run() {
-        //        Main.AppComponent.instance.actions().move().action().myWorker()
-        //            .send(new MyWorker.Request()).toBlocking().first();
+    suspend override fun execute() {
+
     }
 }
