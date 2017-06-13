@@ -211,10 +211,10 @@ public class ActionProcessor extends AbstractProcessor {
                     messager.printMessage(Diagnostic.Kind.WARNING, element.getQualifiedName().toString());
 
                     if (holder.inType != null) {
-                        messager.printMessage(Diagnostic.Kind.WARNING, "IN = " + holder.inType.getResolvedElement().getQualifiedName().toString());
+//                        messager.printMessage(Diagnostic.Kind.WARNING, "IN = " + holder.inType.getResolvedElement().getQualifiedName().toString());
                     }
                     if (holder.outType != null) {
-                        messager.printMessage(Diagnostic.Kind.WARNING, "OUT = " + holder.outType.getResolvedElement().getQualifiedName().toString());
+//                        messager.printMessage(Diagnostic.Kind.WARNING, "OUT = " + holder.outType.getResolvedElement().getQualifiedName().toString());
                     }
                 }
 

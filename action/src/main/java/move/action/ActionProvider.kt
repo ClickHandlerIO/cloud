@@ -4,6 +4,7 @@ import com.google.common.base.Throwables
 import com.netflix.hystrix.*
 import io.vertx.rxjava.core.Vertx
 import javaslang.control.Try
+import kotlinx.coroutines.experimental.rx1.await
 import rx.Observable
 import rx.Single
 import java.util.function.Consumer
@@ -255,8 +256,21 @@ constructor(
      * *
      * @return
      */
+    open fun single(request: IN): Single<OUT> {
+        return observe0(create(request)).toSingle()
+    }
+
+    /**
+     * @param request
+     * *
+     * @return
+     */
     open fun observe(request: IN): Observable<OUT> {
         return observe0(create(request))
+    }
+
+    open suspend fun await(request: IN): OUT {
+        return observe(request).toSingle().await()
     }
 
     /**

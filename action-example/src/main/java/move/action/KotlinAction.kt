@@ -48,17 +48,13 @@ object KotlinAction {
 
         val Actions: Action_Locator = AppComponent.instance.actions().move.action
 
+        val executor = AppComponent.instance.vertx().createSharedWorkerExecutor("db", 10, Integer.MAX_VALUE.toLong());
+
 //        actions().register()
 
         async(Unconfined) {
             try {
-//            Main.actions().kAllocateInventoryBlocking.await(BaseAllocateInventoryBlocking.Request())
-
-
-
-                val result = Actions.allocateInventory {
-                    id = ""
-                }
+                val result = Actions.allocateInventory { id = "" }
 
                 println(result.code)
             } catch (e: Throwable) {
@@ -67,7 +63,6 @@ object KotlinAction {
         }
     }
 }
-
 
 
 object Another {

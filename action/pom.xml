@@ -58,6 +58,11 @@
             <artifactId>hystrix-core</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>io.vertx</groupId>
+            <artifactId>vertx-circuit-breaker</artifactId>
+        </dependency>
+
         <!-- Auto service annotation processor -->
         <dependency>
             <groupId>com.squareup</groupId>

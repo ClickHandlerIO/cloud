@@ -29,6 +29,7 @@ import rx.Single
 import java.net.SocketException
 import java.util.*
 import java.util.concurrent.*
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -53,12 +54,12 @@ internal constructor(val vertx: Vertx,
             return false
         }
 
-        if (config.exclusions != null && !config!!.exclusions.isEmpty()) {
-            return !config!!.exclusions.contains(provider.name) && !config!!.exclusions.contains(provider.queueName)
+        if (config.exclusions != null && !config.exclusions.isEmpty()) {
+            return !config.exclusions.contains(provider.name) && !config.exclusions.contains(provider.queueName)
         }
 
-        if (config.inclusions != null && !config!!.inclusions.isEmpty()) {
-            return config!!.inclusions.contains(provider.name) || config!!.inclusions.contains(provider.queueName)
+        if (config.inclusions != null && !config.inclusions.isEmpty()) {
+            return config.inclusions.contains(provider.name) || config.inclusions.contains(provider.queueName)
         }
 
         return true
@@ -84,7 +85,7 @@ internal constructor(val vertx: Vertx,
         }
 
         if (queueConfig.maxDoneReceiveBatches < 0) {
-            queueConfig.maxDoneReceiveBatches = config!!.maxDoneReceiveBatches
+            queueConfig.maxDoneReceiveBatches = config.maxDoneReceiveBatches
         }
 
         return queueConfig
@@ -115,23 +116,24 @@ internal constructor(val vertx: Vertx,
             method?.invoke(amazonClientLogger, value)
         }
 
-        config.clientThreads = if (config.clientThreads < MIN_THREADS)
+        // Sanitize maxThreads property.
+        config.maxThreads = if (config.maxThreads < MIN_THREADS) {
+            LOG.warn("'maxThreads was set too low. Setting maxThreads to '" + MIN_THREADS + "'")
             MIN_THREADS
-        else if (config.clientThreads > MAX_THREADS)
+        } else if (config.maxThreads > MAX_THREADS) {
+            LOG.warn("'maxThreads was set too high. Setting maxThreads to '" + MAX_THREADS + "'")
             MAX_THREADS
-        else
-            config.clientThreads
+        } else
+            config.maxThreads
 
-        config.bufferThreads = if (config.bufferThreads < MIN_THREADS)
-            MIN_THREADS
-        else if (config.bufferThreads > MAX_THREADS)
-            MAX_THREADS
-        else
-            config.bufferThreads
+        config.namespace = config.namespace?.trim() ?: ""
 
+        // Create SQS QueueBuffer Executor.
+        // Uses a capped cached thread strategy with the core size set to 0.
+        // So it won't consume any threads if there isn't any activity.
         bufferExecutor = ThreadPoolExecutor(
                 0,
-                config.bufferThreads,
+                config.maxThreads,
                 KEEP_ALIVE_SECONDS,
                 TimeUnit.SECONDS,
                 SynchronousQueue<Runnable>()
@@ -140,18 +142,12 @@ internal constructor(val vertx: Vertx,
         val builder = AmazonSQSAsyncClientBuilder
                 .standard()
                 .withExecutorFactory {
-                    ThreadPoolExecutor(
-                            0,
-                            config.clientThreads,
-                            KEEP_ALIVE_SECONDS,
-                            TimeUnit.SECONDS,
-                            SynchronousQueue<Runnable>()
-                    )
+                    bufferExecutor
                 }
                 .withRegion(config.region)
 
-        config.awsAccessKey = Strings.nullToEmpty(config.awsAccessKey).trim { it <= ' ' }
-        config.awsSecretKey = Strings.nullToEmpty(config.awsSecretKey).trim { it <= ' ' }
+        config.awsAccessKey = config.awsAccessKey?.trim() ?: ""
+        config.awsSecretKey = config.awsSecretKey?.trim() ?: ""
 
         // Set credentials if necessary.
         if (!config.awsAccessKey.isEmpty()) {
@@ -163,20 +159,21 @@ internal constructor(val vertx: Vertx,
 
         builder.withClientConfiguration(ClientConfiguration()
                 // Give a nice buffer to max connections based on max threads.
-                .withMaxConnections(config.clientThreads * 2)
+                .withMaxConnections(config.maxThreads * 2)
         )
 
         realSQS = builder.build()
         client = MoveAmazonSQSBufferedAsyncClient(realSQS)
 
         ActionManager.workerActionMap.forEach { key, provider ->
-            LOG.info("Calling getQueueUrl() for " + provider.queueName)
+            val queueName = config.namespace + provider.queueName
+            LOG.info("Calling getQueueUrl() for " + queueName)
 
-            val result = realSQS!!.getQueueUrl(provider.queueName)
+            val result = realSQS!!.getQueueUrl(queueName)
 
             val queueUrl =
                     if (result == null || result.queueUrl == null || result.queueUrl.isEmpty()) {
-                        val createQueueResult = realSQS!!.createQueue(provider.queueName)
+                        val createQueueResult = realSQS!!.createQueue(queueName)
                         createQueueResult.queueUrl
                     } else {
                         result.queueUrl
@@ -187,7 +184,7 @@ internal constructor(val vertx: Vertx,
             val bufferConfig = QueueBufferConfig()
                     .withMaxBatchSize(queueConfig.maxBatchSize)
                     .withMaxBatchOpenMs(queueConfig.maxBatchOpenMs.toLong())
-                    .withFlushOnShutdown(config!!.flushOnShutdown)
+                    .withFlushOnShutdown(config.flushOnShutdown)
 
                     // Turn off pre-fetching
                     .withMaxInflightReceiveBatches(0)
@@ -205,7 +202,7 @@ internal constructor(val vertx: Vertx,
                     )
                 } else {
                     bufferConfig.withVisibilityTimeoutSeconds(
-                            TimeUnit.MILLISECONDS.toSeconds((provider.getTimeoutMillis() + 2000).toLong()).toInt()
+                            TimeUnit.MILLISECONDS.toSeconds((provider.getTimeoutMillis() + 2000)).toInt()
                     )
                 }
             }
@@ -220,9 +217,10 @@ internal constructor(val vertx: Vertx,
 
             ActionManager.bindProducer(provider, sender)
 
-            var consumer: Receiver? = null
+            var receiver: Receiver? = null
             if (isWorker) {
-                consumer = Receiver(
+                receiver = Receiver(
+                        vertx,
                         provider,
                         queueUrl,
                         buffer,
@@ -233,7 +231,7 @@ internal constructor(val vertx: Vertx,
                 )
             }
 
-            queueMap.put(provider.actionClass, QueueContext(sender, consumer, queueUrl, queueConfig))
+            queueMap.put(provider.actionClass, QueueContext(sender, receiver, queueUrl, queueConfig))
         }
 
         // Startup all receivers.
@@ -296,7 +294,7 @@ internal constructor(val vertx: Vertx,
                         }
                     }
 
-                    override fun onSuccess(request: SendMessageRequest, sendMessageResult: SendMessageResult?) {
+                    override fun onSuccess(receiveRequest: SendMessageRequest, sendMessageResult: SendMessageResult?) {
                         if (!subscriber.isUnsubscribed) {
                             subscriber.onSuccess(sendMessageResult?.messageId?.isNotEmpty())
                         }
@@ -313,20 +311,24 @@ internal constructor(val vertx: Vertx,
      *
      * Reliable
      */
-    private class Receiver(val actionProvider: WorkerActionProvider<Action<Any, Boolean>, Any>,
+    private class Receiver(val vertx: Vertx,
+                           val actionProvider: WorkerActionProvider<Action<Any, Boolean>, Any>,
                            val queueUrl: String,
                            val sqsBuffer: QueueBuffer,
-                           val receiveThreadCount: Int) : AbstractIdleService() {
-        private var receiveThreads: Array<ReceiveThread?>? = null
+                           parallelism: Int) : AbstractIdleService() {
+//        private var receiveThreads: Array<ReceiveThread?>? = null
 
         val registry = Metrics.registry()
+
         private val secondsSinceLastPollGauge: Gauge<Long> = registry.register<Gauge<Long>>(
                 actionProvider.name + "-SECONDS_SINCE_LAST_POLL",
-                Gauge<Long>(
-                        { TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis() - lastPoll) }
-                )
+                Gauge<Long> { TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis() - lastPoll) }
         )
-        private val receiveThreadsCounter: Counter = registry.counter(actionProvider.name + "-RECEIVE_THREADS")
+        private val activeMessagesGauge: Gauge<Int> = registry.register<Gauge<Int>>(
+                actionProvider.name + "-ACTIVE_MESSAGES",
+                Gauge<Int> { activeMessages.get() }
+        )
+        private val receiveThreadsCounter: Counter = registry.counter(actionProvider.name + "-CONCURRENCY")
         private val jobsCounter: Counter = registry.counter(actionProvider.name + "-JOBS")
         private val timeoutsCounter: Counter = registry.counter(actionProvider.name + "-TIMEOUTS")
         private val completesCounter: Counter = registry.counter(actionProvider.name + "-COMPLETES")
@@ -334,31 +336,46 @@ internal constructor(val vertx: Vertx,
         private val exceptionsCounter: Counter = registry.counter(actionProvider.name + "-EXCEPTIONS")
         private val deletesCounter: Counter = registry.counter(actionProvider.name + "-DELETES")
         private val deleteFailuresCounter: Counter = registry.counter(actionProvider.name + "-DELETE_FAILURES")
+        private val receiveLatencyCounter: Counter = registry.counter(actionProvider.name + "-RECEIVE_LATENCY")
+        private val noMessagesCounter: Counter = registry.counter(actionProvider.name + "-NO_MESSAGES")
 
         @Volatile private var lastPoll: Long = 0
 
+        private val activeMessages = AtomicInteger(0)
+
+        val activeList = CopyOnWriteArrayList<Single<Any>>()
+
+        val concurrentRequests = if (parallelism < MIN_RECEIVE_THREADS) {
+            MIN_RECEIVE_THREADS
+        } else if (parallelism > MAX_RECEIVE_THREADS) {
+            MAX_RECEIVE_THREADS
+        } else {
+            parallelism
+        }
+
         @Throws(Exception::class)
         override fun startUp() {
-            LOG.debug("Starting up SQS service.")
+//            LOG.debug("Starting up SQS service.")
+            receiveMore()
 
-            var threads = actionProvider.maxConcurrentRequests
-
-            if (receiveThreadCount > 0) {
-                threads = receiveThreadCount
-            }
-
-            if (threads < MIN_RECEIVE_THREADS) {
-                threads = MIN_RECEIVE_THREADS
-            } else if (threads > MAX_RECEIVE_THREADS) {
-                threads = MAX_RECEIVE_THREADS
-            }
+//            var threads = actionProvider.maxConcurrentRequests
+//
+//            if (concurrentRequests > 0) {
+//                threads = concurrentRequests
+//            }
+//
+//            if (threads < MIN_RECEIVE_THREADS) {
+//                threads = MIN_RECEIVE_THREADS
+//            } else if (threads > MAX_RECEIVE_THREADS) {
+//                threads = MAX_RECEIVE_THREADS
+//            }
 
             // Start Receive threads.
-            receiveThreads = arrayOfNulls<ReceiveThread>(threads)
-            for (i in receiveThreads!!.indices) {
-                receiveThreads!![i] = ReceiveThread(i)
-                receiveThreads!![i]!!.startAsync().awaitRunning()
-            }
+//            receiveThreads = arrayOfNulls<ReceiveThread>(threads)
+//            for (i in receiveThreads!!.indices) {
+//                receiveThreads!![i] = ReceiveThread(i)
+//                receiveThreads!![i]!!.startAsync().awaitRunning()
+//            }
         }
 
         @Throws(Exception::class)
@@ -366,12 +383,128 @@ internal constructor(val vertx: Vertx,
             sqsBuffer.shutdown()
 
             // Stop receiving messages.
-            for (thread in receiveThreads!!) {
-                Try.run { thread!!.stopAsync().awaitTerminated(5, TimeUnit.SECONDS) }
-            }
+//            for (thread in receiveThreads!!) {
+//                Try.run { thread!!.stopAsync().awaitTerminated(5, TimeUnit.SECONDS) }
+//            }
+//
+//            // Clear threads.
+//            receiveThreads = null
+        }
 
-            // Clear threads.
-            receiveThreads = null
+        fun deleteMessage(receiptHandle: String) {
+            // Delete asynchronously.
+            // Allow deletes to be batched which can increase performance quite a bit while decreasing
+            // resources used and allowing allowing the next receive to happen immediately.
+            // The visibility timeout buffer provides a good safety net.
+            sqsBuffer.deleteMessage(DeleteMessageRequest(queueUrl, receiptHandle), object : AsyncHandler<DeleteMessageRequest, DeleteMessageResult> {
+                override fun onError(exception: Exception) {
+                    LOG.error("Failed to delete message for receipt handle " + receiptHandle, exception)
+                    deleteFailuresCounter.inc()
+                }
+
+                override fun onSuccess(receiveRequest: DeleteMessageRequest, deleteMessageResult: DeleteMessageResult) {
+                    // Ignore.
+                }
+            })
+        }
+
+        fun receiveMore() {
+            if (!isRunning)
+                return
+
+            if (activeMessages.get() >= concurrentRequests)
+                return
+
+            val request = ReceiveMessageRequest(queueUrl)
+            // SQS max number of messages is capped at 10.
+            request.maxNumberOfMessages = Math.min(10, concurrentRequests - activeMessages.get())
+            // Give it a 1 second poll
+            request.waitTimeSeconds = 1
+
+            if (request.maxNumberOfMessages <= 0)
+                return
+
+            lastPoll = Math.max(System.currentTimeMillis(), lastPoll)
+            val start = System.currentTimeMillis()
+
+            sqsBuffer.receiveMessage(request, object : AsyncHandler<ReceiveMessageRequest, ReceiveMessageResult> {
+                override fun onError(exception: java.lang.Exception?) {
+                    receiveLatencyCounter.inc(System.currentTimeMillis() - start)
+                    LOG.error("ReceiveMessage for " + actionProvider.queueName + " threw an exception", exception)
+                    receiveMore()
+                }
+
+                override fun onSuccess(receiveRequest: ReceiveMessageRequest?, result: ReceiveMessageResult?) {
+                    receiveLatencyCounter.inc(System.currentTimeMillis() - start)
+
+                    // Were there any messages?
+                    if (result == null || result.messages == null || result.messages.isEmpty()) {
+                        noMessagesCounter.inc()
+                        receiveMore()
+                        return
+                    }
+
+                    activeMessages.addAndGet(result.messages.size)
+
+                    result.messages.forEach { message ->
+                        // Parse request.
+                        val body = Strings.nullToEmpty(message.body)
+                        val request: Any = if (body.isEmpty())
+                            actionProvider.inProvider.get()
+                        else
+                            WireFormat.parse(
+                                    actionProvider.inClass,
+                                    body
+                            ) ?: actionProvider.inProvider.get()
+
+                        try {
+                            jobsCounter.inc()
+
+                            actionProvider.single(request).subscribe(
+                                    { shouldDelete ->
+                                        activeMessages.decrementAndGet()
+
+                                        if (shouldDelete) {
+                                            completesCounter.inc()
+                                            deletesCounter.inc()
+
+                                            try {
+                                                deleteMessage(message.receiptHandle)
+                                            } catch (e: Throwable) {
+                                                LOG.error("Delete message from queue '" + queueUrl + "' with receipt handle '" + message.receiptHandle + "' failed", e)
+                                                deleteFailuresCounter.inc()
+                                            }
+                                        } else {
+                                            inCompletesCounter.inc()
+                                        }
+                                    },
+                                    {
+                                        activeMessages.decrementAndGet()
+                                        LOG.error("Action " + actionProvider.actionClass.canonicalName + " threw an exception", it)
+
+                                        val rootCause = Throwables.getRootCause(it)
+                                        if (rootCause is HystrixTimeoutException || rootCause is TimeoutException) {
+                                            timeoutsCounter.inc()
+                                        } else {
+                                            exceptionsCounter.inc()
+                                        }
+                                    }
+                            )
+                        } catch (e: Exception) {
+                            LOG.error("Action " + actionProvider.actionClass.canonicalName + " threw an exception", e)
+
+                            val rootCause = Throwables.getRootCause(e)
+                            if (rootCause is HystrixTimeoutException || rootCause is TimeoutException) {
+                                timeoutsCounter.inc()
+                            } else {
+                                exceptionsCounter.inc()
+                            }
+                        }
+                    }
+                }
+            })
+
+            receiveMore()
         }
 
         private class InternalInterruptedException(cause: Throwable) : RuntimeException(cause)
@@ -408,7 +541,7 @@ internal constructor(val vertx: Vertx,
                         deleteFailuresCounter.inc()
                     }
 
-                    override fun onSuccess(request: DeleteMessageRequest, deleteMessageResult: DeleteMessageResult) {
+                    override fun onSuccess(receiveRequest: DeleteMessageRequest, deleteMessageResult: DeleteMessageResult) {
                         // Ignore.
                     }
                 })
@@ -535,7 +668,7 @@ internal constructor(val vertx: Vertx,
         private val LOG = LoggerFactory.getLogger(SQSService::class.java)
 
         private val MIN_THREADS = 1
-        private val MAX_THREADS = 200
+        private val MAX_THREADS = 1024
         private val KEEP_ALIVE_SECONDS = 60L
     }
 }

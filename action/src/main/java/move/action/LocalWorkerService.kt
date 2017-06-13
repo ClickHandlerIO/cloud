@@ -18,7 +18,7 @@ import java.util.concurrent.TimeUnit
  */
 @Singleton
 class LocalWorkerService @Inject
-internal constructor(val vertx: Vertx) : AbstractIdleService(), WorkerService, WorkerProducer, WorkerConsumer {
+internal constructor(val vertx: Vertx) : AbstractIdleService(), WorkerService, WorkerProducer {
 
     private val queue = LinkedBlockingDeque<WorkerRequest>()
     private val consumer = Consumer()

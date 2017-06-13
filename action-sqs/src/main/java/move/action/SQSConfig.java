@@ -29,7 +29,7 @@ public class SQSConfig {
     /**
      *
      */
-    public int clientThreads = 50;
+    public int maxThreads = 1024;
 
     /**
      * The maximum number of entries in a batch command
@@ -68,11 +68,6 @@ public class SQSConfig {
      * {@link SendQueueBuffer} during shutdown.
      */
     public boolean flushOnShutdown = true;
-
-    /**
-     *
-     */
-    public int bufferThreads = 50;
 
     /**
      *
