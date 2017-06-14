@@ -169,7 +169,7 @@ abstract class Action<IN : Any, OUT : Any> : IAction<IN, OUT>() {
     /**
      * @param request
      */
-    protected abstract suspend fun execute(request: IN): OUT
+    protected abstract suspend fun execute(): OUT
 
     /**
      *
@@ -185,8 +185,8 @@ abstract class Action<IN : Any, OUT : Any> : IAction<IN, OUT>() {
     /**
      * @param request
      */
-    protected suspend open fun executeFallback(request: IN, caught: Throwable?, cause: Throwable?): OUT {
-        return execute(request)
+    protected suspend open fun executeFallback(caught: Throwable?, cause: Throwable?): OUT {
+        return execute()
     }
 
     /**
@@ -284,7 +284,7 @@ abstract class Action<IN : Any, OUT : Any> : IAction<IN, OUT>() {
         override fun construct(): Observable<OUT>? {
             return hystrixSingle(dispatcher) {
                 try {
-                    execute(request)
+                    execute()
                 } catch (e: Throwable) {
                     this@Action.executeException = let {
                         if (this@Command.executionException == null)
@@ -319,7 +319,7 @@ abstract class Action<IN : Any, OUT : Any> : IAction<IN, OUT>() {
                             throw e
                         }
                     } else {
-                        executeFallback(request, this@Action.executeException, this@Action.executeCause)
+                        executeFallback(this@Action.executeException, this@Action.executeCause)
                     }
                 } catch (e: Throwable) {
                     this@Action.fallbackException = let {

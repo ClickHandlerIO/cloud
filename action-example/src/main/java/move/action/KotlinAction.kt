@@ -2,6 +2,7 @@ package move.action
 
 import kotlinx.coroutines.experimental.Unconfined
 import kotlinx.coroutines.experimental.async
+import kotlinx.coroutines.experimental.rx1.await
 import kotlinx.coroutines.experimental.rx1.awaitFirst
 import move.sql.AbstractEntity
 import move.sql.SqlDatabase
@@ -9,14 +10,14 @@ import move.sql.SqlResult
 import move.sql.SqlSession
 import kotlin.reflect.KClass
 
-class KSqlDatabase(val db: SqlDatabase) {
+class SqlDatabaseKt(val db: SqlDatabase) {
     suspend fun <T> read(block: suspend (SqlSession) -> T): T {
         return db.read {
             val session = it
             kotlinx.coroutines.experimental.runBlocking {
                 block(session)
             }
-        }.awaitFirst()
+        }.await()
     }
 
     suspend fun <T> write(block: suspend (SqlSession) -> SqlResult<T>): SqlResult<T> {
@@ -25,11 +26,11 @@ class KSqlDatabase(val db: SqlDatabase) {
             kotlinx.coroutines.experimental.runBlocking {
                 block(session)
             }
-        }.awaitFirst()
+        }.await()
     }
 
     suspend fun <T : AbstractEntity> get(cls: KClass<T>, id: String): T {
-        return db.get(cls.java, id).awaitFirst()
+        return db.get(cls.java, id).await()
     }
 }
 
@@ -46,7 +47,12 @@ object KotlinAction {
         System.setProperty("java.net.preferIPv6Addresses", "false")
         System.setProperty("java.net.preferIPv4Stack", "true")
 
+//        AppComponent.instance.db().startAsync().awaitRunning()
+
         val Actions: Action_Locator = AppComponent.instance.actions().move.action
+        Actions.ensureActionMap()
+        AppComponent.instance.actionManager().startAsync().awaitRunning()
+
 
         val executor = AppComponent.instance.vertx().createSharedWorkerExecutor("db", 10, Integer.MAX_VALUE.toLong());
 

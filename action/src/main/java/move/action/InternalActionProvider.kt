@@ -58,24 +58,11 @@ constructor(vertx: Vertx,
         return observe0(create(request))
     }
 
-    /**
-     * @param request
-     * *
-     * @return
-     */
-    fun single(request: IN): Single<OUT> {
-        return observe0(create(request)).toSingle()
-    }
-
     suspend operator fun invoke(request: IN): OUT {
         return single(request).await()
     }
 
     suspend operator inline fun invoke(block: IN.() -> Unit): OUT = invoke(inProvider.get().apply(block))
-
-    suspend fun await(request: IN): OUT {
-        return single(request).await()
-    }
 
     suspend fun await(block: IN.() -> Unit): OUT {
         return single(inProvider.get().apply(block)).await()

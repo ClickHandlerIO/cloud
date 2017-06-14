@@ -13,7 +13,7 @@ constructor() : Action<String, String>() {
         TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
     }
 
-    suspend override fun execute(request: String): String {
+    suspend override fun execute(): String {
         TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
     }
 }

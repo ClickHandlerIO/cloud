@@ -15,52 +15,15 @@ import javax.inject.Provider
 open class FifoWorkerActionProvider<A : Action<IN, Boolean>, IN : Any> @Inject
 constructor(vertx: Vertx,
             actionProvider: Provider<A>,
-            inProvider: Provider<IN>,
-            outProvider: Provider<Boolean>) : WorkerActionProvider<A, IN>(
-        vertx, actionProvider, inProvider, outProvider
+            inProvider: Provider<IN>) : WorkerActionProvider<A, IN>(
+        vertx, actionProvider, inProvider
 ) {
-
-    /**
-     * @param request
-     * *
-     * @param callback
-     */
-    override fun send(request: IN, callback: Consumer<Boolean>) {
-        send(request, 0, callback)
-    }
-
-    /**
-     * @param request
-     * *
-     * @param delaySeconds
-     * *
-     * @param callback
-     */
-    override fun send(request: IN, delaySeconds: Int, callback: Consumer<Boolean>) {
-        send(request, delaySeconds).subscribe(
-                { r -> Try.run { callback.accept(r) } }
-        ) { e -> Try.run { callback.accept(false) } }
-    }
-
-    /**
-     * @param request
-     * *
-     * @param groupId
-     * *
-     * @param callback
-     */
-    fun send(request: IN, groupId: String, callback: Consumer<Boolean>) {
-        send(request, groupId).subscribe(
-                { r -> Try.run { callback.accept(r) } }
-        ) { e -> Try.run { callback.accept(false) } }
-    }
-
     /**
      * @param request
      * *
      * @return
      */
-    override fun send(request: IN): Single<Boolean> {
+    override fun send(request: IN): Single<WorkerReceipt> {
         return send(request, 0)
     }
 
@@ -71,7 +34,7 @@ constructor(vertx: Vertx,
      * *
      * @return
      */
-    override fun send(request: IN, delaySeconds: Int): Single<Boolean> {
+    override fun send(request: IN, delaySeconds: Int): Single<WorkerReceipt> {
         Preconditions.checkNotNull(
                 producer,
                 "WorkerProducer is null. Ensure ActionManager has been started and all actions have been registered."
@@ -89,7 +52,7 @@ constructor(vertx: Vertx,
      * *
      * @return
      */
-    fun send(request: IN, groupId: String): Single<Boolean> {
+    fun send(request: IN, groupId: String): Single<WorkerReceipt> {
         Preconditions.checkNotNull(
                 producer,
                 "WorkerProducer is null. Ensure ActionManager has been started and all actions have been registered."
@@ -107,7 +70,7 @@ constructor(vertx: Vertx,
      * *
      * @return
      */
-    fun send(request: IN, groupId: String, delaySeconds: Int): Single<Boolean> {
+    fun send(request: IN, groupId: String, delaySeconds: Int): Single<WorkerReceipt> {
         Preconditions.checkNotNull(
                 producer,
                 "WorkerProducer is null. Ensure ActionManager has been started and all actions have been registered."

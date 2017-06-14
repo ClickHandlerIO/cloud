@@ -1,4 +1,4 @@
-package move.action.model
+package move.model
 
 import io.vertx.rxjava.core.Vertx
 import move.sql.*

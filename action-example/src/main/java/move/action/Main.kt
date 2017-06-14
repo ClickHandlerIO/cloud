@@ -83,28 +83,17 @@ object Main {
 
 @Module
 class Actions {
+//    @Provides
+//    fun unit(): Unit {
+//        return Unit
+//    }
 }
 
 @Module
 class M {
     @Provides
-    internal fun bool(): Boolean? {
-        return java.lang.Boolean.FALSE
-    }
-
-    @Provides
     internal fun string(): String {
         return ""
-    }
-
-    @Provides
-    internal fun provideVoid(): Void? {
-        return null
-    }
-
-    @Provides
-    internal fun any(): Any? {
-        return Any()
     }
 
     @Provides

@@ -6,5 +6,5 @@ import rx.Single;
  *
  */
 public interface WorkerProducer {
-    Single<Boolean> send(WorkerRequest request);
+    Single<WorkerReceipt> send(WorkerRequest request);
 }

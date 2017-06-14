@@ -47,7 +47,7 @@ internal constructor(val vertx: Vertx,
         val remoteActionMap = HashMap<Any, RemoteActionProvider<Action<Any, Any>, Any, Any>>()
         val internalActionMap = HashMap<Any, InternalActionProvider<Action<Any, Any>, Any, Any>>()
         val workerActionMap = HashMap<Any, WorkerActionProvider<Action<Any, Boolean>, Any>>()
-        val scheduledActionMap = HashMap<Any, ScheduledActionProvider<Action<Any, Any>>>()
+        val scheduledActionMap = HashMap<Any, ScheduledActionProvider<Action<Unit, Unit>>>()
         var isWorker = true
 
         fun bindProducer(provider: WorkerActionProvider<*, *>, producer: WorkerProducer) {
@@ -86,7 +86,7 @@ internal constructor(val vertx: Vertx,
                     workerActionMap.put(key, value as WorkerActionProvider<Action<Any, Boolean>, Any>)
                     workerActionMap.put(value.actionClass.canonicalName, value)
                 } else if (value.javaClass.isAssignableFrom(ScheduledActionProvider::class.java)) {
-                    scheduledActionMap.put(key, value as ScheduledActionProvider<Action<Any, Any>>)
+                    scheduledActionMap.put(key, value as ScheduledActionProvider<Action<Unit, Unit>>)
                 }
             }
         }

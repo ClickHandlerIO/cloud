@@ -11,7 +11,7 @@ abstract class ActionLocator {
     private val remoteActionMap = HashMap<Any, RemoteActionProvider<Action<Any, Any>, Any, Any>>()
     private val internalActionMap = HashMap<Any, InternalActionProvider<Action<Any, Any>, Any, Any>>()
     private val workerActionMap = HashMap<Any, WorkerActionProvider<Action<Any, Boolean>, Any>>()
-    private val scheduledActionMap = HashMap<Any, ScheduledActionProvider<Action<Any, Any>>>()
+    private val scheduledActionMap = HashMap<Any, ScheduledActionProvider<Action<Unit, Unit>>>()
     val actionMap: MutableMap<Any, ActionProvider<Action<Any, Any>, Any, Any>> = HashMap()
     var actionManager: ActionManager? = null
     private var inited: Boolean = false
@@ -32,22 +32,6 @@ abstract class ActionLocator {
 
     fun put(cls: Any, provider: ActionProvider<*, *, *>) {
         actionMap.put(cls, provider as ActionProvider<Action<Any, Any>, Any, Any>)
-    }
-
-    fun putInternal(cls: Any, provider: InternalActionProvider<*, *, *>) {
-        actionMap.put(cls, provider as InternalActionProvider<Action<Any, Any>, Any, Any>)
-    }
-
-    fun putRemote(cls: Any, provider: RemoteActionProvider<*, *, *>) {
-        actionMap.put(cls, provider as RemoteActionProvider<Action<Any, Any>, Any, Any>)
-    }
-
-//    fun putWorker(cls: Any, provider: WorkerActionProvider<*, *>) {
-//        actionMap.put(cls, provider as WorkerActionProvider<Action<Any, Any>, Any>)
-//    }
-
-    fun putScheduled(cls: Any, provider: ScheduledActionProvider<*>) {
-        actionMap.put(cls, provider as ScheduledActionProvider<Action<Any, Any>>)
     }
 
     /**
@@ -158,7 +142,7 @@ abstract class ActionLocator {
                 workerActionMap.put(key, value as WorkerActionProvider<Action<Any, Boolean>, Any>)
                 workerActionMap.put(value.actionClass.canonicalName, value)
             } else if (value.javaClass.isAssignableFrom(ScheduledActionProvider::class.java)) {
-                scheduledActionMap.put(key, value as ScheduledActionProvider<Action<Any, Any>>)
+                scheduledActionMap.put(key, value as ScheduledActionProvider<Action<Unit, Unit>>)
             }
         }
 

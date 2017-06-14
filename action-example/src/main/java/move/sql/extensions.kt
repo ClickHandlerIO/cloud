@@ -4,15 +4,15 @@ import kotlinx.coroutines.experimental.rx1.await
 import org.jooq.DSLContext
 
 suspend fun <T> SqlDatabase.awaitRead(callable: (SqlSession) -> T): T {
-    return readObservable(callable).toSingle().await()
+    return rxSingle(callable).await()
 }
 
 suspend fun <T> SqlDatabase.awaitDSL(callable: (DSLContext) -> T): T {
-    return readObservable{
+    return rxSingle {
         callable(it.create())
-    }.toSingle().await()
+    }.await()
 }
 
 suspend fun <T> SqlDatabase.awaitWrite(callable: (SqlSession) -> SqlResult<T>): SqlResult<T> {
-    return writeObservable(callable).toSingle().await()
+    return rxWrite(callable).await()
 }

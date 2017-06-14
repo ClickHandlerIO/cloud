@@ -2,6 +2,7 @@ package move.action;
 
 import dagger.Module;
 import dagger.Provides;
+import kotlin.Unit;
 
 import javax.annotation.Nullable;
 
@@ -10,17 +11,6 @@ import javax.annotation.Nullable;
  */
 @Module
 public class ActionModule {
-    @Provides
-    @Nullable
-    Void voidValue() {
-        return null;
-    }
-
-    @Provides
-    Boolean booleanValue() {
-        return false;
-    }
-
     @Provides
     Object any() {
         return new Object();

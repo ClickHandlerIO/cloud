@@ -3,12 +3,12 @@ package move.action;
 import dagger.Component;
 import io.vertx.rxjava.core.Vertx;
 import move.Action_LocatorRoot;
-import move.action.model.DB;
+import move.model.DB;
 
 import javax.inject.Singleton;
 
 @Singleton
-@Component(modules = {Actions.class, M.class})
+@Component(modules = {ActionModule.class, Actions.class, M.class})
 interface AppComponent {
     AppComponent instance = DaggerAppComponent.create();
 

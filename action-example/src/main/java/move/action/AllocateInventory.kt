@@ -23,7 +23,7 @@ constructor() :
         return reply { code = cause.javaClass.simpleName }
     }
 
-    suspend override fun execute(request: Request): Reply {
+    suspend override fun execute(): Reply {
         // Inline blocking block being run asynchronously
         val s = blocking {
             javaClass.simpleName + ": WORKER = " + Thread.currentThread().name

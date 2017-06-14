@@ -7,12 +7,14 @@ import javax.inject.Provider
 /**
 
  */
-open class ScheduledActionProvider<A : Action<Any, Any>> @Inject
+open class ScheduledActionProvider<A : Action<Unit, Unit>> @Inject
 constructor(vertx: Vertx,
-            actionProvider: Provider<A>,
-            inProvider: Provider<Any>,
-            outProvider: Provider<Any>) : ActionProvider<A, Any, Any>(
-        vertx, actionProvider, inProvider, outProvider
+            actionProvider: Provider<A>)
+    : ActionProvider<A, Unit, Unit>(
+        vertx,
+        actionProvider,
+        Provider<Unit> { },
+        Provider<Unit> { }
 ) {
     val scheduledAction: ScheduledAction = actionClass.getAnnotation(ScheduledAction::class.java)
 }

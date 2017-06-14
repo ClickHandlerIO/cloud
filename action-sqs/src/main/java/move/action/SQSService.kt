@@ -264,8 +264,8 @@ internal constructor(val vertx: Vertx,
             private val queueUrl: String,
             private val buffer: QueueBuffer) : WorkerProducer {
 
-        override fun send(request: WorkerRequest): Single<Boolean> {
-            return Single.create<Boolean> { subscriber ->
+        override fun send(request: WorkerRequest): Single<WorkerReceipt> {
+            return Single.create<WorkerReceipt> { subscriber ->
                 val sendRequest = SendMessageRequest(
                         queueUrl,
                         WireFormat.stringify(request.request)
@@ -296,7 +296,12 @@ internal constructor(val vertx: Vertx,
 
                     override fun onSuccess(receiveRequest: SendMessageRequest, sendMessageResult: SendMessageResult?) {
                         if (!subscriber.isUnsubscribed) {
-                            subscriber.onSuccess(sendMessageResult?.messageId?.isNotEmpty())
+                            subscriber.onSuccess(WorkerReceipt().apply {
+                                messageId = sendMessageResult?.messageId
+                                mD5OfMessageBody = sendMessageResult?.mD5OfMessageBody
+                                mD5OfMessageAttributes = sendMessageResult?.mD5OfMessageAttributes
+                                sequenceNumber = sendMessageResult?.sequenceNumber
+                            })
                         }
                     }
                 })
@@ -461,10 +466,10 @@ internal constructor(val vertx: Vertx,
                             jobsCounter.inc()
 
                             actionProvider.single(request).subscribe(
-                                    { shouldDelete ->
+                                    {
                                         activeMessages.decrementAndGet()
 
-                                        if (shouldDelete) {
+                                        if (it) {
                                             completesCounter.inc()
                                             deletesCounter.inc()
 

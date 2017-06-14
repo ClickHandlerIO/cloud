@@ -9,29 +9,27 @@ import com.hazelcast.core.ILock
 import io.vertx.rxjava.core.Vertx
 import javaslang.control.Try
 import move.cluster.HazelcastProvider
-import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-
+import java.util.*
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
-import java.util.ArrayList
-import java.util.concurrent.TimeUnit
 
 /**
 
  */
 @Singleton
 class ScheduledActionManager @Inject
-internal constructor(val vertx: Vertx, val hazelcastProvider: HazelcastProvider?) : AbstractIdleService() {
+internal constructor(val vertx: Vertx,
+                     hazelcastProvider: HazelcastProvider?) : AbstractIdleService() {
     private val clusterSingletons = ArrayList<ClusterSingleton>()
     private val nodeSingletons = ArrayList<NodeSingleton>()
 
     internal var hazelcastInstance: HazelcastInstance? = hazelcastProvider?.get()
-
     @Throws(Exception::class)
     override fun startUp() {
         ActionManager.scheduledActionMap.values.forEach { scheduledActionProvider ->
-            when (scheduledActionProvider.scheduledAction?.type) {
+            when (scheduledActionProvider.scheduledAction.type) {
                 ScheduledActionType.CLUSTER_SINGLETON -> clusterSingletons.add(ClusterSingleton(scheduledActionProvider))
                 ScheduledActionType.NODE_SINGLETON -> nodeSingletons.add(NodeSingleton(scheduledActionProvider))
             }
@@ -136,7 +134,7 @@ internal constructor(val vertx: Vertx, val hazelcastProvider: HazelcastProvider?
             if (startup) {
                 startup = false
             } else {
-                provider.observe(EMPTY).toBlocking().first()
+                provider.waitForResponse(Unit)
             }
 
             val elapsed = System.currentTimeMillis() - start
@@ -182,7 +180,7 @@ internal constructor(val vertx: Vertx, val hazelcastProvider: HazelcastProvider?
             if (startup) {
                 startup = false
             } else {
-                provider.observe(EMPTY).toBlocking().first()
+                provider.waitForResponse(Unit)
             }
         }
 

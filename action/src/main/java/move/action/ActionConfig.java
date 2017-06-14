@@ -16,6 +16,8 @@ import java.lang.annotation.Target;
 @Retention(java.lang.annotation.RetentionPolicy.RUNTIME)
 @Target({ElementType.TYPE})
 public @interface ActionConfig {
+    int DEFAULT_CONCURRENCY = 5000;
+
     /**
      * @return
      */
@@ -34,7 +36,7 @@ public @interface ActionConfig {
     /**
      * @return
      */
-    int maxConcurrentRequests() default 25;
+    int maxConcurrentRequests() default DEFAULT_CONCURRENCY;
 
     /**
      * @return

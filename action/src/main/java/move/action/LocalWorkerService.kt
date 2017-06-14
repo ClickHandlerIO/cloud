@@ -4,6 +4,7 @@ import com.google.common.util.concurrent.AbstractExecutionThreadService
 import com.google.common.util.concurrent.AbstractIdleService
 import io.vertx.rxjava.core.Vertx
 import javaslang.control.Try
+import move.common.UID
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import rx.Single
@@ -34,8 +35,8 @@ internal constructor(val vertx: Vertx) : AbstractIdleService(), WorkerService, W
         consumer.stopAsync().awaitTerminated()
     }
 
-    override fun send(request: WorkerRequest): Single<Boolean> {
-        return Single.create<Boolean> { subscriber ->
+    override fun send(request: WorkerRequest): Single<WorkerReceipt> {
+        return Single.create<WorkerReceipt> { subscriber ->
             if (request.delaySeconds > 0) {
                 vertx.setTimer(
                         TimeUnit.SECONDS.toMillis(request.delaySeconds.toLong())
@@ -44,7 +45,9 @@ internal constructor(val vertx: Vertx) : AbstractIdleService(), WorkerService, W
                 queue.add(request)
             }
 
-            subscriber.onSuccess(true)
+            subscriber.onSuccess(WorkerReceipt().apply {
+                messageId = UID.next()
+            })
         }
     }
 
