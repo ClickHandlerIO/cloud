@@ -18,6 +18,8 @@ constructor(vertx: Vertx,
             outProvider: Provider<OUT>) : ActionProvider<A, IN, OUT>(
         vertx, actionProvider, inProvider, outProvider
 ) {
+    override val isRemote = true
+
     /**
      *
      */

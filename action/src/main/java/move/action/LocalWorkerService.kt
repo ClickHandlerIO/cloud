@@ -79,7 +79,7 @@ internal constructor(val vertx: Vertx) : AbstractIdleService(), WorkerService, W
         protected fun doRun() {
             val request = queue.take() ?: return
 
-            request.actionProvider.executeBlocking(request.request)
+            request.actionProvider.single(request.request).subscribe()
         }
     }
 

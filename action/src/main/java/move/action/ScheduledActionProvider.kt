@@ -16,5 +16,7 @@ constructor(vertx: Vertx,
         Provider<Unit> { },
         Provider<Unit> { }
 ) {
+    override val isScheduled = true
+
     val scheduledAction: ScheduledAction = actionClass.getAnnotation(ScheduledAction::class.java)
 }

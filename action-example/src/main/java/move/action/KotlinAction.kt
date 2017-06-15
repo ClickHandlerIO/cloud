@@ -60,9 +60,9 @@ object KotlinAction {
 
         async(Unconfined) {
             try {
-                val result = Actions.allocateInventory { id = "" }
+//                val result = Actions.allocateInventory { id = "" }
 
-                println(result.code)
+//                println(result.code)
             } catch (e: Throwable) {
                 e.printStackTrace()
             }

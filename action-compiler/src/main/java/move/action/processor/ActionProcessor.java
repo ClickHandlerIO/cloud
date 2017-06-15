@@ -434,16 +434,16 @@ public class ActionProcessor extends AbstractProcessor {
                 providerType.addMethod(MethodSpec.constructorBuilder()
                     .addAnnotation(Inject.class).build());
 
-                final JavaFile javaFile = JavaFile.builder(path, providerType.build()).build();
-
-                try {
-                    // Write .java source code file.
-                    javaFile.writeTo(filer);
-                }
-                catch (Throwable e) {
-                    // Ignore.
-                    messager.printMessage(Diagnostic.Kind.ERROR, "Failed to generate Source File: " + e.getMessage());
-                }
+//                final JavaFile javaFile = JavaFile.builder(path, providerType.build()).build();
+//
+//                try {
+//                    // Write .java source code file.
+//                    javaFile.writeTo(filer);
+//                }
+//                catch (Throwable e) {
+//                    // Ignore.
+//                    messager.printMessage(Diagnostic.Kind.ERROR, "Failed to generate Source File: " + e.getMessage());
+//                }
 
                 ctor.addParameter(
                     ParameterSpec.builder(actionProviderBuilder, action.getFieldName(), Modifier.FINAL).build()

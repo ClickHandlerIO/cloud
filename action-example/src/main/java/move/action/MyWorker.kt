@@ -1,5 +1,6 @@
 package move.action
 
+import kotlinx.coroutines.experimental.delay
 import javax.inject.Inject
 
 /**
@@ -8,13 +9,15 @@ import javax.inject.Inject
 @WorkerAction(fifo = true)
 class MyWorker @Inject
 internal constructor() : BaseWorkerAction<MyWorker.Request>() {
-
     suspend override fun recover(caught: Throwable, cause: Throwable, isFallback: Boolean): Boolean {
-        TODO("not implemented")
+        return false
     }
 
     suspend override fun execute(): Boolean {
-        TODO("not implemented")
+        println("Started worker")
+        delay(1000)
+        println("Finishing worker")
+        return true
     }
 
     class Request @Inject

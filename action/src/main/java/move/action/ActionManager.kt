@@ -82,7 +82,7 @@ internal constructor(val vertx: Vertx,
                     remoteActionMap.put(key, value as RemoteActionProvider<Action<Any, Any>, Any, Any>)
                 } else if (value.javaClass.isAssignableFrom(InternalActionProvider::class.java)) {
                     internalActionMap.put(key, value as InternalActionProvider<Action<Any, Any>, Any, Any>)
-                } else if (value.javaClass.isAssignableFrom(WorkerActionProvider::class.java)) {
+                } else if (value.javaClass.isAssignableFrom(WorkerActionProvider::class.java) || value.javaClass.isAssignableFrom(FifoWorkerActionProvider::class.java)) {
                     workerActionMap.put(key, value as WorkerActionProvider<Action<Any, Boolean>, Any>)
                     workerActionMap.put(value.actionClass.canonicalName, value)
                 } else if (value.javaClass.isAssignableFrom(ScheduledActionProvider::class.java)) {

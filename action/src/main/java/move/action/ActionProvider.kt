@@ -62,6 +62,33 @@ constructor(
         return timeoutMillis.toLong()
     }
 
+    open val isInternal = false
+    open val isRemote = false
+    open val isWorker = false
+    open val isScheduled = false
+
+    protected open fun parallelism(): Int {
+        if (isScheduled) {
+            return DEFAULT_CONCURRENCY_SCHEDULED
+        }
+
+        if (actionConfig == null || actionConfig.maxConcurrentRequests == ActionConfig.DEFAULT_CONCURRENCY || actionConfig.maxConcurrentRequests < 0) {
+            if (isInternal) {
+                return DEFAULT_CONCURRENCY_INTERNAL
+            }
+            if (isRemote) {
+                return DEFAULT_CONCURRENCY_REMOTE
+            }
+            if (isWorker) {
+                return DEFAULT_CONCURRENCY_WORKER
+            }
+
+            return DEFAULT_CONCURRENCY_WORKER
+        }
+
+        return actionConfig.maxConcurrentRequests
+    }
+
     protected open fun init() {
         // Timeout milliseconds.
         var timeoutMillis = DEFAULT_TIMEOUT_MILLIS
@@ -88,7 +115,7 @@ constructor(
 
             commandPropertiesDefaults.withExecutionTimeoutEnabled(true)
             commandPropertiesDefaults.withExecutionTimeoutInMilliseconds(timeoutMillis)
-            this.executionTimeoutEnabled = true
+            executionTimeoutEnabled = true
         }
 
         // Determine Hystrix isolation strategy.
@@ -107,10 +134,9 @@ constructor(
                 // Set command key
                 .andCommandKey(this.commandKey)
 
-        if (actionConfig != null && actionConfig.maxConcurrentRequests > 0) {
-            maxConcurrentRequests = actionConfig.maxConcurrentRequests
-            commandPropertiesDefaults.withExecutionIsolationSemaphoreMaxConcurrentRequests(actionConfig!!.maxConcurrentRequests)
-        }
+
+        commandPropertiesDefaults.withExecutionIsolationSemaphoreMaxConcurrentRequests(parallelism())
+        commandPropertiesDefaults.withExecutionIsolationThreadInterruptOnFutureCancel(true)
     }
 
     protected fun commandKey(config: ActionConfig?, actionClass: Class<*>): String {
@@ -138,7 +164,7 @@ constructor(
 
         // Clone command properties from default and adjust the timeout.
         val commandProperties = HystrixCommandProperties.Setter()
-                .withExecutionIsolationStrategy(commandPropertiesDefaults.executionIsolationStrategy)
+                .withExecutionIsolationStrategy(HystrixCommandProperties.ExecutionIsolationStrategy.SEMAPHORE)
                 .withExecutionTimeoutEnabled(true)
                 .withExecutionTimeoutInMilliseconds(maxMillis.toInt())
                 .withFallbackEnabled(action.isFallbackEnabled)
@@ -354,8 +380,12 @@ constructor(
     companion object {
         internal val DEFAULT_TIMEOUT_MILLIS = 5000
         internal val MIN_TIMEOUT_MILLIS = 200
+        internal val DEFAULT_CONCURRENCY_INTERNAL = 10000
+        internal val DEFAULT_CONCURRENCY_REMOTE = 10000
+        internal val DEFAULT_CONCURRENCY_WORKER = 10
+        internal val DEFAULT_CONCURRENCY_SCHEDULED = 1
 
-        fun current(): ActionContext {
+        fun current(): ActionContext? {
             return Action.currentContext()
         }
     }

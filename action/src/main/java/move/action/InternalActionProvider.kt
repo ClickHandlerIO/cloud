@@ -19,6 +19,8 @@ constructor(vertx: Vertx,
             outProvider: Provider<OUT>) : ActionProvider<A, IN, OUT>(
         vertx, actionProvider, inProvider, outProvider
 ) {
+    override val isInternal = true
+
     val internalAction: InternalAction? = actionClass.getAnnotation(InternalAction::class.java)
 
     override fun execute(callable: Try.CheckedConsumer<IN>): OUT {

@@ -15,6 +15,8 @@ constructor(vertx: Vertx,
             inProvider: Provider<IN>) : ActionProvider<A, IN, Boolean>(
         vertx, actionProvider, inProvider, Provider<Boolean> { false }
 ) {
+    override val isWorker = true
+
     val workerAction: WorkerAction? = actionClass.getAnnotation(WorkerAction::class.java)
     val name = actionClass.canonicalName
     val isFifo = workerAction?.fifo ?: false

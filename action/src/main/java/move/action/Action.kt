@@ -218,9 +218,9 @@ abstract class Action<IN : Any, OUT : Any> : IAction<IN, OUT>() {
     }
 
     companion object {
-        val contextLocal = ThreadLocal<ActionContext>()
+        val contextLocal = ThreadLocal<ActionContext?>()
 
-        fun currentContext(): ActionContext {
+        fun currentContext(): ActionContext? {
             return contextLocal.get()
         }
     }
