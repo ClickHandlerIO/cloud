@@ -31,6 +31,8 @@ constructor(vertx: Vertx,
     val isGuarded: Boolean
         get() = remoteAction?.guarded ?: false
 
+    fun blockingLocal(request: IN): OUT = blocking(request)
+
     fun execute(callable: Try.CheckedConsumer<IN>): OUT = super.execute0(callable)
 
     fun execute(request: IN): OUT = super.execute0(request)
@@ -51,6 +53,10 @@ constructor(vertx: Vertx,
 
     fun singleBuilder(request: IN): Single<OUT> {
         return super.single0(request)
+    }
+
+    fun singleBuilder(data: Any?, request: IN): Single<OUT> {
+        return super.single0(data, request)
     }
 
     fun single(request: IN): Single<OUT> {
