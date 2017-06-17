@@ -4,7 +4,6 @@ import com.google.common.base.Throwables
 import com.netflix.hystrix.*
 import io.vertx.rxjava.core.Vertx
 import javaslang.control.Try
-import kotlinx.coroutines.experimental.rx1.await
 import rx.Observable
 import rx.Single
 import java.util.function.Consumer
@@ -184,7 +183,7 @@ constructor(
                 .andCommandPropertiesDefaults(commandProperties)
     }
 
-    protected fun create(request: IN): A {
+    internal fun create(request: IN): A {
         // Create new Action instance.
         val action = actionProvider.get()
 
@@ -208,13 +207,38 @@ constructor(
         return action
     }
 
+    internal fun create(data: Any?, request: IN): A {
+        // Create new Action instance.
+        val action = actionProvider.get()
+
+        // Get or create ActionContext.
+        var context: ActionContext? = Action.contextLocal.get()
+        if (context == null) {
+            context = ActionContext(timeoutMillis.toLong(), this, io.vertx.core.Vertx.currentContext())
+        }
+        context.data = data
+
+        action.init(
+                vertx,
+                context,
+                request,
+                inProvider,
+                outProvider,
+                // Set the command setter.
+                configureCommand(action, context)
+        )
+
+        // Return action instance.
+        return action
+    }
+
     /**
      * @return
      */
-    open fun execute(callable: Try.CheckedConsumer<IN>): OUT {
+    open internal fun execute0(callable: Try.CheckedConsumer<IN>): OUT {
         val request = inProvider.get()
         Try.run { callable.accept(request) }
-        return waitForResponse(request)
+        return single0(request).toBlocking().value()
     }
 
     /**
@@ -223,47 +247,26 @@ constructor(
      * @return
      */
     @Deprecated("")
-    open fun execute(request: IN): OUT {
+    open internal fun execute0(request: IN): OUT {
         try {
-            return observe0(create(request)
-            ).toBlocking().toFuture().get()
+            return single0(request).toBlocking().value()
         } catch (e: Throwable) {
             Throwables.throwIfUnchecked(e)
             throw RuntimeException(e)
         }
     }
 
-    open fun executeBlocking(request: IN): OUT {
-        try {
-            return observe0(create(request)
-            ).toBlocking().toFuture().get()
-        } catch (e: Throwable) {
-            throw RuntimeException(e)
-        }
-    }
+    open internal fun blockingBuilder(request: IN): OUT = single0(request).toBlocking().value()
+
+    open internal fun blockingBuilder(data: Any?, request: IN): OUT = single0(data, request).toBlocking().value()
 
     /**
      * @return
      */
-    fun waitForResponse(callable: Try.CheckedConsumer<IN>): OUT {
+    open internal fun blockingBuilder(callable: Try.CheckedConsumer<IN>): OUT {
         val request = inProvider.get()
         Try.run { callable.accept(request) }
-        return waitForResponse(request)
-    }
-
-    /**
-     * @param request
-     * *
-     * @return
-     */
-    fun waitForResponse(request: IN): OUT {
-        try {
-            return observe0(create(request)
-            ).toBlocking().toFuture().get()
-        } catch (e: Throwable) {
-            throw RuntimeException(e)
-        }
-
+        return single0(request).toBlocking().value()
     }
 
     /**
@@ -271,10 +274,10 @@ constructor(
      * *
      * @return
      */
-    open fun observe(callback: Consumer<IN>?): Observable<OUT> {
+    open internal fun single0(callback: Consumer<IN>?): Single<OUT> {
         val request = this.inProvider.get()
         callback?.accept(request)
-        return observe(request)
+        return single0(request)
     }
 
     /**
@@ -282,7 +285,7 @@ constructor(
      * *
      * @return
      */
-    open fun single(request: IN): Single<OUT> {
+    open internal fun single0(request: IN): Single<OUT> {
         return observe0(create(request)).toSingle()
     }
 
@@ -291,39 +294,39 @@ constructor(
      * *
      * @return
      */
-    open fun observe(request: IN): Observable<OUT> {
-        return observe0(create(request))
-    }
-
-    open suspend fun await(request: IN): OUT {
-        return observe(request).toSingle().await()
+    open internal fun single0(data: Any?, request: IN): Single<OUT> {
+        return observe0(create(data, request)).toSingle()
     }
 
     /**
      * @param request
-     */
-    fun fireAndForget(request: IN) {
-        observe(request).subscribe()
-    }
-
-    /**
-     * @param callback
      * *
      * @return
      */
-    fun fireAndForget(callback: Consumer<IN>?) {
-        val request = this.inProvider.get()
-        callback?.accept(request)
-        observe(request).subscribe()
+    open internal fun eagerSingle0(request: IN): Single<OUT> {
+        return observe0(true, create(request)).toSingle()
+    }
+
+    /**
+     * @param request
+     * *
+     * @return
+     */
+    open internal fun eagerSingle0(data: Any?, request: IN): Single<OUT> {
+        return observe0(true, create(data, request)).toSingle()
+    }
+
+    protected fun observe0(action: A): Observable<OUT> {
+        return observe0(false, action)
     }
 
     /**
      * @param request\
      */
-    protected fun observe0(action: A): Observable<OUT> {
+    protected fun observe0(eager: Boolean, action: A): Observable<OUT> {
         return Single.create<OUT> { subscriber ->
             // Build observable.
-            val observable = action.toObservable()
+            val observable = if (eager) action.observe() else action.toObservable()
             val ctx = io.vertx.core.Vertx.currentContext()
             val actionContext = action.context
 

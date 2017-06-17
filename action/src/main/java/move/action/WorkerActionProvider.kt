@@ -2,6 +2,7 @@ package move.action
 
 import com.google.common.base.Preconditions
 import io.vertx.rxjava.core.Vertx
+import kotlinx.coroutines.experimental.rx1.await
 import rx.Single
 import javax.inject.Inject
 import javax.inject.Provider
@@ -24,14 +25,41 @@ constructor(vertx: Vertx,
 
     internal var producer: WorkerProducer? = null
 
+    fun blockingLocal(request: IN): Boolean {
+        return super.blockingBuilder(request)
+    }
+
+    /**
+     *
+     */
+    fun single(request: IN): Single<WorkerReceipt> = single(0, request)
+
+    /**
+     *
+     */
+    fun single(delaySeconds: Int, request: IN): Single<WorkerReceipt> =
+            producer!!.send(WorkerRequest()
+                    .actionProvider(this)
+                    .request(request)
+                    .delaySeconds(delaySeconds))
+
+    /**
+     *
+     */
+    fun single(block: IN.() -> Unit): Single<WorkerReceipt> = single(0, block)
+
+    /**
+     *
+     */
+    fun single(delaySeconds: Int, block: IN.() -> Unit): Single<WorkerReceipt> =
+            single(delaySeconds, inProvider.get().apply(block))
+
     /**
      * @param request
      * *
      * @return
      */
-    open fun send(request: IN): Single<WorkerReceipt> {
-        return send(request, 0)
-    }
+    fun send(request: IN): Single<WorkerReceipt> = send(0, request)
 
     /**
      * @param request
@@ -40,16 +68,54 @@ constructor(vertx: Vertx,
      * *
      * @return
      */
-    open fun send(request: IN, delaySeconds: Int): Single<WorkerReceipt> {
+    fun send(delaySeconds: Int, request: IN): Single<WorkerReceipt> {
         Preconditions.checkNotNull(
                 producer,
                 "WorkerProducer is null. Ensure ActionManager has been started and all actions have been registered."
         )
-        return producer!!.send(WorkerRequest()
+        val single = producer!!.send(WorkerRequest()
                 .actionProvider(this)
                 .request(request)
                 .delaySeconds(delaySeconds))
+
+        // Dispatch
+        single.subscribe()
+
+        return single
     }
+
+    /**
+     * @param request
+     * *
+     * @return
+     */
+    fun send(block: IN.() -> Unit): Single<WorkerReceipt> = send(0, inProvider.get().apply(block))
+
+    /**
+     * @param request
+     * *
+     * @return
+     */
+    fun send(delaySeconds: Int, block: IN.() -> Unit): Single<WorkerReceipt> = send(delaySeconds, inProvider.get().apply(block))
+
+    suspend operator fun invoke(request: IN): Single<WorkerReceipt> = send(request)
+
+    suspend operator fun invoke(delaySeconds: Int, request: IN): Single<WorkerReceipt> = send(delaySeconds, request)
+
+    suspend operator fun invoke(block: IN.() -> Unit): Single<WorkerReceipt> = send(0, block)
+
+    suspend operator fun invoke(delaySeconds: Int, block: IN.() -> Unit): Single<WorkerReceipt> =
+            send(delaySeconds, inProvider.get().apply(block))
+
+    suspend fun await(request: IN): WorkerReceipt = single(request).await()
+
+    suspend fun await(delaySeconds: Int, request: IN): WorkerReceipt = single(delaySeconds, request).await()
+
+    suspend fun await(block: IN.() -> Unit): WorkerReceipt =
+            single(inProvider.get().apply(block)).await()
+
+    suspend fun await(delaySeconds: Int, block: IN.() -> Unit): WorkerReceipt =
+            single(delaySeconds, inProvider.get().apply(block)).await()
 }
 
 class WorkerReceipt @Inject constructor() {

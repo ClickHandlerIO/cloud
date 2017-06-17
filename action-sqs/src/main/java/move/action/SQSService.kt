@@ -54,12 +54,12 @@ internal constructor(val vertx: Vertx,
             return false
         }
 
-        if (config.exclusions != null && !config.exclusions.isEmpty()) {
-            return !config.exclusions.contains(provider.name) && !config.exclusions.contains(provider.queueName)
+        if (config.exclusions != null && !config.exclusions!!.isEmpty()) {
+            return !config.exclusions!!.contains(provider.name) && !config.exclusions!!.contains(provider.queueName)
         }
 
-        if (config.inclusions != null && !config.inclusions.isEmpty()) {
-            return config.inclusions.contains(provider.name) || config.inclusions.contains(provider.queueName)
+        if (config.inclusions != null && !config.inclusions!!.isEmpty()) {
+            return config.inclusions!!.contains(provider.name) || config.inclusions!!.contains(provider.queueName)
         }
 
         return true
@@ -67,10 +67,6 @@ internal constructor(val vertx: Vertx,
 
     private fun queueConfig(provider: WorkerActionProvider<*, *>): SQSQueueConfig {
         var queueConfig = queueConfig0(provider)
-
-        if (queueConfig == null) {
-            queueConfig = SQSQueueConfig()
-        }
 
         if (queueConfig.maxBatchSize < 1) {
             queueConfig.maxBatchSize = config.maxBatchSize
@@ -91,13 +87,16 @@ internal constructor(val vertx: Vertx,
         return queueConfig
     }
 
-    private fun queueConfig0(provider: WorkerActionProvider<*, *>): SQSQueueConfig? {
-        if (config.queues == null || config.queues.isEmpty()) {
-            return null
+    private fun queueConfig0(provider: WorkerActionProvider<*, *>): SQSQueueConfig {
+        if (config.queues == null || config.queues!!.isEmpty()) {
+            return SQSQueueConfig()
         }
 
-        return config.queues.stream()
-                .filter { Strings.nullToEmpty(it.name).equals(provider.name, ignoreCase = true) }
+        return config.queues!!.stream()
+                .filter {
+                    Strings.nullToEmpty(it.name).equals(provider.name, ignoreCase = true) ||
+                            Strings.nullToEmpty(it.name).equals(provider.queueName, ignoreCase = true)
+                }
                 .findFirst()
                 .orElse(null)
     }
@@ -150,7 +149,7 @@ internal constructor(val vertx: Vertx,
         config.awsSecretKey = config.awsSecretKey?.trim() ?: ""
 
         // Set credentials if necessary.
-        if (!config.awsAccessKey.isEmpty()) {
+        if (config.awsAccessKey != null && config.awsAccessKey!!.isNotEmpty()) {
             builder.withCredentials(
                     AWSStaticCredentialsProvider(
                             BasicAWSCredentials(
@@ -469,7 +468,7 @@ internal constructor(val vertx: Vertx,
                                     {
                                         activeMessages.decrementAndGet()
 
-                                        if (it) {
+                                        if (it != null && it.isSuccess) {
                                             completesCounter.inc()
                                             deletesCounter.inc()
 
@@ -610,7 +609,7 @@ internal constructor(val vertx: Vertx,
                                 try {
                                     jobsCounter.inc()
 
-                                    val shouldDelete = actionProvider.executeBlocking(request)
+                                    val shouldDelete = actionProvider.blockingLocal(request)
 
                                     if (shouldDelete) {
                                         completesCounter.inc()

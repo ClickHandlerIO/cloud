@@ -1,8 +1,8 @@
 package move.action
 
 import io.vertx.rxjava.core.Vertx
+import javaslang.control.Try
 import kotlinx.coroutines.experimental.rx1.await
-import rx.Observable
 import rx.Single
 import java.util.function.Consumer
 import javax.inject.Inject
@@ -31,57 +31,70 @@ constructor(vertx: Vertx,
     val isGuarded: Boolean
         get() = remoteAction?.guarded ?: false
 
-    /**
-     * @param callback
-     * *
-     * @return
-     */
-    override fun observe(callback: Consumer<IN>?): Observable<OUT> {
-        return super.observe(callback)
+    fun execute(callable: Try.CheckedConsumer<IN>): OUT = super.execute0(callable)
+
+    fun execute(request: IN): OUT = super.execute0(request)
+
+    fun blocking(request: IN): OUT = super.blockingBuilder(request)
+
+    fun blocking(data: Any?, request: IN): OUT = super.blockingBuilder(data, request)
+
+    fun blocking(block: IN.() -> Unit): OUT = super.blockingBuilder(inProvider.get().apply(block))
+
+    fun blocking(data: Any?, block: IN.() -> Unit): OUT = super.blockingBuilder(data, inProvider.get().apply(block))
+
+    fun singleBuilder(callback: Consumer<IN>): Single<OUT> {
+        val request = inProvider.get()
+        callback.accept(request)
+        return super.single0(request)
     }
 
-    fun single(callback: Consumer<IN>): Single<OUT> {
-        return observe(callback).toSingle()
+    fun singleBuilder(request: IN): Single<OUT> {
+        return super.single0(request)
     }
 
-    /**
-     * @param request
-     * *
-     * @return
-     */
-    override fun observe(request: IN): Observable<OUT> {
-        return observe0(create(request))
-    }
-
-    fun observe(data: Any?, request: IN): Observable<OUT> {
-        val action = create(request)
-
-        action.context.data = data
-
-        return observe0(action)
+    fun single(request: IN): Single<OUT> {
+        return super.single0(request)
     }
 
     fun single(data: Any?, request: IN): Single<OUT> {
-        return observe(data, request).toSingle()
+        return super.single0(data, request)
     }
 
-    fun observe(request: IN, actionCallback: Consumer<A>?): Observable<OUT> {
-        val action = create(request)
-        actionCallback?.accept(action)
-        return observe0(action)
+    fun single(block: IN.() -> Unit): Single<OUT> {
+        return super.single0(inProvider.get().apply(block))
     }
 
-    fun single(request: IN, actionCallback: Consumer<A>): Single<OUT> {
-        return observe(request, actionCallback).toSingle()
+    fun single(data: Any?, block: IN.() -> Unit): Single<OUT> {
+        return super.single0(data, inProvider.get().apply(block))
     }
 
-    suspend operator fun invoke(request: IN): OUT {
-        return single(request).await()
+    fun eagerSingle(callback: Consumer<IN>): Single<OUT> {
+        val request = inProvider.get()
+        callback.accept(request)
+        return super.eagerSingle0(request)
     }
 
-    suspend operator inline fun invoke(block: IN.() -> Unit): OUT = invoke(inProvider.get().apply(block))
+    fun eagerSingle(data: Any?, request: IN): Single<OUT> = super.eagerSingle0(data, request)
 
-    suspend fun await(block: IN.() -> Unit): OUT {
-        return single(inProvider.get().apply(block)).await()
-    }
+    fun eagerSingle(block: IN.() -> Unit): Single<OUT> = super.eagerSingle0(inProvider.get().apply(block))
+
+    fun eagerSingle(data: Any?, block: IN.() -> Unit): Single<OUT> =
+            super.eagerSingle0(data, inProvider.get().apply(block))
+
+    suspend operator fun invoke(request: IN): OUT = await(request)
+
+    suspend operator fun invoke(data: Any?, request: IN): OUT = await(data, request)
+
+    suspend operator fun invoke(block: IN.() -> Unit): OUT = await(inProvider.get().apply(block))
+
+    suspend operator fun invoke(data: Any?, block: IN.() -> Unit): OUT = await(data, block)
+
+    suspend fun await(request: IN): OUT = super.single0(request).await()
+
+    suspend fun await(data: Any?, request: IN): OUT = super.single0(data, request).await()
+
+    suspend fun await(block: IN.() -> Unit): OUT = super.single0(inProvider.get().apply(block)).await()
+
+    suspend fun await(data: Any?, block: IN.() -> Unit): OUT = super.single0(data, inProvider.get().apply(block)).await()
 }

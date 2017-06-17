@@ -89,10 +89,31 @@ abstract class ActionLocator {
     /**
      * @return
      */
+    val internalProviderMap: Map<Any, InternalActionProvider<*, *, *>>
+        get() {
+            ensureActionMap()
+            return HashMap(internalActionMap)
+        }
+
+    /**
+     * @return
+     */
     val remoteProviderMap: Map<Any, RemoteActionProvider<*, *, *>>
         get() {
             ensureActionMap()
             return HashMap(remoteActionMap)
+        }
+
+    val workerProviderMap: Map<Any, WorkerActionProvider<*, *>>
+        get() {
+            ensureActionMap()
+            return HashMap(workerProviderMap)
+        }
+
+    val scheduledProviderMap: Map<Any, ScheduledActionProvider<*>>
+        get() {
+            ensureActionMap()
+            return HashMap(scheduledActionMap)
         }
 
     /**

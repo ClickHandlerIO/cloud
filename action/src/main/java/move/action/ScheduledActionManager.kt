@@ -134,7 +134,7 @@ internal constructor(val vertx: Vertx,
             if (startup) {
                 startup = false
             } else {
-                provider.waitForResponse(Unit)
+                provider.blockingBuilder(Unit)
             }
 
             val elapsed = System.currentTimeMillis() - start
@@ -180,7 +180,7 @@ internal constructor(val vertx: Vertx,
             if (startup) {
                 startup = false
             } else {
-                provider.waitForResponse(Unit)
+                provider.blockingBuilder(Unit)
             }
         }
 

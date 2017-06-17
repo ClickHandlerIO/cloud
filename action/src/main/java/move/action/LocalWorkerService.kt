@@ -5,7 +5,6 @@ import com.google.common.util.concurrent.AbstractIdleService
 import io.vertx.rxjava.core.Vertx
 import javaslang.control.Try
 import move.common.UID
-import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import rx.Single
 
@@ -37,6 +36,7 @@ internal constructor(val vertx: Vertx) : AbstractIdleService(), WorkerService, W
 
     override fun send(request: WorkerRequest): Single<WorkerReceipt> {
         return Single.create<WorkerReceipt> { subscriber ->
+
             if (request.delaySeconds > 0) {
                 vertx.setTimer(
                         TimeUnit.SECONDS.toMillis(request.delaySeconds.toLong())
@@ -79,7 +79,7 @@ internal constructor(val vertx: Vertx) : AbstractIdleService(), WorkerService, W
         protected fun doRun() {
             val request = queue.take() ?: return
 
-            request.actionProvider.single(request.request).subscribe()
+            request.actionProvider.single0(request.request).subscribe()
         }
     }
 

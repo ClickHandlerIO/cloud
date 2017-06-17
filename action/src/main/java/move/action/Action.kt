@@ -57,6 +57,12 @@ abstract class Action<IN : Any, OUT : Any> : IAction<IN, OUT>() {
         this.setter = setter
         this.dispatcher = createDispatcher()
         this.command = createCommand()
+
+        afterInit()
+    }
+
+    open fun afterInit() {
+
     }
 
     open fun createDispatcher(): CoroutineDispatcher {
@@ -157,8 +163,14 @@ abstract class Action<IN : Any, OUT : Any> : IAction<IN, OUT>() {
      */
     protected fun <T> single(block: suspend CoroutineScope.() -> T): Single<T> = rxSingle(dispatcher, block)
 
+    /**
+     *
+     */
     protected inline fun request(block: IN.() -> Unit): IN = requestProvider.get().apply(block)
 
+    /**
+     *
+     */
     protected inline fun reply(block: OUT.() -> Unit): OUT = replyProvider.get().apply(block)
 
     /**
@@ -225,6 +237,10 @@ abstract class Action<IN : Any, OUT : Any> : IAction<IN, OUT>() {
         }
     }
 
+    suspend open fun afterExecute(reply: OUT): OUT {
+        return reply
+    }
+
     inner class Command(setter: HystrixObservableCommand.Setter?) : HystrixObservableCommand<OUT>(setter) {
         private var timedOut: Boolean = false
 
@@ -284,7 +300,7 @@ abstract class Action<IN : Any, OUT : Any> : IAction<IN, OUT>() {
         override fun construct(): Observable<OUT>? {
             return hystrixSingle(dispatcher) {
                 try {
-                    execute()
+                    afterExecute(execute())
                 } catch (e: Throwable) {
                     this@Action.executeException = let {
                         if (this@Command.executionException == null)
@@ -319,7 +335,7 @@ abstract class Action<IN : Any, OUT : Any> : IAction<IN, OUT>() {
                             throw e
                         }
                     } else {
-                        executeFallback(this@Action.executeException, this@Action.executeCause)
+                        afterExecute(executeFallback(this@Action.executeException, this@Action.executeCause))
                     }
                 } catch (e: Throwable) {
                     this@Action.fallbackException = let {
