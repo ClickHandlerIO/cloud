@@ -1,36 +1,46 @@
 package move.sql;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
  *
  */
 public abstract class AbstractEntity implements HasId {
-    public static final String ID = "id";
 
-    @JsonProperty(ID)
-    @Column(name = ID, length = 32, nullable = false)
-    protected String id;
+  public static final String ID = "id";
 
-    public AbstractEntity() {
-    }
+  @JsonProperty(ID)
+  @Column(name = ID, length = 32, nullable = false)
+  protected String id;
 
-    public AbstractEntity(String id) {
-        this.id = id;
-    }
+  @JsonIgnore
+  @NoColumn
+  public boolean exists;
 
-    @Override
-    public String getId() {
-        return id;
-    }
+  public AbstractEntity() {
+  }
 
-    @Override
-    public void setId(String id) {
-        this.id = id;
-    }
+  public AbstractEntity(String id) {
+    this.id = id;
+  }
 
-    public AbstractEntity id(String id) {
-        this.id = id;
-        return this;
-    }
+  @Override
+  public String getId() {
+    return id;
+  }
+
+  @Override
+  public void setId(String id) {
+    this.id = id;
+  }
+
+  public AbstractEntity id(String id) {
+    this.id = id;
+    return this;
+  }
+
+  public boolean exists() {
+    return exists;
+  }
 }

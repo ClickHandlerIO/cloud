@@ -10,18 +10,16 @@ import org.jooq.Record;
  * @author Clay Molocznik
  */
 public interface EntityMapper<E extends AbstractEntity, R extends Record> {
-    /**
-     * A callback method indicating that the next record has been fetched.
-     *
-     * @param entity The entity to be mapped. This is never null.
-     */
-    R map(E entity);
 
-    /**
-     * Merge the values of a record into an instance of an entity.
-     *
-     * @param record
-     * @param intoEntity
-     */
-    void merge(R record, E intoEntity);
+  /**
+   * A callback method indicating that the next record has been fetched.
+   *
+   * @param entity The entity to be mapped. This is never null.
+   */
+  R map(E entity);
+
+  /**
+   * Merge the values of a record into an instance of an entity.
+   */
+  void merge(R record, E intoEntity);
 }

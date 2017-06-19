@@ -11,13 +11,14 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
 public @interface Index {
-    String name() default "";
 
-    IndexColumn[] columns();
+  String name() default "";
 
-    boolean unique() default false;
+  IndexColumn[] columns();
 
-    boolean clustered() default false;
+  boolean unique() default false;
 
-    String type() default "";
+  boolean clustered() default false;
+
+  String type() default "";
 }

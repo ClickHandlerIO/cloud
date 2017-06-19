@@ -7,74 +7,75 @@ import java.time.LocalDateTime;
  */
 @Table
 public class EvolutionChangeEntity extends AbstractEntity {
-    @Column
-    private ChangeType type;
-    @Column
-    private String sql;
-    @Column
-    private LocalDateTime started;
-    @Column
-    private LocalDateTime end;
-    @Column
-    private boolean success;
-    @Column
-    private long affected;
-    @Column
-    private String message;
 
-    public ChangeType getType() {
-        return type;
-    }
+  @Column
+  private ChangeType type;
+  @Column
+  private String sql;
+  @Column
+  private LocalDateTime started;
+  @Column
+  private LocalDateTime end;
+  @Column
+  private boolean success;
+  @Column
+  private long affected;
+  @Column
+  private String message;
 
-    public void setType(ChangeType type) {
-        this.type = type;
-    }
+  public ChangeType getType() {
+    return type;
+  }
 
-    public String getSql() {
-        return sql;
-    }
+  public void setType(ChangeType type) {
+    this.type = type;
+  }
 
-    public void setSql(String sql) {
-        this.sql = sql;
-    }
+  public String getSql() {
+    return sql;
+  }
 
-    public LocalDateTime getStarted() {
-        return started;
-    }
+  public void setSql(String sql) {
+    this.sql = sql;
+  }
 
-    public void setStarted(LocalDateTime started) {
-        this.started = started;
-    }
+  public LocalDateTime getStarted() {
+    return started;
+  }
 
-    public LocalDateTime getEnd() {
-        return end;
-    }
+  public void setStarted(LocalDateTime started) {
+    this.started = started;
+  }
 
-    public void setEnd(LocalDateTime end) {
-        this.end = end;
-    }
+  public LocalDateTime getEnd() {
+    return end;
+  }
 
-    public boolean isSuccess() {
-        return success;
-    }
+  public void setEnd(LocalDateTime end) {
+    this.end = end;
+  }
 
-    public void setSuccess(boolean success) {
-        this.success = success;
-    }
+  public boolean isSuccess() {
+    return success;
+  }
 
-    public long getAffected() {
-        return affected;
-    }
+  public void setSuccess(boolean success) {
+    this.success = success;
+  }
 
-    public void setAffected(long affected) {
-        this.affected = affected;
-    }
+  public long getAffected() {
+    return affected;
+  }
 
-    public String getMessage() {
-        return message;
-    }
+  public void setAffected(long affected) {
+    this.affected = affected;
+  }
 
-    public void setMessage(String message) {
-        this.message = message;
-    }
+  public String getMessage() {
+    return message;
+  }
+
+  public void setMessage(String message) {
+    this.message = message;
+  }
 }

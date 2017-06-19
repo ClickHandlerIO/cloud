@@ -1,292 +1,317 @@
 package move.sql;
 
-import org.jooq.*;
-import org.slf4j.Logger;
-
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.stream.Stream;
+import org.jooq.Condition;
+import org.jooq.DSLContext;
+import org.jooq.Delete;
+import org.jooq.Query;
+import org.jooq.Update;
+import org.slf4j.Logger;
 
 /**
  * Bundles multiple SQL write queries into a single batch call.
  */
 public class SqlBatch {
-   public final SqlSession session;
-   private final List<Query> queryList = new ArrayList<>();
 
-   SqlBatch(SqlSession session) {
-      this.session = session;
-   }
+  public final SqlSession session;
+  private final List<Query> queryList = new ArrayList<>();
 
-   /**
-    * @return
-    */
-   public SqlSession getSession() {
-      return session;
-   }
+  SqlBatch(SqlSession session) {
+    this.session = session;
+  }
 
-   /**
-    * @return
-    */
-   public DSLContext create() {
-      return session.create();
-   }
+  /**
+   * @return
+   */
+  public SqlSession getSession() {
+    return session;
+  }
 
-   /**
-    * @param entity
-    * @param <E>
-    * @return
-    */
-   public <E extends AbstractEntity> SqlBatch insert(E entity) {
-      if (entity == null)
-         return this;
+  /**
+   * @return
+   */
+  public DSLContext create() {
+    return session.create();
+  }
 
-      queryList.add(session.insertQuery(entity));
+  /**
+   * @param entity
+   * @param <E>
+   * @return
+   */
+  public <E extends AbstractEntity> SqlBatch insert(E entity) {
+    if (entity == null) {
       return this;
-   }
+    }
 
-   /**
-    * @param stream
-    * @param <E>
-    * @return
-    */
-   public <E extends AbstractEntity> SqlBatch insert(Stream<? extends AbstractEntity> stream) {
-      if (stream == null)
-         return this;
+    queryList.add(session.insertQuery(entity));
+    return this;
+  }
 
-      stream.forEach(v -> queryList.add(session.insertQuery(v)));
+  /**
+   * @param stream
+   * @param <E>
+   * @return
+   */
+  public <E extends AbstractEntity> SqlBatch insert(Stream<? extends AbstractEntity> stream) {
+    if (stream == null) {
       return this;
-   }
+    }
 
-   /**
-    * @param entities
-    * @param <E>
-    * @return
-    */
-   public <E extends AbstractEntity> SqlBatch insert(Collection<? extends AbstractEntity> entities) {
-      if (entities == null || entities.isEmpty())
-         return this;
+    stream.forEach(v -> queryList.add(session.insertQuery(v)));
+    return this;
+  }
 
-      entities.forEach(entity -> queryList.add(session.insertQuery(entity)));
+  /**
+   * @param entities
+   * @param <E>
+   * @return
+   */
+  public <E extends AbstractEntity> SqlBatch insert(Collection<? extends AbstractEntity> entities) {
+    if (entities == null || entities.isEmpty()) {
       return this;
-   }
+    }
 
-   /**
-    * @param query
-    * @return
-    */
-   public SqlBatch update(Update query) {
-      if (query == null)
-         return this;
+    entities.forEach(entity -> queryList.add(session.insertQuery(entity)));
+    return this;
+  }
 
-      queryList.add(query);
+  /**
+   * @param query
+   * @return
+   */
+  public SqlBatch update(Update query) {
+    if (query == null) {
       return this;
-   }
+    }
 
-   /**
-    * @param entity
-    * @param <E>
-    * @return
-    */
-   public <E extends AbstractEntity> SqlBatch update(E entity) {
-      if (entity == null)
-         return this;
+    queryList.add(query);
+    return this;
+  }
 
-      queryList.add(session.updateQuery(entity));
+  /**
+   * @param entity
+   * @param <E>
+   * @return
+   */
+  public <E extends AbstractEntity> SqlBatch update(E entity) {
+    if (entity == null) {
       return this;
-   }
+    }
 
-   /**
-    * @param entity
-    * @param condition
-    * @param <E>
-    * @return
-    */
-   public <E extends AbstractEntity> SqlBatch update(E entity, Condition condition) {
-      if (entity == null)
-         return this;
+    queryList.add(session.updateQuery(entity));
+    return this;
+  }
 
-      queryList.add(session.updateQuery(entity, condition));
+  /**
+   * @param entity
+   * @param condition
+   * @param <E>
+   * @return
+   */
+  public <E extends AbstractEntity> SqlBatch update(E entity, Condition condition) {
+    if (entity == null) {
       return this;
-   }
+    }
 
-   /**
-    * @param stream
-    * @param <E>
-    * @return
-    */
-   public <E extends AbstractEntity> SqlBatch update(Stream<? extends Update> stream) {
-      if (stream == null)
-         return this;
+    queryList.add(session.updateQuery(entity, condition));
+    return this;
+  }
 
-      stream.forEach(queryList::add);
+  /**
+   * @param stream
+   * @param <E>
+   * @return
+   */
+  public <E extends AbstractEntity> SqlBatch update(Stream<? extends Update> stream) {
+    if (stream == null) {
       return this;
-   }
+    }
 
-   /**
-    * @param stream
-    * @param <E>
-    * @return
-    */
-   public <E extends AbstractEntity> SqlBatch updateStream(Stream<? extends AbstractEntity> stream) {
-      if (stream == null)
-         return this;
+    stream.forEach(queryList::add);
+    return this;
+  }
 
-      stream.forEach(entity -> queryList.add(session.updateQuery(entity)));
+  /**
+   * @param stream
+   * @param <E>
+   * @return
+   */
+  public <E extends AbstractEntity> SqlBatch updateStream(Stream<? extends AbstractEntity> stream) {
+    if (stream == null) {
       return this;
-   }
+    }
 
-   /**
-    * @param entities
-    * @param <E>
-    * @return
-    */
-   public <E extends AbstractEntity> SqlBatch update(Collection<? extends AbstractEntity> entities) {
-      if (entities == null || entities.isEmpty())
-         return this;
+    stream.forEach(entity -> queryList.add(session.updateQuery(entity)));
+    return this;
+  }
 
-      entities.forEach(entity -> queryList.add(session.updateQuery(entity)));
+  /**
+   * @param entities
+   * @param <E>
+   * @return
+   */
+  public <E extends AbstractEntity> SqlBatch update(Collection<? extends AbstractEntity> entities) {
+    if (entities == null || entities.isEmpty()) {
       return this;
-   }
+    }
 
-   /**
-    * @param query
-    * @return
-    */
-   public SqlBatch delete(Delete query) {
-      if (query == null)
-         return this;
+    entities.forEach(entity -> queryList.add(session.updateQuery(entity)));
+    return this;
+  }
 
-      queryList.add(query);
+  /**
+   * @param query
+   * @return
+   */
+  public SqlBatch delete(Delete query) {
+    if (query == null) {
       return this;
-   }
+    }
 
-   /**
-    * @param entity
-    * @param <E>
-    * @return
-    */
-   public <E extends AbstractEntity> SqlBatch delete(E entity) {
-      if (entity == null)
-         return this;
+    queryList.add(query);
+    return this;
+  }
 
-      queryList.add(session.deleteQuery(entity));
+  /**
+   * @param entity
+   * @param <E>
+   * @return
+   */
+  public <E extends AbstractEntity> SqlBatch delete(E entity) {
+    if (entity == null) {
       return this;
-   }
+    }
 
-   /**
-    * @param entity
-    * @param condition
-    * @param <E>
-    * @return
-    */
-   public <E extends AbstractEntity> SqlBatch delete(E entity, Condition condition) {
-      if (entity == null)
-         return this;
+    queryList.add(session.deleteQuery(entity));
+    return this;
+  }
 
-      queryList.add(session.deleteQuery(entity, condition));
+  /**
+   * @param entity
+   * @param condition
+   * @param <E>
+   * @return
+   */
+  public <E extends AbstractEntity> SqlBatch delete(E entity, Condition condition) {
+    if (entity == null) {
       return this;
-   }
+    }
 
-   /**
-    * @param entities
-    * @param <E>
-    * @return
-    */
-   public <E extends AbstractEntity> SqlBatch delete(Collection<? extends AbstractEntity> entities) {
-      if (entities == null || entities.isEmpty())
-         return this;
+    queryList.add(session.deleteQuery(entity, condition));
+    return this;
+  }
 
-      entities.forEach(entity -> queryList.add(session.deleteQuery(entity)));
+  /**
+   * @param entities
+   * @param <E>
+   * @return
+   */
+  public <E extends AbstractEntity> SqlBatch delete(Collection<? extends AbstractEntity> entities) {
+    if (entities == null || entities.isEmpty()) {
       return this;
-   }
+    }
 
-   /**
-    * @return
-    */
-   public SqlResult<int[]> execute() {
-      if (queryList.isEmpty())
-         return SqlResult.commit(new int[0]);
+    entities.forEach(entity -> queryList.add(session.deleteQuery(entity)));
+    return this;
+  }
 
-      return session.save(queryList);
-   }
+  /**
+   * @return
+   */
+  public SqlResult<int[]> execute() {
+    if (queryList.isEmpty()) {
+      return SqlResult.commit(new int[0]);
+    }
 
-   /**
-    * @param timeoutSeconds
-    * @return
-    */
-   public SqlResult<int[]> execute(int timeoutSeconds) {
-      if (queryList.isEmpty())
-         return SqlResult.commit(new int[0]);
+    return session.save(queryList);
+  }
 
-      return session.save(queryList, timeoutSeconds);
-   }
+  /**
+   * @param timeoutSeconds
+   * @return
+   */
+  public SqlResult<int[]> execute(int timeoutSeconds) {
+    if (queryList.isEmpty()) {
+      return SqlResult.commit(new int[0]);
+    }
 
-   /**
-    * @param logger
-    * @return
-    */
-   public SqlResult<int[]> execute(Logger logger) {
-      if (queryList.isEmpty())
-         return SqlResult.commit(new int[0]);
+    return session.save(queryList, timeoutSeconds);
+  }
 
-      return session.save(queryList, logger);
-   }
+  /**
+   * @param logger
+   * @return
+   */
+  public SqlResult<int[]> execute(Logger logger) {
+    if (queryList.isEmpty()) {
+      return SqlResult.commit(new int[0]);
+    }
 
-   /**
-    * @param timeoutSeconds
-    * @param logger
-    * @return
-    */
-   public SqlResult<int[]> execute(int timeoutSeconds, Logger logger) {
-      if (queryList.isEmpty())
-         return SqlResult.commit(new int[0]);
+    return session.save(queryList, logger);
+  }
 
-      return session.save(queryList, timeoutSeconds, logger);
-   }
+  /**
+   * @param timeoutSeconds
+   * @param logger
+   * @return
+   */
+  public SqlResult<int[]> execute(int timeoutSeconds, Logger logger) {
+    if (queryList.isEmpty()) {
+      return SqlResult.commit(new int[0]);
+    }
 
-   /**
-    * @return
-    */
-   public SqlResult<int[]> executeAtomic() {
-      if (queryList.isEmpty())
-         return SqlResult.commit(new int[0]);
+    return session.save(queryList, timeoutSeconds, logger);
+  }
 
-      return session.saveAtomic(queryList);
-   }
+  /**
+   * @return
+   */
+  public SqlResult<int[]> executeAtomic() {
+    if (queryList.isEmpty()) {
+      return SqlResult.commit(new int[0]);
+    }
 
-   /**
-    * @param timeoutSeconds
-    * @return
-    */
-   public SqlResult<int[]> executeAtomic(int timeoutSeconds) {
-      if (queryList.isEmpty())
-         return SqlResult.commit(new int[0]);
+    return session.saveAtomic(queryList);
+  }
 
-      return session.saveAtomic(queryList, timeoutSeconds);
-   }
+  /**
+   * @param timeoutSeconds
+   * @return
+   */
+  public SqlResult<int[]> executeAtomic(int timeoutSeconds) {
+    if (queryList.isEmpty()) {
+      return SqlResult.commit(new int[0]);
+    }
 
-   /**
-    * @param logger
-    * @return
-    */
-   public SqlResult<int[]> executeAtomic(Logger logger) {
-      if (queryList.isEmpty())
-         return SqlResult.commit(new int[0]);
+    return session.saveAtomic(queryList, timeoutSeconds);
+  }
 
-      return session.saveAtomic(queryList, logger);
-   }
+  /**
+   * @param logger
+   * @return
+   */
+  public SqlResult<int[]> executeAtomic(Logger logger) {
+    if (queryList.isEmpty()) {
+      return SqlResult.commit(new int[0]);
+    }
 
-   /**
-    * @param timeoutSeconds
-    * @param logger
-    * @return
-    */
-   public SqlResult<int[]> executeAtomic(int timeoutSeconds, Logger logger) {
-      if (queryList.isEmpty())
-         return SqlResult.commit(new int[0]);
+    return session.saveAtomic(queryList, logger);
+  }
 
-      return session.saveAtomic(queryList, timeoutSeconds, logger);
-   }
+  /**
+   * @param timeoutSeconds
+   * @param logger
+   * @return
+   */
+  public SqlResult<int[]> executeAtomic(int timeoutSeconds, Logger logger) {
+    if (queryList.isEmpty()) {
+      return SqlResult.commit(new int[0]);
+    }
+
+    return session.saveAtomic(queryList, timeoutSeconds, logger);
+  }
 }

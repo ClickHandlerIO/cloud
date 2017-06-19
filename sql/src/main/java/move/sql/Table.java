@@ -12,50 +12,48 @@ import java.lang.annotation.Target;
 @Target(ElementType.TYPE)
 public @interface Table {
 
-    /**
-     * Name of the table mapped to the class.
-     */
-    String name() default "";
+  /**
+   * Name of the table mapped to the class.
+   */
+  String name() default "";
 
-    /**
-     * @return
-     */
-    String[] primaryKey() default {};
+  /**
+   * @return
+   */
+  String[] primaryKey() default {};
 
-    /**
-     * @return
-     */
-    String[] shardKey() default {};
+  /**
+   * @return
+   */
+  String[] shardKey() default {};
 
-    /**
-     * @return
-     */
-    String[] columnStoreKey() default {};
+  /**
+   * @return
+   */
+  String[] columnStoreKey() default {};
 
-    /**
-     * Reference tables are
-     *
-     * @return
-     */
-    boolean reference() default false;
+  /**
+   * Reference tables are
+   */
+  boolean reference() default false;
 
-    /**
-     * @return
-     */
-    boolean columnStore() default false;
+  /**
+   * @return
+   */
+  boolean columnStore() default false;
 
-    /**
-     * @return
-     */
-    UniquePolicy[] uniquePolicies() default {@UniquePolicy(strategy = UniqueConflictStrategy.MERGE)};
+  /**
+   * @return
+   */
+  UniquePolicy[] uniquePolicies() default {@UniquePolicy(strategy = UniqueConflictStrategy.MERGE)};
 
-    /**
-     * @return
-     */
-    FieldPolicy[] fieldPolicies() default {};
+  /**
+   * @return
+   */
+  FieldPolicy[] fieldPolicies() default {};
 
-    /**
-     * @return
-     */
-    DeleteConflictStrategy deletePolicy() default DeleteConflictStrategy.DELETE_LOSES;
+  /**
+   * @return
+   */
+  DeleteConflictStrategy deletePolicy() default DeleteConflictStrategy.DELETE_LOSES;
 }

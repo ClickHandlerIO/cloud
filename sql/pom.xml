@@ -15,7 +15,11 @@
 
     <name>SQL</name>
 
-    <dependencies>
+  <properties>
+    <kotlin.version>1.1.2-5</kotlin.version>
+  </properties>
+
+  <dependencies>
         <dependency>
             <groupId>com.google.dagger</groupId>
             <artifactId>dagger</artifactId>
@@ -88,28 +92,121 @@
             <groupId>com.nuodb.jdbc</groupId>
             <artifactId>nuodb-jdbc</artifactId>
         </dependency>
+    <!--<dependency>-->
+    <!--<groupId>org.jetbrains.kotlin</groupId>-->
+    <!--<artifactId>kotlin-stdlib-jre8</artifactId>-->
+    <!--<version>${kotlin.version}</version>-->
+    <!--</dependency>-->
+    <dependency>
+      <groupId>org.jetbrains.kotlin</groupId>
+      <artifactId>kotlin-test</artifactId>
+      <version>${kotlin.version}</version>
+      <scope>test</scope>
+    </dependency>
 
-    </dependencies>
+  </dependencies>
 
     <build>
         <plugins>
-            <plugin>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.5.1</version>
-                <dependencies>
-                    <dependency>
-                        <groupId>com.google.dagger</groupId>
-                        <artifactId>dagger-compiler</artifactId>
-                        <version>${dagger.version}</version>
-                    </dependency>
-                </dependencies>
+          <plugin>
+            <artifactId>kotlin-maven-plugin</artifactId>
+            <groupId>org.jetbrains.kotlin</groupId>
+            <version>${kotlin.version}</version>
+            <configuration>
+              <args>
+                <arg>-Xcoroutines=enable</arg>
+              </args>
+            </configuration>
+            <executions>
+              <execution>
+                <id>kapt</id>
+                <goals>
+                  <goal>kapt</goal>
+                </goals>
                 <configuration>
-                    <source>1.8</source>
-                    <target>1.8</target>
-                    <!-- workaround for http://jira.codehaus.org/browse/MCOMPILER-202 -->
-                    <forceJavacCompilerUse>true</forceJavacCompilerUse>
+                  <sourceDirs>
+                    <sourceDir>src/main/kotlin</sourceDir>
+                    <sourceDir>src/main/java</sourceDir>
+                  </sourceDirs>
+                  <annotationProcessorPaths>
+                    <annotationProcessorPath>
+                      <groupId>com.google.dagger</groupId>
+                      <artifactId>dagger-compiler</artifactId>
+                      <version>${dagger.version}</version>
+                    </annotationProcessorPath>
+                  </annotationProcessorPaths>
                 </configuration>
-            </plugin>
+              </execution>
+              <execution>
+                <id>compile</id>
+                <goals>
+                  <goal>compile</goal>
+                </goals>
+                <configuration>
+                  <sourceDirs>
+                    <sourceDir>src/main/kotlin</sourceDir>
+                    <sourceDir>src/main/java</sourceDir>
+                  </sourceDirs>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-compiler-plugin</artifactId>
+            <version>${maven-compiler-plugin.version}</version>
+            <dependencies>
+              <dependency>
+                <groupId>com.google.dagger</groupId>
+                <artifactId>dagger-compiler</artifactId>
+                <version>${dagger.version}</version>
+              </dependency>
+            </dependencies>
+            <configuration>
+              <source>1.8</source>
+              <target>1.8</target>
+              <showWarnings>true</showWarnings>
+              <verbose>false</verbose>
+              <compilerArgument>-nowarn</compilerArgument>
+              <encoding>UTF-8</encoding>
+              <forceJavacCompilerUse>true</forceJavacCompilerUse>
+
+              <generatedSourcesDirectory>
+                target/generated-sources/kapt/compile
+              </generatedSourcesDirectory>
+              <generatedTestSourcesDirectory>
+                target/generated-sources/kapt/test
+              </generatedTestSourcesDirectory>
+            </configuration>
+
+            <executions>
+              <!-- Replacing default-compile as it is treated specially by maven -->
+              <execution>
+                <id>default-compile</id>
+                <phase>none</phase>
+              </execution>
+              <!-- Replacing default-testCompile as it is treated specially by maven -->
+              <execution>
+                <id>default-testCompile</id>
+                <phase>none</phase>
+              </execution>
+              <execution>
+                <id>java-compile</id>
+                <phase>compile</phase>
+                <goals>
+                  <goal>compile</goal>
+                </goals>
+              </execution>
+              <execution>
+                <id>java-test-compile</id>
+                <phase>test-compile</phase>
+                <goals>
+                  <goal>testCompile</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
         </plugins>
     </build>
 </project>

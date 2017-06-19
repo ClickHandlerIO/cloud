@@ -2,16 +2,19 @@ package move.sql;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
-import org.jooq.*;
+import java.sql.Timestamp;
+import java.util.LinkedHashSet;
+import java.util.List;
+import org.jooq.Configuration;
+import org.jooq.CreateTableAsStep;
+import org.jooq.CreateTableColumnStep;
+import org.jooq.DataType;
+import org.jooq.SQLDialect;
 import org.jooq.conf.ParamType;
 import org.jooq.impl.DSL;
 import org.jooq.impl.DefaultDataType;
 import org.jooq.impl.SQLDataType;
 import org.jooq.util.mysql.MySQLDataType;
-
-import java.sql.Timestamp;
-import java.util.LinkedHashSet;
-import java.util.List;
 
 /**
  * MySQL platform.
@@ -19,172 +22,181 @@ import java.util.List;
  * @author Clay Molocznik
  */
 public class MemSqlPlatform extends SqlPlatform {
-    public MemSqlPlatform(Configuration configuration, SqlConfig configEntity) {
-        super(configuration, configEntity);
+
+  public MemSqlPlatform(Configuration configuration, SqlConfig configEntity) {
+    super(configuration, configEntity);
+  }
+
+  /**
+   * @return
+   */
+  @Override
+  public String quote() {
+    return "`";
+  }
+
+  /**
+   * @param mapping
+   * @return
+   */
+  @Override
+  public String ddlCreateTable(TableMapping mapping) {
+    final CreateTableAsStep step = create().createTable(mapping.getTableName());
+    CreateTableColumnStep createColumnStep = null;
+    for (TableMapping.Property property : mapping.getProperties()) {
+      createColumnStep = step.column(property.getColumnName(), property.fieldDataType());
     }
 
-    /**
-     * @return
-     */
-    @Override
-    public String quote() {
-        return "`";
+    if (!mapping.tableAnnotation.columnStore()) {
+      createColumnStep.constraints(DSL.constraint("pk_" + mapping.getTableName())
+          .primaryKey(columnNames(mapping.getPrimaryKeyProperties())));
+
+      final List<TableMapping.Index> indexes = mapping.getIndexes();
+      if (indexes != null) {
+        for (TableMapping.Index index : indexes) {
+          if (index.unique) {
+            final LinkedHashSet<String> columns = new LinkedHashSet<>();
+            columns.addAll(Lists.newArrayList(columnNames(mapping.getPrimaryKeyProperties())));
+            columns.addAll(Lists.newArrayList(index.columnNames));
+
+            createColumnStep.constraint(DSL.constraint(index.name)
+                .unique(columns.toArray(new String[columns.size()])));
+          }
+        }
+      }
     }
 
-    /**
-     * @param mapping
-     * @return
-     */
-    @Override
-    public String ddlCreateTable(TableMapping mapping) {
-        final CreateTableAsStep step = create().createTable(mapping.getTableName());
-        CreateTableColumnStep createColumnStep = null;
-        for (TableMapping.Property property : mapping.getProperties()) {
-            createColumnStep = step.column(property.getColumnName(), property.fieldDataType());
-        }
+    String sql = createColumnStep.getSQL(ParamType.INLINED);
 
-        if (!mapping.tableAnnotation.columnStore()) {
-            createColumnStep.constraints(DSL.constraint("pk_" + mapping.getTableName())
-                .primaryKey(columnNames(mapping.getPrimaryKeyProperties())));
-
-            final List<TableMapping.Index> indexes = mapping.getIndexes();
-            if (indexes != null) {
-                for (TableMapping.Index index : indexes) {
-                    if (index.unique) {
-                        final LinkedHashSet<String> columns = new LinkedHashSet<>();
-                        columns.addAll(Lists.newArrayList(columnNames(mapping.getPrimaryKeyProperties())));
-                        columns.addAll(Lists.newArrayList(index.columnNames));
-
-                        createColumnStep.constraint(DSL.constraint(index.name)
-                            .unique(columns.toArray(new String[columns.size()])));
-                    }
-                }
-            }
-        }
-
-        String sql = createColumnStep.getSQL(ParamType.INLINED);
-
-        // Handle reference tables.
-        if (mapping.tableAnnotation.reference()) {
-            if (sql.startsWith("create table") || sql.startsWith("CREATE TABLE")) {
-                sql = sql.substring(12);
-                sql = "CREATE REFERENCE TABLE" + sql;
-            }
-        }
-
-        sql = sql.trim();
-
-        if (sql.endsWith(";")) {
-            sql = sql.substring(0, sql.length() - 1);
-        }
-
-        if (sql.endsWith(")")) {
-            sql = sql.substring(0, sql.length() - 1);
-        }
-
-        if (mapping.tableAnnotation.columnStore()) {
-            final List<TableMapping.Property> primaryKey = mapping.getPrimaryKeyProperties();
-
-            sql += ", KEY (" + Joiner.on(",").join(columnNames(primaryKey)) + ") USING CLUSTERED COLUMNSTORE";
-        } else {
-            final List<TableMapping.Property> primaryKey = mapping.getPrimaryKeyProperties();
-
-            // Add index on "id" column if it isn't the primary key.
-            if (primaryKey.size() == 1 && !primaryKey.get(0).columnName.equals(AbstractEntity.ID)) {
-                sql += ", KEY ix_" + mapping.getTableName() + "_id (`id`)";
-            }
-        }
-
-        if (!mapping.tableAnnotation.reference()) {
-            final List<TableMapping.Property> shardKey = mapping.getShardKeyProperties();
-            if (shardKey != null && !shardKey.isEmpty()) {
-                sql = sql + ", SHARD KEY (" +
-                    Joiner.on(",").join(columnNames(shardKey)) +
-                    ")";
-            }
-        }
-
-        sql += ")";
-
-        return sql;
+    // Handle reference tables.
+    if (mapping.tableAnnotation.reference()) {
+      if (sql.startsWith("create table") || sql.startsWith("CREATE TABLE")) {
+        sql = sql.substring(12);
+        sql = "CREATE REFERENCE TABLE" + sql;
+      }
     }
 
-    @Override
-    public String ddlCreateIndex(TableMapping mapping, TableMapping.Index index) {
-        final String name = index.name;
+    sql = sql.trim();
 
-        if (index.unique) {
-            return null;
-            // Prepend Primary Key.
+    if (sql.endsWith(";")) {
+      sql = sql.substring(0, sql.length() - 1);
+    }
+
+    if (sql.endsWith(")")) {
+      sql = sql.substring(0, sql.length() - 1);
+    }
+
+    if (mapping.tableAnnotation.columnStore()) {
+      final List<TableMapping.Property> primaryKey = mapping.getPrimaryKeyProperties();
+
+      sql += ", KEY (" + Joiner.on(",").join(columnNames(primaryKey))
+          + ") USING CLUSTERED COLUMNSTORE";
+    } else {
+      final List<TableMapping.Property> primaryKey = mapping.getPrimaryKeyProperties();
+
+      // Add index on "id" column if it isn't the primary key.
+      if (primaryKey.size() == 1 && !primaryKey.get(0).columnName.equals(AbstractEntity.ID)) {
+        sql += ", KEY ix_" + mapping.getTableName() + "_id (`id`)";
+      }
+    }
+
+    if (!mapping.tableAnnotation.reference()) {
+      final List<TableMapping.Property> shardKey = mapping.getShardKeyProperties();
+      if (shardKey != null && !shardKey.isEmpty()) {
+        sql = sql + ", SHARD KEY (" +
+            Joiner.on(",").join(columnNames(shardKey)) +
+            ")";
+      }
+    }
+
+    sql += ")";
+
+    return sql;
+  }
+
+  @Override
+  public String ddlCreateIndex(TableMapping mapping, TableMapping.Index index) {
+    final String name = index.name;
+
+    if (index.unique) {
+      return null;
+      // Prepend Primary Key.
 //            final LinkedHashSet<String> columns = new LinkedHashSet<>();
 //            columns.addAll(Lists.newArrayList(columnNames(mapping.getPrimaryKeyProperties())));
 //            columns.addAll(Lists.newArrayList(index.columnNames));
 //            return create()
 //                .alterTable(mapping.getTableName())
 //                .add(DSL.constraint(name).unique(columns.toArray(new String[columns.size()]))).getSQL();
-        }
-
-        return create()
-            .createIndex(name)
-            .on(mapping.getTableName(), index.columnNames).getSQL(ParamType.INLINED);
     }
 
-    /**
-     * @param type
-     * @return
-     */
-    public DataType fromJdbcType(int type, TableMapping.Property property) {
-        switch (type) {
-            case DBTypes.BIGINT:
-                return MySQLDataType.BIGINT;
-            case DBTypes.BOOLEAN:
-            case DBTypes.BIT:
-                return MySQLDataType.BOOLEAN;
-            case DBTypes.TIMESTAMP:
-                return MySQLDataType.DATETIME.length(6);
-            case DBTypes.TIME:
-                return MySQLDataType.TIME;
-            case DBTypes.VARBINARY:
-                return MySQLDataType.VARBINARY;
-            case DBTypes.BINARY:
-                return MySQLDataType.BINARY;
-            case DBTypes.BLOB:
-                return MySQLDataType.BLOB;
-            case DBTypes.LONGVARCHAR:
-            case DBTypes.LONGNVARCHAR:
-            case DBTypes.CLOB:
-                return MySQLDataType.TEXT;
-            case DBTypes.DATE:
-                new DefaultDataType<Timestamp>(SQLDialect.MYSQL, SQLDataType.TIMESTAMP, "datetime", "datetime");
-                return MySQLDataType.DATETIME.length(6);
-            case DBTypes.DECIMAL:
-                if (property.columnAnnotation != null && property.columnAnnotation.precision() > 0)
-                    return MySQLDataType.DECIMAL.precision(property.columnAnnotation.precision(), property.columnAnnotation.scale());
-                else
-                    return MySQLDataType.DECIMAL;
-            case DBTypes.DOUBLE:
-                if (property.columnAnnotation != null && property.columnAnnotation.precision() > 0)
-                    return MySQLDataType.DOUBLE.precision(property.columnAnnotation.precision(), property.columnAnnotation.scale());
-                else
-                    return MySQLDataType.DOUBLE;
-            case DBTypes.FLOAT:
-                if (property.columnAnnotation != null && property.columnAnnotation.precision() > 0)
-                    return MySQLDataType.FLOAT.precision(property.columnAnnotation.precision(), property.columnAnnotation.scale());
-                else
-                    return MySQLDataType.FLOAT;
-            case DBTypes.INTEGER:
-                return MySQLDataType.INTEGER;
-            case DBTypes.CHAR:
-                return MySQLDataType.CHAR;
-            case DBTypes.NCHAR:
-                return MySQLDataType.CHAR;
-            case DBTypes.SMALLINT:
-                return MySQLDataType.SMALLINT;
-            case DBTypes.VARCHAR:
-                return MySQLDataType.VARCHAR;
-            case DBTypes.NVARCHAR:
-                return MySQLDataType.VARCHAR;
+    return create()
+        .createIndex(name)
+        .on(mapping.getTableName(), index.columnNames).getSQL(ParamType.INLINED);
+  }
+
+  /**
+   * @param type
+   * @return
+   */
+  public DataType fromJdbcType(int type, TableMapping.Property property) {
+    switch (type) {
+      case DBTypes.BIGINT:
+        return MySQLDataType.BIGINT;
+      case DBTypes.BOOLEAN:
+      case DBTypes.BIT:
+        return MySQLDataType.BOOLEAN;
+      case DBTypes.TIMESTAMP:
+        return MySQLDataType.DATETIME.length(6);
+      case DBTypes.TIME:
+        return MySQLDataType.TIME;
+      case DBTypes.VARBINARY:
+        return MySQLDataType.VARBINARY;
+      case DBTypes.BINARY:
+        return MySQLDataType.BINARY;
+      case DBTypes.BLOB:
+        return MySQLDataType.BLOB;
+      case DBTypes.LONGVARCHAR:
+      case DBTypes.LONGNVARCHAR:
+      case DBTypes.CLOB:
+        return MySQLDataType.TEXT;
+      case DBTypes.DATE:
+        new DefaultDataType<Timestamp>(SQLDialect.MYSQL, SQLDataType.TIMESTAMP, "datetime",
+            "datetime");
+        return MySQLDataType.DATETIME.length(6);
+      case DBTypes.DECIMAL:
+        if (property.columnAnnotation != null && property.columnAnnotation.precision() > 0) {
+          return MySQLDataType.DECIMAL
+              .precision(property.columnAnnotation.precision(), property.columnAnnotation.scale());
+        } else {
+          return MySQLDataType.DECIMAL;
         }
-        return null;
+      case DBTypes.DOUBLE:
+        if (property.columnAnnotation != null && property.columnAnnotation.precision() > 0) {
+          return MySQLDataType.DOUBLE
+              .precision(property.columnAnnotation.precision(), property.columnAnnotation.scale());
+        } else {
+          return MySQLDataType.DOUBLE;
+        }
+      case DBTypes.FLOAT:
+        if (property.columnAnnotation != null && property.columnAnnotation.precision() > 0) {
+          return MySQLDataType.FLOAT
+              .precision(property.columnAnnotation.precision(), property.columnAnnotation.scale());
+        } else {
+          return MySQLDataType.FLOAT;
+        }
+      case DBTypes.INTEGER:
+        return MySQLDataType.INTEGER;
+      case DBTypes.CHAR:
+        return MySQLDataType.CHAR;
+      case DBTypes.NCHAR:
+        return MySQLDataType.CHAR;
+      case DBTypes.SMALLINT:
+        return MySQLDataType.SMALLINT;
+      case DBTypes.VARCHAR:
+        return MySQLDataType.VARCHAR;
+      case DBTypes.NVARCHAR:
+        return MySQLDataType.VARCHAR;
     }
+    return null;
+  }
 }

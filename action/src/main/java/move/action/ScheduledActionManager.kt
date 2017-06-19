@@ -172,7 +172,6 @@ internal constructor(val vertx: Vertx,
             } catch (e: Throwable) {
                 LOG.warn(provider.actionClass.canonicalName, e)
             }
-
         }
 
         @Throws(InterruptedException::class)
