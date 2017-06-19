@@ -1,7 +1,11 @@
 package move.action;
 
 
-import java.lang.annotation.*;
+import java.lang.annotation.Documented;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
 /**
  * A RemoteAction may be invoked by a system through a network connection.
@@ -12,11 +16,12 @@ import java.lang.annotation.*;
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
 public @interface RemoteAction {
-    String method() default "POST";
 
-    long timeoutMillis() default 15000;
+  String method() default "POST";
 
-    boolean guarded() default true;
+  long timeoutMillis() default 15000;
 
-    String path();
+  boolean guarded() default true;
+
+  String path();
 }

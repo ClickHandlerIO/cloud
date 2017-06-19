@@ -12,5 +12,6 @@ import java.lang.annotation.Target;
 @Retention(java.lang.annotation.RetentionPolicy.RUNTIME)
 @Target({ElementType.PACKAGE})
 public @interface ActionPackage {
-    String value();
+
+  String value();
 }

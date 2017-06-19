@@ -1,7 +1,11 @@
 package move.action;
 
 
-import java.lang.annotation.*;
+import java.lang.annotation.Documented;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
 /**
  * A RemoteAction may be invoked by a system through a network connection.
@@ -12,19 +16,20 @@ import java.lang.annotation.*;
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
 public @interface WorkerAction {
-    /**
-     * @return
-     */
-    boolean encrypted() default false;
 
-    /**
-     * @return
-     */
-    boolean fifo() default false;
+  /**
+   * @return
+   */
+  boolean encrypted() default false;
 
-    /**
-     *
-     * @return
-     */
-    boolean buffered() default false;
+  /**
+   * @return
+   */
+  boolean fifo() default false;
+
+  /**
+   *
+   * @return
+   */
+  boolean buffered() default false;
 }

@@ -16,40 +16,41 @@ import java.lang.annotation.Target;
 @Retention(java.lang.annotation.RetentionPolicy.RUNTIME)
 @Target({ElementType.TYPE})
 public @interface ActionConfig {
-    int DEFAULT_CONCURRENCY = 10000;
 
-    /**
-     * @return
-     */
-    String groupKey() default "";
+  int DEFAULT_CONCURRENCY = 10000;
 
-    /**
-     * @return
-     */
-    String commandKey() default "";
+  /**
+   * @return
+   */
+  String groupKey() default "";
 
-    /**
-     * @return
-     */
-    int maxExecutionMillis() default 120_000;
+  /**
+   * @return
+   */
+  String commandKey() default "";
 
-    /**
-     * @return
-     */
-    int maxConcurrentRequests() default DEFAULT_CONCURRENCY;
+  /**
+   * @return
+   */
+  int maxExecutionMillis() default 120_000;
 
-    /**
-     * @return
-     */
-    String description() default "";
+  /**
+   * @return
+   */
+  int maxConcurrentRequests() default DEFAULT_CONCURRENCY;
 
-    /**
-     * @return
-     */
-    Class<? extends ActionProvider> provider() default ActionProvider.class;
+  /**
+   * @return
+   */
+  String description() default "";
 
-    /**
-     * @return
-     */
-    ExecutionIsolationStrategy isolationStrategy() default ExecutionIsolationStrategy.BEST;
+  /**
+   * @return
+   */
+  Class<? extends ActionProvider> provider() default ActionProvider.class;
+
+  /**
+   * @return
+   */
+  ExecutionIsolationStrategy isolationStrategy() default ExecutionIsolationStrategy.BEST;
 }
