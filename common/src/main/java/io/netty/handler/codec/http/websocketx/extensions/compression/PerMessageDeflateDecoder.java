@@ -21,7 +21,6 @@ import io.netty.handler.codec.http.websocketx.ContinuationWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketFrame;
 import io.netty.handler.codec.http.websocketx.extensions.WebSocketExtension;
-
 import java.util.List;
 
 /**
@@ -29,44 +28,45 @@ import java.util.List;
  */
 class PerMessageDeflateDecoder extends DeflateDecoder {
 
-    private boolean compressing;
+  private boolean compressing;
 
-    /**
-     * Constructor
-     * @param noContext true to disable context takeover.
-     */
-    public PerMessageDeflateDecoder(boolean noContext, int maxSize) {
-        super(noContext, maxSize);
+  /**
+   * Constructor
+   *
+   * @param noContext true to disable context takeover.
+   */
+  public PerMessageDeflateDecoder(boolean noContext, int maxSize) {
+    super(noContext, maxSize);
+  }
+
+  @Override
+  public boolean acceptInboundMessage(Object msg) throws Exception {
+    return ((msg instanceof TextWebSocketFrame ||
+        msg instanceof BinaryWebSocketFrame) &&
+        (((WebSocketFrame) msg).rsv() & WebSocketExtension.RSV1) > 0) ||
+        (msg instanceof ContinuationWebSocketFrame && compressing);
+  }
+
+  @Override
+  protected int newRsv(WebSocketFrame msg) {
+    return (((WebSocketFrame) msg).rsv() & WebSocketExtension.RSV1) > 0 ?
+        msg.rsv() ^ WebSocketExtension.RSV1 : msg.rsv();
+  }
+
+  @Override
+  protected boolean appendFrameTail(WebSocketFrame msg) {
+    return msg.isFinalFragment();
+  }
+
+  @Override
+  protected void decode(ChannelHandlerContext ctx, WebSocketFrame msg,
+      List<Object> out) throws Exception {
+    super.decode(ctx, msg, out);
+
+    if (msg.isFinalFragment()) {
+      compressing = false;
+    } else if (msg instanceof TextWebSocketFrame || msg instanceof BinaryWebSocketFrame) {
+      compressing = true;
     }
-
-    @Override
-    public boolean acceptInboundMessage(Object msg) throws Exception {
-        return ((msg instanceof TextWebSocketFrame ||
-                 msg instanceof BinaryWebSocketFrame) &&
-                    (((WebSocketFrame) msg).rsv() & WebSocketExtension.RSV1) > 0) ||
-                (msg instanceof ContinuationWebSocketFrame && compressing);
-    }
-
-    @Override
-    protected int newRsv(WebSocketFrame msg) {
-        return (((WebSocketFrame) msg).rsv() & WebSocketExtension.RSV1) > 0 ?
-                msg.rsv() ^ WebSocketExtension.RSV1 : msg.rsv();
-    }
-
-    @Override
-    protected boolean appendFrameTail(WebSocketFrame msg) {
-        return msg.isFinalFragment();
-    }
-
-    @Override
-    protected void decode(ChannelHandlerContext ctx, WebSocketFrame msg,
-        List<Object> out) throws Exception {
-        super.decode(ctx, msg, out);
-
-        if (msg.isFinalFragment()) {
-            compressing = false;
-        } else if (msg instanceof TextWebSocketFrame || msg instanceof BinaryWebSocketFrame) {
-            compressing = true;
-        }
-    }
+  }
 }

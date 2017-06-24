@@ -9,7 +9,7 @@ import javax.inject.Inject
 @ScheduledAction(intervalSeconds = 1, type = ScheduledActionType.NODE_SINGLETON)
 class MyScheduledAction2 @Inject
 constructor() : BaseScheduledAction() {
-    suspend override fun execute() {
-        println(javaClass.simpleName + " " + Thread.currentThread().name)
-    }
+   suspend override fun execute() {
+      println(javaClass.simpleName + " " + Thread.currentThread().name)
+   }
 }

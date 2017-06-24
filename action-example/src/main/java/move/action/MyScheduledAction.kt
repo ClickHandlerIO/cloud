@@ -10,12 +10,12 @@ import javax.inject.Inject
 @ScheduledAction(intervalSeconds = 1, type = ScheduledActionType.CLUSTER_SINGLETON)
 class MyScheduledAction @Inject
 constructor() : BaseScheduledAction() {
-    suspend override fun recover(caught: Throwable, cause: Throwable, isFallback: Boolean) {
-        cause.printStackTrace()
-    }
+   suspend override fun recover(caught: Throwable, cause: Throwable, isFallback: Boolean) {
+      cause.printStackTrace()
+   }
 
-    suspend override fun execute() {
-        println(javaClass.simpleName + " " + Thread.currentThread().name)
-        AppComponent.instance.actions().move.action.myWorker.send(MyWorker.Request()).await()
-    }
+   suspend override fun execute() {
+      println(javaClass.simpleName + " " + Thread.currentThread().name)
+      AppComponent.instance.actions().move.action.myWorker.send(MyWorker.Request()).await()
+   }
 }

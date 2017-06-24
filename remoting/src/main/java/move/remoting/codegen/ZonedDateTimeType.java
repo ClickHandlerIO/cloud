@@ -6,22 +6,23 @@ import java.time.ZonedDateTime;
  *
  */
 public class ZonedDateTimeType extends AbstractType {
-    public ZonedDateTimeType() {
-        super(ZonedDateTime.class);
-    }
 
-    @Override
-    public DataType dataType() {
-        return DataType.DATETIME;
-    }
+  public ZonedDateTimeType() {
+    super(ZonedDateTime.class);
+  }
 
-    @Override
-    public boolean nullable() {
-        return true;
-    }
+  @Override
+  public DataType dataType() {
+    return DataType.DATETIME;
+  }
 
-    @Override
-    public boolean isPrimitive() {
-        return true;
-    }
+  @Override
+  public boolean nullable() {
+    return true;
+  }
+
+  @Override
+  public boolean isPrimitive() {
+    return true;
+  }
 }

@@ -14,10 +14,6 @@ public abstract class AbstractEntity implements HasId {
   @Column(name = ID, length = 32, nullable = false)
   protected String id;
 
-  @JsonIgnore
-  @NoColumn
-  public boolean exists;
-
   public AbstractEntity() {
   }
 
@@ -38,9 +34,5 @@ public abstract class AbstractEntity implements HasId {
   public AbstractEntity id(String id) {
     this.id = id;
     return this;
-  }
-
-  public boolean exists() {
-    return exists;
   }
 }

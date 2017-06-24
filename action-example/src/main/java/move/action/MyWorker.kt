@@ -9,19 +9,19 @@ import javax.inject.Inject
 @WorkerAction(fifo = true)
 class MyWorker @Inject
 internal constructor() : BaseWorkerAction<MyWorker.Request>() {
-    suspend override fun recover(caught: Throwable, cause: Throwable, isFallback: Boolean): Boolean {
-        return false
-    }
+   suspend override fun recover(caught: Throwable, cause: Throwable, isFallback: Boolean): Boolean {
+      return false
+   }
 
-    suspend override fun execute(): Boolean {
-        println("Started worker")
-        delay(1000)
-        println("Finishing worker")
-        return true
-    }
+   suspend override fun execute(): Boolean {
+      println("Started worker")
+      delay(1000)
+      println("Finishing worker")
+      return true
+   }
 
-    class Request @Inject
-    constructor() {
-        var id: String? = null
-    }
+   class Request @Inject
+   constructor() {
+      var id: String? = null
+   }
 }

@@ -26,33 +26,35 @@ import io.netty.handler.codec.http.websocketx.extensions.WebSocketExtension;
  */
 class PerFrameDeflateEncoder extends DeflateEncoder {
 
-    /**
-     * Constructor
-     * @param compressionLevel compression level of the compressor.
-     * @param windowSize maximum size of the window compressor buffer.
-     * @param noContext true to disable context takeover.
-     */
-    public PerFrameDeflateEncoder(int compressionLevel, int windowSize, boolean noContext, int maxSize) {
-        super(compressionLevel, windowSize, noContext, maxSize);
-    }
+  /**
+   * Constructor
+   *
+   * @param compressionLevel compression level of the compressor.
+   * @param windowSize maximum size of the window compressor buffer.
+   * @param noContext true to disable context takeover.
+   */
+  public PerFrameDeflateEncoder(int compressionLevel, int windowSize, boolean noContext,
+      int maxSize) {
+    super(compressionLevel, windowSize, noContext, maxSize);
+  }
 
-    @Override
-    public boolean acceptOutboundMessage(Object msg) throws Exception {
-        return (msg instanceof TextWebSocketFrame ||
-                msg instanceof BinaryWebSocketFrame ||
-                msg instanceof ContinuationWebSocketFrame) &&
-                    ((WebSocketFrame) msg).content().readableBytes() > 0 &&
-                    (((WebSocketFrame) msg).rsv() & WebSocketExtension.RSV1) == 0;
-    }
+  @Override
+  public boolean acceptOutboundMessage(Object msg) throws Exception {
+    return (msg instanceof TextWebSocketFrame ||
+        msg instanceof BinaryWebSocketFrame ||
+        msg instanceof ContinuationWebSocketFrame) &&
+        ((WebSocketFrame) msg).content().readableBytes() > 0 &&
+        (((WebSocketFrame) msg).rsv() & WebSocketExtension.RSV1) == 0;
+  }
 
-    @Override
-    protected int rsv(WebSocketFrame msg) {
-        return msg.rsv() | WebSocketExtension.RSV1;
-    }
+  @Override
+  protected int rsv(WebSocketFrame msg) {
+    return msg.rsv() | WebSocketExtension.RSV1;
+  }
 
-    @Override
-    protected boolean removeFrameTail(WebSocketFrame msg) {
-        return true;
-    }
+  @Override
+  protected boolean removeFrameTail(WebSocketFrame msg) {
+    return true;
+  }
 
 }

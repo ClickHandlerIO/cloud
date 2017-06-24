@@ -2,21 +2,21 @@ package move.action;
 
 import dagger.Component;
 import io.vertx.rxjava.core.Vertx;
+import javax.inject.Singleton;
 import move.Action_LocatorRoot;
 import move.model.DB;
-
-import javax.inject.Singleton;
 
 @Singleton
 @Component(modules = {ActionModule.class, Actions.class, M.class})
 interface AppComponent {
-    AppComponent instance = DaggerAppComponent.create();
 
-    Vertx vertx();
+  AppComponent instance = DaggerAppComponent.create();
 
-    ActionManager actionManager();
+  Vertx vertx();
 
-    DB db();
+  ActionManager actionManager();
 
-    Action_LocatorRoot actions();
+  DB db();
+
+  Action_LocatorRoot actions();
 }

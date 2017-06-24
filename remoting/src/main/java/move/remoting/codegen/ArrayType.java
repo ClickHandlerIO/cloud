@@ -4,24 +4,25 @@ package move.remoting.codegen;
  *
  */
 public class ArrayType extends AbstractType {
-    private StandardType componentType;
 
-    public ArrayType(StandardType type) {
-        super(type.javaType());
-        this.componentType = type;
-    }
+  private StandardType componentType;
 
-    public StandardType componentType() {
-        return componentType;
-    }
+  public ArrayType(StandardType type) {
+    super(type.javaType());
+    this.componentType = type;
+  }
 
-    @Override
-    public DataType dataType() {
-        return DataType.ARRAY;
-    }
+  public StandardType componentType() {
+    return componentType;
+  }
 
-    @Override
-    public boolean nullable() {
-        return true;
-    }
+  @Override
+  public DataType dataType() {
+    return DataType.ARRAY;
+  }
+
+  @Override
+  public boolean nullable() {
+    return true;
+  }
 }

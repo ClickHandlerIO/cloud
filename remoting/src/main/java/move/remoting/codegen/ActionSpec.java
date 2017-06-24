@@ -6,43 +6,44 @@ import move.action.ActionProvider;
  *
  */
 public class ActionSpec extends Namespace {
-    private ActionProvider provider;
-    private StandardType inSpec;
-    private StandardType outSpec;
 
-    public ActionSpec() {
-        isClass(true);
-    }
+  private ActionProvider provider;
+  private StandardType inSpec;
+  private StandardType outSpec;
 
-    public ActionProvider provider() {
-        return this.provider;
-    }
+  public ActionSpec() {
+    isClass(true);
+  }
 
-    public StandardType inSpec() {
-        return this.inSpec;
-    }
+  public ActionProvider provider() {
+    return this.provider;
+  }
 
-    public StandardType outSpec() {
-        return this.outSpec;
-    }
+  public StandardType inSpec() {
+    return this.inSpec;
+  }
 
-    public ActionSpec provider(final ActionProvider provider) {
-        this.provider = provider;
-        return this;
-    }
+  public StandardType outSpec() {
+    return this.outSpec;
+  }
 
-    public ActionSpec inSpec(final StandardType inSpec) {
-        this.inSpec = inSpec;
-        return this;
-    }
+  public ActionSpec provider(final ActionProvider provider) {
+    this.provider = provider;
+    return this;
+  }
 
-    public ActionSpec outSpec(final StandardType outSpec) {
-        this.outSpec = outSpec;
-        return this;
-    }
+  public ActionSpec inSpec(final StandardType inSpec) {
+    this.inSpec = inSpec;
+    return this;
+  }
 
-    @Override
-    public String path() {
-        return parent().path();
-    }
+  public ActionSpec outSpec(final StandardType outSpec) {
+    this.outSpec = outSpec;
+    return this;
+  }
+
+  @Override
+  public String path() {
+    return parent().path();
+  }
 }

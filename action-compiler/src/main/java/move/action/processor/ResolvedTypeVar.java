@@ -7,31 +7,32 @@ import javax.lang.model.type.DeclaredType;
  * @author Clay Molocznik
  */
 public class ResolvedTypeVar {
-    private DeclaredType type;
-    private TypeElement element;
-    private int index;
-    private String varName;
 
-    public ResolvedTypeVar(DeclaredType type, TypeElement element, int index, String varName) {
-        this.type = type;
-        this.element = element;
-        this.index = index;
-        this.varName = varName;
-    }
+  private DeclaredType type;
+  private TypeElement element;
+  private int index;
+  private String varName;
 
-    public DeclaredType getType() {
-        return type;
-    }
+  public ResolvedTypeVar(DeclaredType type, TypeElement element, int index, String varName) {
+    this.type = type;
+    this.element = element;
+    this.index = index;
+    this.varName = varName;
+  }
 
-    public TypeElement getElement() {
-        return element;
-    }
+  public DeclaredType getType() {
+    return type;
+  }
 
-    public int getIndex() {
-        return index;
-    }
+  public TypeElement getElement() {
+    return element;
+  }
 
-    public String getVarName() {
-        return varName;
-    }
+  public int getIndex() {
+    return index;
+  }
+
+  public String getVarName() {
+    return varName;
+  }
 }

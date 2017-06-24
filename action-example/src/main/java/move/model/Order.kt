@@ -10,8 +10,8 @@ import javax.inject.Singleton
  */
 @Table
 class OrderEntity(
-        @Column
-        var number: String? = null
+   @Column
+   var number: String? = null
 ) : AbstractEntity()
 
 

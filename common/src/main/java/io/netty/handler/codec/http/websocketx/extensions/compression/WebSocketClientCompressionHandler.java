@@ -17,7 +17,6 @@ package io.netty.handler.codec.http.websocketx.extensions.compression;
 
 import io.netty.channel.ChannelHandler;
 import io.netty.handler.codec.http.websocketx.extensions.WebSocketClientExtensionHandler;
-import io.netty.handler.codec.http.websocketx.extensions.WebSocketClientExtensionHandshaker;
 
 /**
  * Extends <tt>io.netty.handler.codec.http.websocketx.extensions.compression.WebSocketClientExtensionHandler</tt>
@@ -28,16 +27,16 @@ import io.netty.handler.codec.http.websocketx.extensions.WebSocketClientExtensio
 @ChannelHandler.Sharable
 public final class WebSocketClientCompressionHandler extends WebSocketClientExtensionHandler {
 
-    public static final WebSocketClientCompressionHandler INSTANCE = new WebSocketClientCompressionHandler();
+  public static final WebSocketClientCompressionHandler INSTANCE = new WebSocketClientCompressionHandler();
 
-    public WebSocketClientCompressionHandler() {
-        this(0);
-    }
+  public WebSocketClientCompressionHandler() {
+    this(0);
+  }
 
-    private WebSocketClientCompressionHandler(int maxSize) {
-        super(new PerMessageDeflateClientExtensionHandshaker(),
-                new DeflateFrameClientExtensionHandshaker(false, maxSize),
-                new DeflateFrameClientExtensionHandshaker(true, maxSize));
-    }
+  private WebSocketClientCompressionHandler(int maxSize) {
+    super(new PerMessageDeflateClientExtensionHandshaker(),
+        new DeflateFrameClientExtensionHandshaker(false, maxSize),
+        new DeflateFrameClientExtensionHandshaker(true, maxSize));
+  }
 
 }

@@ -7,65 +7,66 @@ import java.util.List;
  *
  */
 public class EnumType extends AbstractType implements MaterializedType {
-    private String[] values;
-    private Namespace namespace;
-    private String canonicalName;
-    private final List<MaterializedType> children = new ArrayList<>(0);
 
-    public EnumType(Class type, String[] values) {
-        super(type);
-        this.values = values;
-    }
+  private String[] values;
+  private Namespace namespace;
+  private String canonicalName;
+  private final List<MaterializedType> children = new ArrayList<>(0);
 
-    @Override
-    public String name() {
-        return javaType().getSimpleName();
-    }
+  public EnumType(Class type, String[] values) {
+    super(type);
+    this.values = values;
+  }
 
-    @Override
-    public DataType dataType() {
-        return DataType.ENUM;
-    }
+  @Override
+  public String name() {
+    return javaType().getSimpleName();
+  }
 
-    @Override
-    public boolean nullable() {
-        return true;
-    }
+  @Override
+  public DataType dataType() {
+    return DataType.ENUM;
+  }
 
-    public String[] values() {
-        return this.values;
-    }
+  @Override
+  public boolean nullable() {
+    return true;
+  }
 
-    public String canonicalName() {
-        return this.canonicalName;
-    }
+  public String[] values() {
+    return this.values;
+  }
 
-    public EnumType values(final String[] values) {
-        this.values = values;
-        return this;
-    }
+  public String canonicalName() {
+    return this.canonicalName;
+  }
 
-    public EnumType canonicalName(final String canonicalName) {
-        this.canonicalName = canonicalName;
-        return this;
-    }
+  public EnumType values(final String[] values) {
+    this.values = values;
+    return this;
+  }
 
-    @Override
-    public List<MaterializedType> children() {
-        return children;
-    }
+  public EnumType canonicalName(final String canonicalName) {
+    this.canonicalName = canonicalName;
+    return this;
+  }
 
-    @Override
-    public String path() {
-        return namespace().canonicalName();
-    }
+  @Override
+  public List<MaterializedType> children() {
+    return children;
+  }
 
-    public Namespace namespace() {
-        return this.namespace;
-    }
+  @Override
+  public String path() {
+    return namespace().canonicalName();
+  }
 
-    public EnumType namespace(final Namespace namespace) {
-        this.namespace = namespace;
-        return this;
-    }
+  public Namespace namespace() {
+    return this.namespace;
+  }
+
+  public EnumType namespace(final Namespace namespace) {
+    this.namespace = namespace;
+    return this;
+  }
 }

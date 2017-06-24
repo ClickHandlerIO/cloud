@@ -673,7 +673,7 @@ public class SqlSession {
    * @return
    */
   @Nullable
-  protected <T> T selectOne(final Class<T> cls, Condition condition) {
+  public <T> T selectOne(final Class<T> cls, Condition condition) {
     final TableMapping mapping = db.getMapping(cls);
     if (mapping == null) {
       throw new RuntimeException("No mapping for class [" + cls.getCanonicalName() + "]");
@@ -688,7 +688,7 @@ public class SqlSession {
    * @return
    */
   @Nullable
-  protected <T> T selectOne(final Class<T> cls, Collection<? extends Condition> conditions) {
+  public <T> T selectOne(final Class<T> cls, Collection<? extends Condition> conditions) {
     final TableMapping mapping = db.getMapping(cls);
     if (mapping == null) {
       throw new RuntimeException("No mapping for class [" + cls.getCanonicalName() + "]");

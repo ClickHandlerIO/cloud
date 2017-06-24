@@ -6,40 +6,41 @@ import java.util.List;
  * A Materialized Type is a type that requires code generation.
  */
 public interface MaterializedType extends StandardType {
-    /**
-     * @return
-     */
-    Namespace namespace();
 
-    /**
-     * @param namespace
-     * @return
-     */
-    MaterializedType namespace(Namespace namespace);
+  /**
+   * @return
+   */
+  Namespace namespace();
 
-    /**
-     * @return
-     */
-    String name();
+  /**
+   * @param namespace
+   * @return
+   */
+  MaterializedType namespace(Namespace namespace);
 
-    /**
-     * @return
-     */
-    String canonicalName();
+  /**
+   * @return
+   */
+  String name();
 
-    /**
-     * @param canonicalName
-     * @return
-     */
-    MaterializedType canonicalName(String canonicalName);
+  /**
+   * @return
+   */
+  String canonicalName();
 
-    /**
-     * @return
-     */
-    List<MaterializedType> children();
+  /**
+   * @param canonicalName
+   * @return
+   */
+  MaterializedType canonicalName(String canonicalName);
 
-    /**
-     * @return
-     */
-    String path();
+  /**
+   * @return
+   */
+  List<MaterializedType> children();
+
+  /**
+   * @return
+   */
+  String path();
 }

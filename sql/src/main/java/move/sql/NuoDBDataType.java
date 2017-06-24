@@ -1,13 +1,11 @@
 package move.sql;
 
-import java.math.BigDecimal;
 import java.sql.Date;
 import java.sql.Time;
 import java.sql.Timestamp;
 import org.jooq.DataType;
 import org.jooq.SQLDialect;
 import org.jooq.impl.DefaultDataType;
-import org.jooq.impl.PrecisionDataType;
 import org.jooq.impl.SQLDataType;
 
 /**
@@ -35,10 +33,8 @@ public class NuoDBDataType {
       SQLDataType.BIGINT, "bigint", "bigint");
   public static final DataType<Double> DOUBLE = new DefaultDataType<>(SQLDialect.MYSQL,
       SQLDataType.DOUBLE, "double", "double");
-  public static final DataType<BigDecimal> DECIMAL = new PrecisionDataType<>(SQLDialect.MYSQL,
-      SQLDataType.DECIMAL, "decimal", "decimal");
-  public static final DataType<Double> NUMERIC = new PrecisionDataType<>(SQLDialect.MYSQL,
-      SQLDataType.DOUBLE, "numeric", "numeric");
+  public static final DataType<Double> DECIMAL = DOUBLE;
+  public static final DataType<Double> NUMERIC = DOUBLE;
 
   public static final DataType<Boolean> BOOLEAN = new DefaultDataType<Boolean>(SQLDialect.MYSQL,
       SQLDataType.BOOLEAN, "boolean", "boolean");

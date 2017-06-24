@@ -26,29 +26,30 @@ import io.netty.handler.codec.http.websocketx.extensions.WebSocketExtension;
  */
 class PerFrameDeflateDecoder extends DeflateDecoder {
 
-    /**
-     * Constructor
-     * @param noContext true to disable context takeover.
-     */
-    public PerFrameDeflateDecoder(boolean noContext, int maxSize) {
-        super(noContext, maxSize);
-    }
+  /**
+   * Constructor
+   *
+   * @param noContext true to disable context takeover.
+   */
+  public PerFrameDeflateDecoder(boolean noContext, int maxSize) {
+    super(noContext, maxSize);
+  }
 
-    @Override
-    public boolean acceptInboundMessage(Object msg) throws Exception {
-        return (msg instanceof TextWebSocketFrame ||
-                msg instanceof BinaryWebSocketFrame ||
-                msg instanceof ContinuationWebSocketFrame) &&
-                    (((WebSocketFrame) msg).rsv() & WebSocketExtension.RSV1) > 0;
-    }
+  @Override
+  public boolean acceptInboundMessage(Object msg) throws Exception {
+    return (msg instanceof TextWebSocketFrame ||
+        msg instanceof BinaryWebSocketFrame ||
+        msg instanceof ContinuationWebSocketFrame) &&
+        (((WebSocketFrame) msg).rsv() & WebSocketExtension.RSV1) > 0;
+  }
 
-    @Override
-    protected int newRsv(WebSocketFrame msg) {
-        return msg.rsv() ^ WebSocketExtension.RSV1;
-    }
+  @Override
+  protected int newRsv(WebSocketFrame msg) {
+    return msg.rsv() ^ WebSocketExtension.RSV1;
+  }
 
-    @Override
-    protected boolean appendFrameTail(WebSocketFrame msg) {
-        return true;
-    }
+  @Override
+  protected boolean appendFrameTail(WebSocketFrame msg) {
+    return true;
+  }
 }

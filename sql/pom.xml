@@ -15,10 +15,6 @@
 
     <name>SQL</name>
 
-  <properties>
-    <kotlin.version>1.1.2-5</kotlin.version>
-  </properties>
-
   <dependencies>
         <dependency>
             <groupId>com.google.dagger</groupId>

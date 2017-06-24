@@ -1,36 +1,36 @@
 package move.remoting;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-
 import java.io.Serializable;
 
 /**
  *
  */
 public class PushEnvelope implements Serializable {
-    @JsonProperty("a")
-    private String address;
-    @JsonProperty("p")
-    private String payload;
 
-    public PushEnvelope() {
-    }
+  @JsonProperty("a")
+  private String address;
+  @JsonProperty("p")
+  private String payload;
 
-    public String address() {
-        return this.address;
-    }
+  public PushEnvelope() {
+  }
 
-    public String payload() {
-        return this.payload;
-    }
+  public String address() {
+    return this.address;
+  }
 
-    public PushEnvelope address(final String name) {
-        this.address = name;
-        return this;
-    }
+  public String payload() {
+    return this.payload;
+  }
 
-    public PushEnvelope payload(final String payload) {
-        this.payload = payload;
-        return this;
-    }
+  public PushEnvelope address(final String name) {
+    this.address = name;
+    return this;
+  }
+
+  public PushEnvelope payload(final String payload) {
+    this.payload = payload;
+    return this;
+  }
 }

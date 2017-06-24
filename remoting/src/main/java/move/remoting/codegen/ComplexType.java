@@ -7,114 +7,115 @@ import java.util.List;
  *
  */
 public class ComplexType extends AbstractType implements MaterializedType {
-    private final List<FieldSpec> fields = new ArrayList<>();
-    private final List<MaterializedType> children = new ArrayList<>(0);
-    private Namespace namespace;
-    private StandardType superType;
-    private StandardType[] interfaces;
-    private String canonicalName;
-    private String name;
-    private boolean processed;
 
-    public ComplexType(Class typeClass) {
-        super(typeClass);
-    }
+  private final List<FieldSpec> fields = new ArrayList<>();
+  private final List<MaterializedType> children = new ArrayList<>(0);
+  private Namespace namespace;
+  private StandardType superType;
+  private StandardType[] interfaces;
+  private String canonicalName;
+  private String name;
+  private boolean processed;
 
-    public ComplexType(Class type, StandardType superType) {
-        super(type);
-        this.superType = superType;
-    }
+  public ComplexType(Class typeClass) {
+    super(typeClass);
+  }
 
-    void setSuperType(StandardType superType) {
-        this.superType = superType;
-    }
+  public ComplexType(Class type, StandardType superType) {
+    super(type);
+    this.superType = superType;
+  }
 
-    @Override
-    public DataType dataType() {
-        return DataType.COMPLEX;
-    }
+  void setSuperType(StandardType superType) {
+    this.superType = superType;
+  }
 
-    @Override
-    public boolean nullable() {
-        return true;
-    }
+  @Override
+  public DataType dataType() {
+    return DataType.COMPLEX;
+  }
 
-    public StandardType superType() {
-        return this.superType;
-    }
+  @Override
+  public boolean nullable() {
+    return true;
+  }
 
-    public StandardType[] interfaces() {
-        return this.interfaces;
-    }
+  public StandardType superType() {
+    return this.superType;
+  }
 
-    public ComplexType superType(final StandardType superType) {
-        this.superType = superType;
-        return this;
-    }
+  public StandardType[] interfaces() {
+    return this.interfaces;
+  }
 
-    public ComplexType interfaces(final StandardType[] interfaces) {
-        this.interfaces = interfaces;
-        return this;
-    }
+  public ComplexType superType(final StandardType superType) {
+    this.superType = superType;
+    return this;
+  }
 
-    public Namespace namespace() {
-        return this.namespace;
-    }
+  public ComplexType interfaces(final StandardType[] interfaces) {
+    this.interfaces = interfaces;
+    return this;
+  }
 
-    public String canonicalName() {
-        return this.canonicalName;
-    }
+  public Namespace namespace() {
+    return this.namespace;
+  }
 
-    public boolean processed() {
-        return this.processed;
-    }
+  public String canonicalName() {
+    return this.canonicalName;
+  }
 
-    public ComplexType namespace(final Namespace namespace) {
-        this.namespace = namespace;
-        return this;
-    }
+  public boolean processed() {
+    return this.processed;
+  }
 
-    @Override
-    public String name() {
-        return name != null ? name : javaType().getSimpleName();
-    }
+  public ComplexType namespace(final Namespace namespace) {
+    this.namespace = namespace;
+    return this;
+  }
 
-    public ComplexType canonicalName(final String canonicalName) {
-        this.canonicalName = canonicalName;
-        return this;
-    }
+  @Override
+  public String name() {
+    return name != null ? name : javaType().getSimpleName();
+  }
 
-    public ComplexType processed(final boolean processed) {
-        this.processed = processed;
-        return this;
-    }
+  public ComplexType canonicalName(final String canonicalName) {
+    this.canonicalName = canonicalName;
+    return this;
+  }
 
-    @Override
-    public List<MaterializedType> children() {
-        return children;
-    }
+  public ComplexType processed(final boolean processed) {
+    this.processed = processed;
+    return this;
+  }
 
-    @Override
-    public String path() {
-        return namespace().canonicalName();
-    }
+  @Override
+  public List<MaterializedType> children() {
+    return children;
+  }
 
-    public List<FieldSpec> fields() {
-        return fields;
-    }
+  @Override
+  public String path() {
+    return namespace().canonicalName();
+  }
 
-    public ComplexType convertToHolder(String name) {
-        final ComplexType complexType = new ComplexType(javaType());
-        complexType.canonicalName(canonicalName() + "." + name);
-        complexType.fields.addAll(fields);
-        fields.clear();
-        complexType.children.addAll(children);
-        children.clear();
-        complexType.namespace = namespace;
-        complexType.superType = superType;
-        complexType.interfaces = interfaces;
-        complexType.name = name;
-        superType = null;
-        return complexType;
-    }
+  public List<FieldSpec> fields() {
+    return fields;
+  }
+
+  public ComplexType convertToHolder(String name) {
+    final ComplexType complexType = new ComplexType(javaType());
+    complexType.canonicalName(canonicalName() + "." + name);
+    complexType.fields.addAll(fields);
+    fields.clear();
+    complexType.children.addAll(children);
+    children.clear();
+    complexType.namespace = namespace;
+    complexType.superType = superType;
+    complexType.interfaces = interfaces;
+    complexType.name = name;
+    superType = null;
+    return complexType;
+  }
 }
