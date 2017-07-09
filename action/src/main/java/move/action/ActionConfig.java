@@ -48,9 +48,4 @@ public @interface ActionConfig {
    * @return
    */
   Class<? extends ActionProvider> provider() default ActionProvider.class;
-
-  /**
-   * @return
-   */
-  ExecutionIsolationStrategy isolationStrategy() default ExecutionIsolationStrategy.BEST;
 }

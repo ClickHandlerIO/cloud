@@ -1,14 +1,23 @@
 package move.action
 
 import com.amazonaws.services.sqs.buffered.SendQueueBuffer
+import move.common.WireFormat
 import java.util.*
 
 /**
 
  */
 class SQSConfig {
-   var enabled: Boolean = false
+   var enabled: Boolean = true
 
+   /**
+    *
+    */
+   var worker: Boolean = true
+
+   /**
+    *
+    */
    var namespace = "dev"
 
    /**
@@ -25,6 +34,25 @@ class SQSConfig {
 
     */
    var awsSecretKey: String? = null
+
+   /**
+    *
+    */
+   var s3AccessKey: String? = null
+   /**
+    *
+    */
+   var s3SecretKey: String? = null
+
+   /**
+    *
+    */
+   var s3BucketName: String? = null
+
+   /**
+    *
+    */
+   var maxPayloadSize = 1024 * 1024 * 10
 
    /**
 
@@ -72,11 +100,6 @@ class SQSConfig {
    /**
 
     */
-   var worker: Boolean = false
-
-   /**
-
-    */
    var inclusions: Set<String>? = null
    /**
 
@@ -87,4 +110,18 @@ class SQSConfig {
 
     */
    var queues: ArrayList<SQSQueueConfig>? = null
+
+   companion object {
+      @JvmStatic
+      fun main(args: Array<String>) {
+         println(WireFormat.stringify(SQSConfig().apply {
+            region = "us-west-2"
+            awsAccessKey = ""
+            awsSecretKey = ""
+            s3AccessKey = ""
+            s3SecretKey = ""
+            s3BucketName = "sqs"
+         }))
+      }
+   }
 }

@@ -3,8 +3,17 @@ package move.action
 import com.amazonaws.ClientConfiguration
 import com.amazonaws.auth.AWSStaticCredentialsProvider
 import com.amazonaws.auth.BasicAWSCredentials
+import com.amazonaws.client.builder.ExecutorFactory
+import com.amazonaws.event.ProgressEvent
+import com.amazonaws.event.ProgressEventType
+import com.amazonaws.event.ProgressListener
 import com.amazonaws.handlers.AsyncHandler
 import com.amazonaws.http.AmazonHttpClient
+import com.amazonaws.services.s3.AmazonS3ClientBuilder
+import com.amazonaws.services.s3.model.ObjectMetadata
+import com.amazonaws.services.s3.model.PutObjectRequest
+import com.amazonaws.services.s3.transfer.*
+import com.amazonaws.services.s3.transfer.internal.AbstractTransfer
 import com.amazonaws.services.sqs.AmazonSQSAsync
 import com.amazonaws.services.sqs.AmazonSQSAsyncClientBuilder
 import com.amazonaws.services.sqs.buffered.MoveAmazonSQSBufferedAsyncClient
@@ -16,7 +25,10 @@ import com.codahale.metrics.Gauge
 import com.google.common.base.Preconditions
 import com.google.common.base.Strings
 import com.google.common.base.Throwables
-import com.google.common.util.concurrent.AbstractExecutionThreadService
+import com.google.common.cache.Cache
+import com.google.common.cache.CacheBuilder
+import com.google.common.cache.RemovalListener
+import com.google.common.cache.RemovalNotification
 import com.google.common.util.concurrent.AbstractIdleService
 import com.netflix.hystrix.exception.HystrixTimeoutException
 import io.vertx.rxjava.core.Vertx
@@ -26,7 +38,7 @@ import move.common.UID
 import move.common.WireFormat
 import org.slf4j.LoggerFactory
 import rx.Single
-import java.net.SocketException
+import java.io.File
 import java.util.*
 import java.util.concurrent.*
 import java.util.concurrent.atomic.AtomicInteger
@@ -45,9 +57,47 @@ internal constructor(val vertx: Vertx,
 
    private val queueMap = HashMap<Class<*>, QueueContext>()
 
-   private var realSQS: AmazonSQSAsync? = null
-   private var client: MoveAmazonSQSBufferedAsyncClient? = null
-   private var bufferExecutor: ExecutorService? = null
+   private lateinit var realSQS: AmazonSQSAsync
+   private lateinit var client: MoveAmazonSQSBufferedAsyncClient
+   private lateinit var bufferExecutor: ExecutorService
+   //   private lateinit var s3Client: AmazonS3Client
+   private lateinit var s3TransferManager: TransferManager
+
+   private val fileCache: Cache<String, File> = CacheBuilder
+      .newBuilder()
+      .maximumSize(50000)
+      .expireAfterWrite(2, TimeUnit.HOURS)
+      .removalListener(object : RemovalListener<String, File> {
+         override fun onRemoval(notification: RemovalNotification<String, File>?) {
+            if (notification?.wasEvicted() == true) {
+               notification.value.delete()
+            }
+         }
+      }).build()
+
+   private val uploadCache: Cache<String, Upload> = CacheBuilder
+      .newBuilder()
+      .maximumSize(50000)
+      .expireAfterWrite(2, TimeUnit.HOURS)
+      .removalListener(object : RemovalListener<String, Upload> {
+         override fun onRemoval(notification: RemovalNotification<String, Upload>?) {
+            if (notification?.wasEvicted() == true) {
+               notification.value.abort()
+            }
+         }
+      }).build()
+
+   private val downloadCache: Cache<String, Download> = CacheBuilder
+      .newBuilder()
+      .maximumSize(50000)
+      .expireAfterWrite(2, TimeUnit.HOURS)
+      .removalListener(object : RemovalListener<String, Download> {
+         override fun onRemoval(notification: RemovalNotification<String, Download>?) {
+            if (notification?.wasEvicted() == true) {
+               notification.value.abort()
+            }
+         }
+      }).build()
 
    private fun workerEnabled(provider: WorkerActionProvider<*, *>): Boolean {
       if (!config.worker) {
@@ -148,6 +198,30 @@ internal constructor(val vertx: Vertx,
       config.awsAccessKey = config.awsAccessKey?.trim() ?: ""
       config.awsSecretKey = config.awsSecretKey?.trim() ?: ""
 
+      config.s3AccessKey = config.s3AccessKey?.trim() ?: ""
+      config.s3SecretKey = config.s3SecretKey?.trim() ?: ""
+
+      s3TransferManager = TransferManagerBuilder.standard().apply {
+         val clientBuilder = AmazonS3ClientBuilder.standard()
+
+         if (config.s3AccessKey != null && config.s3AccessKey!!.isNotEmpty()) {
+            clientBuilder.withCredentials(
+               AWSStaticCredentialsProvider(
+                  BasicAWSCredentials(
+                     config.s3AccessKey, config.s3SecretKey)))
+         }
+
+         clientBuilder.withRegion(config.region)
+
+         withExecutorFactory(object : ExecutorFactory {
+            override fun newExecutor(): ExecutorService {
+               return bufferExecutor
+            }
+         })
+
+         withS3Client(clientBuilder.build())
+      }.build()
+
       // Set credentials if necessary.
       if (config.awsAccessKey != null && config.awsAccessKey!!.isNotEmpty()) {
          builder.withCredentials(
@@ -168,11 +242,11 @@ internal constructor(val vertx: Vertx,
          val queueName = config.namespace + provider.queueName
          LOG.info("Calling getQueueUrl() for " + queueName)
 
-         val result = realSQS!!.getQueueUrl(queueName)
+         val result = realSQS.getQueueUrl(queueName)
 
          val queueUrl =
             if (result == null || result.queueUrl == null || result.queueUrl.isEmpty()) {
-               val createQueueResult = realSQS!!.createQueue(queueName)
+               val createQueueResult = realSQS.createQueue(queueName)
                createQueueResult.queueUrl
             } else {
                result.queueUrl
@@ -206,7 +280,7 @@ internal constructor(val vertx: Vertx,
             }
          }
 
-         val buffer = client!!.putQBuffer(queueUrl, bufferConfig, bufferExecutor)
+         val buffer = client.putQBuffer(queueUrl, bufferConfig, bufferExecutor)
 
          val sender = Sender(
             provider,
@@ -255,55 +329,141 @@ internal constructor(val vertx: Vertx,
          }
       }
 
-      client!!.shutdown()
+      client.shutdown()
+      s3TransferManager.shutdownNow(true)
    }
 
-   private class Sender(
+   data class Envelope(val l: Boolean, val s: Int? = null, val p: String)
+
+   data class S3Pointer(val b: String, val k: String, val e: String)
+
+   private inner class Sender(
       private val actionProvider: WorkerActionProvider<*, *>,
       private val queueUrl: String,
       private val buffer: QueueBuffer) : WorkerProducer {
 
       override fun send(request: WorkerRequest): Single<WorkerReceipt> {
          return Single.create<WorkerReceipt> { subscriber ->
-            val sendRequest = SendMessageRequest(
-               queueUrl,
-               WireFormat.stringify(request.request)
-            )
+            val payload = WireFormat.stringify(request.request)
 
-            if (request.delaySeconds > 0) {
-               sendRequest.delaySeconds = request.delaySeconds
-            }
-
-            // Handle fifo
-            if (actionProvider.isFifo) {
-               var groupId = actionProvider.name
-
-               if (request.groupId != null && !request.groupId.isEmpty()) {
-                  groupId = request.groupId
-               }
-
-               sendRequest.messageGroupId = groupId
-               sendRequest.messageDeduplicationId = UID.next()
-            }
-
-            buffer.sendMessage(sendRequest, object : AsyncHandler<SendMessageRequest, SendMessageResult> {
-               override fun onError(exception: Exception) {
+            if (payload.length > MAX_PAYLOAD_SIZE || actionProvider.workerAction?.encrypted == true) {
+               if (payload.length > config.maxPayloadSize) {
                   if (!subscriber.isUnsubscribed) {
-                     subscriber.onError(exception)
+                     subscriber.onError(RuntimeException("Payload of size '" + payload.length + "' exceeded max allowable '" + config.maxPayloadSize + "'"))
                   }
+                  return@create
                }
 
-               override fun onSuccess(receiveRequest: SendMessageRequest, sendMessageResult: SendMessageResult?) {
-                  if (!subscriber.isUnsubscribed) {
-                     subscriber.onSuccess(WorkerReceipt().apply {
-                        messageId = sendMessageResult?.messageId
-                        mD5OfMessageBody = sendMessageResult?.mD5OfMessageBody
-                        mD5OfMessageAttributes = sendMessageResult?.mD5OfMessageAttributes
-                        sequenceNumber = sendMessageResult?.sequenceNumber
+               // Upload to S3.
+               val id = UID.next()
+
+               val putRequest = PutObjectRequest(
+                  config.s3BucketName,
+                  id,
+                  payload.byteInputStream(Charsets.UTF_8),
+                  ObjectMetadata()
+               )
+
+               val upload = s3TransferManager.upload(putRequest)
+               uploadCache.put(id, upload)
+               val transfer = upload as AbstractTransfer
+               transfer.addStateChangeListener { t, state ->
+                  if (state == Transfer.TransferState.Completed) {
+                     uploadCache.invalidate(id)
+                     val uploadResult = upload.waitForUploadResult()
+
+                     val sendRequest = SendMessageRequest(
+                        queueUrl,
+                        stringify(Envelope(
+                           true,
+                           payload.length,
+                           WireFormat.stringify(S3Pointer(
+                              uploadResult.bucketName,
+                              uploadResult.key,
+                              uploadResult.eTag)
+                           )
+                        ))
+                     )
+
+                     if (request.delaySeconds > 0) {
+                        sendRequest.delaySeconds = request.delaySeconds
+                     }
+
+                     // Handle fifo
+                     if (actionProvider.isFifo) {
+                        var groupId = actionProvider.name
+
+                        if (request.groupId != null && !request.groupId.isEmpty()) {
+                           groupId = request.groupId
+                        }
+
+                        sendRequest.messageGroupId = groupId
+                        sendRequest.messageDeduplicationId = UID.next()
+                     }
+
+                     buffer.sendMessage(sendRequest, object : AsyncHandler<SendMessageRequest, SendMessageResult> {
+                        override fun onError(exception: Exception) {
+                           if (!subscriber.isUnsubscribed) {
+                              subscriber.onError(exception)
+                           }
+                        }
+
+                        override fun onSuccess(receiveRequest: SendMessageRequest, sendMessageResult: SendMessageResult?) {
+                           if (!subscriber.isUnsubscribed) {
+                              subscriber.onSuccess(WorkerReceipt().apply {
+                                 messageId = sendMessageResult?.messageId
+                                 mD5OfMessageBody = sendMessageResult?.mD5OfMessageBody
+                                 mD5OfMessageAttributes = sendMessageResult?.mD5OfMessageAttributes
+                                 sequenceNumber = sendMessageResult?.sequenceNumber
+                              })
+                           }
+                        }
                      })
+                  } else if (state == Transfer.TransferState.Failed || state == Transfer.TransferState.Canceled) {
+                     uploadCache.invalidate(id)
                   }
                }
-            })
+            } else {
+               val sendRequest = SendMessageRequest(
+                  queueUrl,
+                  stringify(Envelope(false, payload.length, payload))
+               )
+
+               if (request.delaySeconds > 0) {
+                  sendRequest.delaySeconds = request.delaySeconds
+               }
+
+               // Handle fifo
+               if (actionProvider.isFifo) {
+                  var groupId = actionProvider.name
+
+                  if (request.groupId != null && !request.groupId.isEmpty()) {
+                     groupId = request.groupId
+                  }
+
+                  sendRequest.messageGroupId = groupId
+                  sendRequest.messageDeduplicationId = UID.next()
+               }
+
+               buffer.sendMessage(sendRequest, object : AsyncHandler<SendMessageRequest, SendMessageResult> {
+                  override fun onError(exception: Exception) {
+                     if (!subscriber.isUnsubscribed) {
+                        subscriber.onError(exception)
+                     }
+                  }
+
+                  override fun onSuccess(receiveRequest: SendMessageRequest, sendMessageResult: SendMessageResult?) {
+                     if (!subscriber.isUnsubscribed) {
+                        subscriber.onSuccess(WorkerReceipt().apply {
+                           messageId = sendMessageResult?.messageId
+                           mD5OfMessageBody = sendMessageResult?.mD5OfMessageBody
+                           mD5OfMessageAttributes = sendMessageResult?.mD5OfMessageAttributes
+                           sequenceNumber = sendMessageResult?.sequenceNumber
+                        })
+                     }
+                  }
+               })
+            }
          }
       }
    }
@@ -315,11 +475,11 @@ internal constructor(val vertx: Vertx,
     *
     * Reliable
     */
-   private class Receiver(val vertx: Vertx,
-                          val actionProvider: WorkerActionProvider<Action<Any, Boolean>, Any>,
-                          val queueUrl: String,
-                          val sqsBuffer: QueueBuffer,
-                          parallelism: Int) : AbstractIdleService() {
+   private inner class Receiver(val vertx: Vertx,
+                                val actionProvider: WorkerActionProvider<Action<Any, Boolean>, Any>,
+                                val queueUrl: String,
+                                val sqsBuffer: QueueBuffer,
+                                parallelism: Int) : AbstractIdleService() {
 //        private var receiveThreads: Array<ReceiveThread?>? = null
 
       val registry = Metrics.registry()
@@ -342,12 +502,13 @@ internal constructor(val vertx: Vertx,
       private val deleteFailuresCounter: Counter = registry.counter(actionProvider.name + "-DELETE_FAILURES")
       private val receiveLatencyCounter: Counter = registry.counter(actionProvider.name + "-RECEIVE_LATENCY")
       private val noMessagesCounter: Counter = registry.counter(actionProvider.name + "-NO_MESSAGES")
+      private val downloadsCounter: Counter = registry.counter(actionProvider.name + "-DOWNLOADS")
+      private val downloadsNanosCounter: Counter = registry.counter(actionProvider.name + "-DOWNLOAD_NANOS")
+      private val downloadedBytesCounter: Counter = registry.counter(actionProvider.name + "-DOWNLOADED_BYTES")
 
       @Volatile private var lastPoll: Long = 0
 
       private val activeMessages = AtomicInteger(0)
-
-      val activeList = CopyOnWriteArrayList<Single<Any>>()
 
       val concurrentRequests = if (parallelism < MIN_RECEIVE_THREADS) {
          MIN_RECEIVE_THREADS
@@ -361,38 +522,11 @@ internal constructor(val vertx: Vertx,
       override fun startUp() {
 //            LOG.debug("Starting up SQS service.")
          receiveMore()
-
-//            var threads = actionProvider.maxConcurrentRequests
-//
-//            if (concurrentRequests > 0) {
-//                threads = concurrentRequests
-//            }
-//
-//            if (threads < MIN_RECEIVE_THREADS) {
-//                threads = MIN_RECEIVE_THREADS
-//            } else if (threads > MAX_RECEIVE_THREADS) {
-//                threads = MAX_RECEIVE_THREADS
-//            }
-
-         // Start Receive threads.
-//            receiveThreads = arrayOfNulls<ReceiveThread>(threads)
-//            for (i in receiveThreads!!.indices) {
-//                receiveThreads!![i] = ReceiveThread(i)
-//                receiveThreads!![i]!!.startAsync().awaitRunning()
-//            }
       }
 
       @Throws(Exception::class)
       override fun shutDown() {
          sqsBuffer.shutdown()
-
-         // Stop receiving messages.
-//            for (thread in receiveThreads!!) {
-//                Try.run { thread!!.stopAsync().awaitTerminated(5, TimeUnit.SECONDS) }
-//            }
-//
-//            // Clear threads.
-//            receiveThreads = null
       }
 
       fun deleteMessage(receiptHandle: String) {
@@ -452,212 +586,144 @@ internal constructor(val vertx: Vertx,
 
                result.messages.forEach { message ->
                   // Parse request.
-                  val body = Strings.nullToEmpty(message.body)
-                  val request: Any = if (body.isEmpty())
-                     actionProvider.inProvider.get()
-                  else
-                     WireFormat.parse(
-                        actionProvider.inClass,
-                        body
-                     ) ?: actionProvider.inProvider.get()
+                  val envelope = parse(Strings.nullToEmpty(message.body))
 
-                  try {
-                     jobsCounter.inc()
+                  if (envelope.l) {
+                     val s3Pointer = WireFormat.parse(S3Pointer::class.java, envelope.p)
 
-                     actionProvider.single(request).subscribe(
-                        {
-                           activeMessages.decrementAndGet()
-
-                           if (it != null && it.isSuccess) {
-                              completesCounter.inc()
-                              deletesCounter.inc()
-
-                              try {
-                                 deleteMessage(message.receiptHandle)
-                              } catch (e: Throwable) {
-                                 LOG.error("Delete message from queue '" + queueUrl + "' with receipt handle '" + message.receiptHandle + "' failed", e)
-                                 deleteFailuresCounter.inc()
-                              }
-                           } else {
-                              inCompletesCounter.inc()
-                           }
-                        },
-                        {
-                           activeMessages.decrementAndGet()
-                           LOG.error("Action " + actionProvider.actionClass.canonicalName + " threw an exception", it)
-
-                           val rootCause = Throwables.getRootCause(it)
-                           if (rootCause is HystrixTimeoutException || rootCause is TimeoutException) {
-                              timeoutsCounter.inc()
-                           } else {
-                              exceptionsCounter.inc()
-                           }
-                        }
-                     )
-                  } catch (e: Exception) {
-                     LOG.error("Action " + actionProvider.actionClass.canonicalName + " threw an exception", e)
-
-                     val rootCause = Throwables.getRootCause(e)
-                     if (rootCause is HystrixTimeoutException || rootCause is TimeoutException) {
-                        timeoutsCounter.inc()
+                     if (s3Pointer == null) {
+                        LOG.error("Invalid S3Pointer json: " + envelope.p)
+                        deleteMessage(message.receiptHandle)
                      } else {
-                        exceptionsCounter.inc()
+                        downloadsCounter.inc()
+                        val downloadStarted = System.nanoTime()
+
+                        vertx.rxExecuteBlocking<Unit> {
+                           val file = File.createTempFile("move_sqs_" + s3Pointer.k, "json")
+                           fileCache.put(s3Pointer.k, file)
+
+                           // Start S3 Download.
+                           val download = s3TransferManager.download(s3Pointer.b, s3Pointer.k, file)
+                           downloadCache.put(s3Pointer.k, download)
+
+                           (download as AbstractTransfer).addStateChangeListener { transfer, state ->
+                              if (state == Transfer.TransferState.Completed) {
+                                 downloadCache.invalidate(s3Pointer.k)
+                                 val length = file.length()
+                                 downloadedBytesCounter.inc(length)
+                                 downloadsNanosCounter.inc(System.nanoTime() - downloadStarted)
+
+                                 if (length > config.maxPayloadSize) {
+                                    if (file.delete()) {
+                                       fileCache.invalidate(s3Pointer.k)
+                                    }
+
+                                    LOG.error("Payload of size '" + length + "' exceeded max allowable '" + config.maxPayloadSize + "'")
+                                    return@addStateChangeListener
+                                 }
+
+                                 if (isRunning) {
+                                    vertx.fileSystem().rxReadFile(file.absolutePath).subscribe(
+                                       {
+                                          val payload = it.toString()
+
+                                          if (file.delete()) {
+                                             fileCache.invalidate(s3Pointer.k)
+                                          }
+
+                                          vertx.runOnContext {
+                                             call(message, payload)
+                                          }
+                                       },
+                                       {
+                                          LOG.error("Failed to read File '" + file.absoluteFile + "'", it)
+                                          if (file.delete()) {
+                                             fileCache.invalidate(s3Pointer.k)
+                                          }
+                                       }
+                                    )
+                                 }
+                              } else if (state == Transfer.TransferState.Failed || state == Transfer.TransferState.Canceled) {
+                                 downloadCache.invalidate(s3Pointer.k)
+                              }
+                           }
+                        }.subscribe(
+                           { f ->
+                           },
+                           {
+                              LOG.error("Failed to Download", it)
+                           }
+                        )
                      }
+                  } else {
+                     call(message, envelope.p)
                   }
                }
             }
          })
 
+         // Try to receive more.
          receiveMore()
       }
 
-      private class InternalInterruptedException(cause: Throwable) : RuntimeException(cause)
+      fun call(message: Message, body: String) {
+         if (!isRunning)
+            return
 
-      /**
+         val request: Any = if (body.isEmpty())
+            actionProvider.inProvider.get()
+         else
+            WireFormat.parse(
+               actionProvider.inClass,
+               body
+            ) ?: actionProvider.inProvider.get()
 
-       */
-      private inner class ReceiveThread(private val number: Int) : AbstractExecutionThreadService() {
-         private var thread: Thread? = null
+         try {
+            jobsCounter.inc()
 
-         override fun serviceName(): String {
-            return actionProvider.name + "-" + number
-         }
+            actionProvider.single(request).subscribe(
+               {
+                  activeMessages.decrementAndGet()
 
-         override fun triggerShutdown() {
-            Try.run { thread!!.interrupt() }
-         }
+                  if (it != null && it.isSuccess) {
+                     completesCounter.inc()
+                     deletesCounter.inc()
 
-         @Throws(InterruptedException::class, SocketException::class)
-         protected fun receiveMessage(request: ReceiveMessageRequest): ReceiveMessageResult {
-            // Receive blocking.
-            return sqsBuffer.receiveMessageSync(request)
-         }
-
-         @Throws(InterruptedException::class, SocketException::class)
-         protected fun deleteMessage(receiptHandle: String) {
-            // Delete asynchronously.
-            // Allow deletes to be batched which can increase performance quite a bit while decreasing
-            // resources used and allowing allowing the next receive to happen immediately.
-            // The visibility timeout buffer provides a good safety net.
-            sqsBuffer.deleteMessage(DeleteMessageRequest(queueUrl, receiptHandle), object : AsyncHandler<DeleteMessageRequest, DeleteMessageResult> {
-               override fun onError(exception: Exception) {
-                  LOG.error("Failed to delete message for receipt handle " + receiptHandle, exception)
-                  deleteFailuresCounter.inc()
-               }
-
-               override fun onSuccess(receiveRequest: DeleteMessageRequest, deleteMessageResult: DeleteMessageResult) {
-                  // Ignore.
-               }
-            })
-         }
-
-         @Throws(Exception::class)
-         override fun run() {
-            thread = Thread.currentThread()
-            receiveThreadsCounter.inc()
-
-            try {
-               while (isRunning) {
-                  try {
-                     var result: ReceiveMessageResult? = null
                      try {
-                        lastPoll = Math.max(System.currentTimeMillis(), lastPoll)
-
-                        val request = ReceiveMessageRequest()
-                           .withQueueUrl(queueUrl)
-                           //                                .withWaitTimeSeconds(20)
-                           //                                .withVisibilityTimeout((int) TimeUnit.MILLISECONDS.toSeconds(actionProvider.getTimeoutMillis() + 1000))
-                           .withMaxNumberOfMessages(1)
-
-                        // Receive a batch of messages.
-                        result = receiveMessage(request)
-                     } catch (e: InterruptedException) {
-                        LOG.warn("Interrupted.", e)
-                        return
-                     } catch (e: Exception) {
-                        LOG.warn("SQS Consumer Exception", e)
+                        deleteMessage(message.receiptHandle)
+                     } catch (e: Throwable) {
+                        LOG.error("Delete message from queue '" + queueUrl + "' with receipt handle '" + message.receiptHandle + "' failed", e)
+                        deleteFailuresCounter.inc()
                      }
-
-                     if (result == null) {
-                        continue
-                     }
-
-                     val messages = result.messages
-
-                     // Were any messages received?
-                     if (messages == null || messages.isEmpty()) {
-                        continue
-                     }
-
-                     // Are we still running.
-                     if (!isRunning) {
-                        LOG.warn("Consumer not running when checked.")
-                        return
-                     }
-
-                     for (message in messages) {
-                        // Parse request.
-                        val body = Strings.nullToEmpty(message.body)
-                        val request: Any = if (body.isEmpty())
-                           actionProvider.inProvider.get()
-                        else
-                           WireFormat.parse(
-                              actionProvider.inClass,
-                              body
-                           ) ?: actionProvider.inProvider.get()
-
-                        try {
-                           jobsCounter.inc()
-
-                           val shouldDelete = actionProvider.blockingLocal(request)
-
-                           if (shouldDelete) {
-                              completesCounter.inc()
-                              deletesCounter.inc()
-
-                              try {
-                                 deleteMessage(message.receiptHandle)
-                              } catch (e: Throwable) {
-                                 LOG.error("Delete message from queue '" + queueUrl + "' with receipt handle '" + message.receiptHandle + "' failed", e)
-                                 deleteFailuresCounter.inc()
-                              }
-                           } else {
-                              inCompletesCounter.inc()
-                           }
-                        } catch (e: Exception) {
-                           LOG.error("Action " + actionProvider.actionClass.canonicalName + " threw an exception", e)
-
-                           val rootCause = Throwables.getRootCause(e)
-                           if (rootCause is HystrixTimeoutException || rootCause is TimeoutException) {
-                              timeoutsCounter.inc()
-                           } else {
-                              exceptionsCounter.inc()
-                           }
-                        }
-
-                     }
-                  } catch (e: Exception) {
-                     if (e is InternalInterruptedException) {
-                        LOG.info("Consumer Interrupted... Shutting down.")
-                        return
-                     }
-
-                     // Ignore.
-                     LOG.error("ReceiveThread.run() threw an exception", e)
+                  } else {
+                     inCompletesCounter.inc()
                   }
+               },
+               {
+                  activeMessages.decrementAndGet()
+                  LOG.error("Action " + actionProvider.actionClass.canonicalName + " threw an exception", it)
 
+                  val rootCause = Throwables.getRootCause(it)
+                  if (rootCause is HystrixTimeoutException || rootCause is TimeoutException) {
+                     timeoutsCounter.inc()
+                  } else {
+                     exceptionsCounter.inc()
+                  }
                }
-            } finally {
-               receiveThreadsCounter.dec()
+            )
+         } catch (e: Exception) {
+            LOG.error("Action " + actionProvider.actionClass.canonicalName + " threw an exception", e)
+
+            val rootCause = Throwables.getRootCause(e)
+            if (rootCause is HystrixTimeoutException || rootCause is TimeoutException) {
+               timeoutsCounter.inc()
+            } else {
+               exceptionsCounter.inc()
             }
          }
       }
 
-      companion object {
-         private val LOG = LoggerFactory.getLogger(Receiver::class.java)
-         private val MIN_RECEIVE_THREADS = 1
-         private val MAX_RECEIVE_THREADS = 1024
-      }
+      private inner class InternalInterruptedException(cause: Throwable) : RuntimeException(cause)
    }
 
    /**
@@ -674,5 +740,48 @@ internal constructor(val vertx: Vertx,
       private val MIN_THREADS = 1
       private val MAX_THREADS = 1024
       private val KEEP_ALIVE_SECONDS = 60L
+      private val MAX_PAYLOAD_SIZE = 255000
+      private val MIN_RECEIVE_THREADS = 1
+      private val MAX_RECEIVE_THREADS = 1024
+
+      private val NULL_ENVELOPE = Envelope(false, 0, "")
+
+      fun stringify(e: Envelope): String {
+         val builder = StringBuilder()
+
+         if (e.l)
+            builder.append("1")
+         else
+            builder.append("0")
+
+         return builder.append(e.s).append("|").append(e.p).toString()
+      }
+
+      fun parse(p: String): Envelope {
+         if (p.isNullOrBlank()) {
+            return NULL_ENVELOPE
+         }
+
+         val large = p[0] == '1'
+
+         val indexOfBar = p.indexOf('|')
+         if (indexOfBar < 2) {
+            return NULL_ENVELOPE
+         }
+
+         val sizeSubstr = p.substring(1, indexOfBar)
+         val size = try {
+            Integer.parseInt(sizeSubstr)
+         } catch (e: Exception) {
+            0
+         }
+         val payload = if (indexOfBar + 1 == p.length) "" else try {
+            p.substring(indexOfBar + 1)
+         } catch (e: Exception) {
+            ""
+         }
+
+         return Envelope(large, size, payload)
+      }
    }
 }

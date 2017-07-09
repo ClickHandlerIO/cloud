@@ -269,6 +269,7 @@ abstract class Action<IN : Any, OUT : Any> : IAction<IN, OUT>() {
          override val parentContext: CoroutineContext,
          private val subscriber: SingleSubscriber<T>
       ) : AbstractCoroutine<T>(true), Subscription {
+
          @Suppress("UNCHECKED_CAST")
          override fun afterCompletion(state: Any?, mode: Int) {
             if (state is CompletedExceptionally)
