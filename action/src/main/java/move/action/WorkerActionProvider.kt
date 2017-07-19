@@ -21,7 +21,7 @@ constructor(vertx: Vertx,
    val workerAction: WorkerAction? = actionClass.getAnnotation(WorkerAction::class.java)
    val name = actionClass.canonicalName
    val isFifo = workerAction?.fifo ?: false
-   val queueName = name.replace(".", "-")
+   val queueName = name.replace(".", "-").replace("-action-worker", "")
 
    internal var producer: WorkerProducer? = null
 
