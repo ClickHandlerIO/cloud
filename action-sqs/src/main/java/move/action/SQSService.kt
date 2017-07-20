@@ -484,14 +484,23 @@ internal constructor(val vertx: Vertx,
 
       val registry = Metrics.registry()
 
-      private val secondsSinceLastPollGauge: Gauge<Long> = registry.register<Gauge<Long>>(
-         actionProvider.name + "-SECONDS_SINCE_LAST_POLL",
-         Gauge<Long> { TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis() - lastPoll) }
-      )
-      private val activeMessagesGauge: Gauge<Int> = registry.register<Gauge<Int>>(
-         actionProvider.name + "-ACTIVE_MESSAGES",
-         Gauge<Int> { activeMessages.get() }
-      )
+      private val secondsSinceLastPollGauge: Gauge<Long> = try {
+         registry.register<Gauge<Long>>(
+                 actionProvider.name + "-SECONDS_SINCE_LAST_POLL",
+                 Gauge<Long> { TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis() - lastPoll) }
+         )
+      } catch (e: Throwable) {
+         registry.metrics[actionProvider.name + "-SECONDS_SINCE_LAST_POLL"] as Gauge<Long>
+      }
+
+      private val activeMessagesGauge: Gauge<Int> = try {
+         registry.register<Gauge<Int>>(
+                 actionProvider.name + "-ACTIVE_MESSAGES",
+                 Gauge<Int> { activeMessages.get() }
+         )
+      } catch (e: Throwable) {
+         registry.metrics[actionProvider.name + "-ACTIVE_MESSAGES"] as Gauge<Int>
+      }
       private val receiveThreadsCounter: Counter = registry.counter(actionProvider.name + "-CONCURRENCY")
       private val jobsCounter: Counter = registry.counter(actionProvider.name + "-JOBS")
       private val timeoutsCounter: Counter = registry.counter(actionProvider.name + "-TIMEOUTS")
