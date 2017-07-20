@@ -32,4 +32,10 @@ public @interface WorkerAction {
    * @return
    */
   boolean buffered() default false;
+
+  /**
+   *
+   * @return
+   */
+  String queueName() default "";
 }
