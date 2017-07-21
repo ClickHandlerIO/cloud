@@ -77,7 +77,7 @@ class SQSConfig {
     * the queue will be pulling messages from the SQS servers (at the expense of consuming more
     * threads).
     */
-   var maxInflightReceiveBatches = 0
+   var maxInflightReceiveBatches = 1
 
    /**
     * If more than that number of completed receive batches are waiting in the buffer, the querying
@@ -89,7 +89,7 @@ class SQSConfig {
     * already expired. The number of messages prefetched will not exceed maxBatchSize *
     * maxDoneReceiveBatches.
     */
-   var maxDoneReceiveBatches = 0
+   var maxDoneReceiveBatches = 1
 
    /**
     * Option to configure flushOnShutdown. Enabling this option will flush the pending requests in the

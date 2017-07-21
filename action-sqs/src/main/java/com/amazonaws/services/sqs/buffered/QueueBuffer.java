@@ -55,7 +55,7 @@ public class QueueBuffer {
    * for each queue. The DaemonThreadFactory creates daemon threads, which means they won't block
    * the JVM from exiting if only they are still around.
    */
-//    static ExecutorService executor = Executors.newCachedThreadPool(new DaemonThreadFactory());
+  public static ExecutorService executor = null;//Executors.newCachedThreadPool(new DaemonThreadFactory());
 
   private final SendQueueBuffer sendBuffer;
   private final ReceiveQueueBuffer receiveBuffer;
@@ -68,6 +68,7 @@ public class QueueBuffer {
     config = paramConfig;
     sendBuffer = new SendQueueBuffer(sqs, executor, paramConfig, url);
     receiveBuffer = new ReceiveQueueBuffer(sqs, executor, paramConfig, url);
+    QueueBuffer.executor = executor;
   }
 
   /**
