@@ -1,0 +1,17 @@
+{
+  "worker": true,
+  "namespace": "dev",
+  "region": "us-west-2",
+  "awsAccessKey": "",
+  "awsSecretKey": "",
+  "s3AccessKey": "",
+  "s3SecretKey": "",
+  "s3BucketName": "sqs",
+  "maxPayloadSize": 10485760,
+  "maxThreads": 1024,
+  "maxBatchSize": 10,
+  "maxBatchOpenMs": 100,
+  "maxInflightReceiveBatches": 0,
+  "maxDoneReceiveBatches": 0,
+  "flushOnShutdown": true
+}

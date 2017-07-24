@@ -18,6 +18,7 @@ import java.lang.annotation.Target;
 public @interface ActionConfig {
 
   int DEFAULT_CONCURRENCY = 10000;
+  int DEFAULT_TIMEOUT_MILLIS = 120_000;
 
   /**
    * @return
@@ -32,12 +33,26 @@ public @interface ActionConfig {
   /**
    * @return
    */
-  int maxExecutionMillis() default 120_000;
+  @Deprecated
+  int maxExecutionMillis() default DEFAULT_TIMEOUT_MILLIS;
 
   /**
    * @return
    */
+  @Deprecated
   int maxConcurrentRequests() default DEFAULT_CONCURRENCY;
+
+  /**
+   *
+   * @return
+   */
+  int timeoutMillis() default 120_000;
+
+  /**
+   *
+   * @return
+   */
+  int parallelism() default DEFAULT_TIMEOUT_MILLIS;
 
   /**
    * @return

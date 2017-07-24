@@ -8,17 +8,17 @@ import java.util.*
 
  */
 class SQSConfig {
-   var enabled: Boolean = true
+   var enabled: Boolean? = true
 
    /**
     *
     */
-   var worker: Boolean = true
+   var worker: Boolean? = true
 
    /**
     *
     */
-   var namespace = "dev"
+   var namespace:String? = "dev"
 
    /**
 
@@ -98,16 +98,16 @@ class SQSConfig {
    var flushOnShutdown = true
 
    /**
-
+    *
     */
    var inclusions: Set<String>? = null
    /**
-
+    *
     */
    var exclusions: Set<String>? = null
 
    /**
-
+    *
     */
    var queues: ArrayList<SQSQueueConfig>? = null
 

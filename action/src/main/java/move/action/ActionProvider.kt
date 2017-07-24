@@ -61,17 +61,19 @@ constructor(
       return timeoutMillis.toLong()
    }
 
+   fun timeoutMillis() = timeoutMillis
+
    open val isInternal = false
    open val isRemote = false
    open val isWorker = false
    open val isScheduled = false
 
-   protected open fun parallelism(): Int {
+   open fun parallelism(): Int {
       if (isScheduled) {
          return DEFAULT_CONCURRENCY_SCHEDULED
       }
 
-      if (actionConfig == null || actionConfig.maxConcurrentRequests == ActionConfig.DEFAULT_CONCURRENCY || actionConfig.maxConcurrentRequests < 0) {
+      return if (actionConfig == null) {
          if (isInternal) {
             return DEFAULT_CONCURRENCY_INTERNAL
          }
@@ -81,21 +83,64 @@ constructor(
          if (isWorker) {
             return DEFAULT_CONCURRENCY_WORKER
          }
+         if (isScheduled) {
+            return DEFAULT_CONCURRENCY_SCHEDULED
+         }
 
-         return DEFAULT_CONCURRENCY_WORKER
+         return DEFAULT_CONCURRENCY_INTERNAL
+      } else if (actionConfig.maxConcurrentRequests == ActionConfig.DEFAULT_CONCURRENCY) {
+         val p = actionConfig.parallelism
+         if (p == ActionConfig.DEFAULT_CONCURRENCY) {
+            if (isInternal) {
+               return DEFAULT_CONCURRENCY_INTERNAL
+            }
+            if (isRemote) {
+               return DEFAULT_CONCURRENCY_REMOTE
+            }
+            if (isWorker) {
+               return DEFAULT_CONCURRENCY_WORKER
+            }
+
+            return DEFAULT_CONCURRENCY_INTERNAL
+         } else {
+            return p
+         }
+      } else {
+         val p = actionConfig.parallelism
+         if (p == ActionConfig.DEFAULT_CONCURRENCY) {
+            if (isInternal) {
+               return DEFAULT_CONCURRENCY_INTERNAL
+            }
+            if (isRemote) {
+               return DEFAULT_CONCURRENCY_REMOTE
+            }
+            if (isWorker) {
+               return DEFAULT_CONCURRENCY_WORKER
+            }
+
+            return DEFAULT_CONCURRENCY_INTERNAL
+         } else {
+            return p
+         }
       }
-
-      return actionConfig.maxConcurrentRequests
    }
 
    protected open fun init() {
       // Timeout milliseconds.
-      var timeoutMillis = DEFAULT_TIMEOUT_MILLIS
+      var timeoutMillis = ActionConfig.DEFAULT_TIMEOUT_MILLIS
       if (actionConfig != null) {
          if (actionConfig.maxExecutionMillis == 0) {
-            timeoutMillis = 0
+            timeoutMillis = if (actionConfig.timeoutMillis != ActionConfig.DEFAULT_TIMEOUT_MILLIS) {
+               actionConfig.timeoutMillis
+            } else {
+               ActionConfig.DEFAULT_TIMEOUT_MILLIS
+            }
          } else if (actionConfig.maxExecutionMillis > 0) {
-            timeoutMillis = actionConfig.maxExecutionMillis
+            timeoutMillis = if (actionConfig.maxExecutionMillis != ActionConfig.DEFAULT_TIMEOUT_MILLIS) {
+               actionConfig.maxExecutionMillis
+            } else {
+               actionConfig.timeoutMillis
+            }
          }
       }
 
@@ -103,11 +148,11 @@ constructor(
 
       // Enable timeout?
       if (timeoutMillis > 0) {
-         if (timeoutMillis < 100) {
+         if (timeoutMillis < MILLIS_TO_SECONDS_THRESHOLD) {
             // Looks like somebody decided to put seconds instead of milliseconds.
             timeoutMillis = timeoutMillis * 1000
          } else if (timeoutMillis < 1000) {
-            timeoutMillis = DEFAULT_TIMEOUT_MILLIS
+            timeoutMillis = ActionConfig.DEFAULT_TIMEOUT_MILLIS
          }
 
          this.timeoutMillis = timeoutMillis
@@ -117,11 +162,8 @@ constructor(
          executionTimeoutEnabled = true
       }
 
-      // Determine Hystrix isolation strategy.
-      val hystrixIsolation = HystrixCommandProperties.ExecutionIsolationStrategy.SEMAPHORE
-
-      // Set Hystrix isolation strategy.
-      commandPropertiesDefaults.withExecutionIsolationStrategy(hystrixIsolation)
+      // Set Hystrix isolation strategy to SEMAPHORE. We don't use hystrix for thread pooling.
+      commandPropertiesDefaults.withExecutionIsolationStrategy(HystrixCommandProperties.ExecutionIsolationStrategy.SEMAPHORE)
       commandPropertiesDefaults.withFallbackEnabled(true)
 
       // Build HystrixObservableCommand.Setter default.
@@ -381,11 +423,11 @@ constructor(
    }
 
    companion object {
-      internal val DEFAULT_TIMEOUT_MILLIS = 5000
       internal val MIN_TIMEOUT_MILLIS = 200
+      internal val MILLIS_TO_SECONDS_THRESHOLD = 1000
       internal val DEFAULT_CONCURRENCY_INTERNAL = 10000
       internal val DEFAULT_CONCURRENCY_REMOTE = 10000
-      internal val DEFAULT_CONCURRENCY_WORKER = 10
+      internal val DEFAULT_CONCURRENCY_WORKER = 10000
       internal val DEFAULT_CONCURRENCY_SCHEDULED = 1
 
       fun current(): ActionContext? {

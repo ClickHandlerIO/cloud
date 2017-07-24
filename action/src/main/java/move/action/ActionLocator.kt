@@ -1,5 +1,7 @@
 package move.action
 
+import com.google.common.collect.Multimap
+import com.google.common.collect.Multimaps
 import java.util.*
 import javax.inject.Inject
 
@@ -11,6 +13,8 @@ abstract class ActionLocator {
    private val remoteActionMap = HashMap<Any, RemoteActionProvider<Action<Any, Any>, Any, Any>>()
    private val internalActionMap = HashMap<Any, InternalActionProvider<Action<Any, Any>, Any, Any>>()
    private val workerActionMap = HashMap<Any, WorkerActionProvider<Action<Any, Boolean>, Any>>()
+   val workerActionQueueGroupMap: HashMap<String, List<WorkerActionProvider<Action<Any, Boolean>, Any>>> =
+      LinkedHashMap<String, List<WorkerActionProvider<Action<Any, Boolean>, Any>>>()
    private val scheduledActionMap = HashMap<Any, ScheduledActionProvider<Action<Unit, Unit>>>()
    val actionMap: MutableMap<Any, ActionProvider<Action<Any, Any>, Any, Any>> = HashMap()
    var actionManager: ActionManager? = null
@@ -162,6 +166,12 @@ abstract class ActionLocator {
          } else if (value.javaClass.isAssignableFrom(WorkerActionProvider::class.java)) {
             workerActionMap.put(key, value as WorkerActionProvider<Action<Any, Boolean>, Any>)
             workerActionMap.put(value.actionClass.canonicalName, value)
+            var list: List<WorkerActionProvider<Action<Any, Boolean>, Any>>? = ActionManager.workerActionQueueGroupMap.get(value.queueName)
+            if (list == null) {
+               list = listOf()
+               ActionManager.workerActionQueueGroupMap.put(value.queueName, list)
+            }
+            list += value
          } else if (value.javaClass.isAssignableFrom(ScheduledActionProvider::class.java)) {
             scheduledActionMap.put(key, value as ScheduledActionProvider<Action<Unit, Unit>>)
          }

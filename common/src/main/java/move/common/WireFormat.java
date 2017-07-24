@@ -16,7 +16,6 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import javaslang.collection.List;
-import javaslang.jackson.datatype.JavaslangModule;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,7 +28,6 @@ public class WireFormat {
   public static final ObjectMapper MAPPER = new ObjectMapper();
 
   static {
-    MAPPER.registerModule(new JavaslangModule());
     MAPPER.registerModule(new JavaTimeModule());
     MAPPER.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     MAPPER.configure(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES, false);

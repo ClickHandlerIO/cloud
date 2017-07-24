@@ -9,10 +9,9 @@ class SQSQueueConfig {
     */
    var name: String? = null
    /**
-    * Number of receive threads. This will override maxConcurrentRequests on the @ActionConfig.
-    * If anything less than 1 is specified then the "maxConcurrentRequests" on the @ActionConfig is used.
+    *
     */
-   var threads: Int = 0
+   var parallelism: Int = 0
    /**
     * The maximum number of entries in a batch command
     */

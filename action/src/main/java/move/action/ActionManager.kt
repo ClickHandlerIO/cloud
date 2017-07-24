@@ -1,11 +1,12 @@
 package move.action
 
+import com.google.common.collect.Multimap
+import com.google.common.collect.Multimaps
 import com.google.common.util.concurrent.AbstractIdleService
 import io.vertx.rxjava.core.Vertx
 import javaslang.control.Try
 import move.cluster.HazelcastProvider
 import org.slf4j.LoggerFactory
-import java.util.*
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -47,6 +48,8 @@ internal constructor(val vertx: Vertx,
       val remoteActionMap = HashMap<Any, RemoteActionProvider<Action<Any, Any>, Any, Any>>()
       val internalActionMap = HashMap<Any, InternalActionProvider<Action<Any, Any>, Any, Any>>()
       val workerActionMap = HashMap<Any, WorkerActionProvider<Action<Any, Boolean>, Any>>()
+      val workerActionQueueGroupMap: HashMap<String, List<WorkerActionProvider<Action<Any, Boolean>, Any>>> =
+         LinkedHashMap<String, List<WorkerActionProvider<Action<Any, Boolean>, Any>>>()
       val scheduledActionMap = HashMap<Any, ScheduledActionProvider<Action<Unit, Unit>>>()
       var isWorker = true
 
@@ -85,6 +88,12 @@ internal constructor(val vertx: Vertx,
             } else if (value.javaClass.isAssignableFrom(WorkerActionProvider::class.java) || value.javaClass.isAssignableFrom(FifoWorkerActionProvider::class.java)) {
                workerActionMap.put(key, value as WorkerActionProvider<Action<Any, Boolean>, Any>)
                workerActionMap.put(value.actionClass.canonicalName, value)
+               var list: List<WorkerActionProvider<Action<Any, Boolean>, Any>>? = workerActionQueueGroupMap.get(value.queueName)
+               if (list == null) {
+                  list = listOf()
+                  workerActionQueueGroupMap.put(value.queueName, list)
+               }
+               list += value
             } else if (value.javaClass.isAssignableFrom(ScheduledActionProvider::class.java)) {
                scheduledActionMap.put(key, value as ScheduledActionProvider<Action<Unit, Unit>>)
             }

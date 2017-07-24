@@ -18,6 +18,7 @@ import com.netflix.hystrix.HystrixObservableCommand;
 import com.netflix.hystrix.exception.HystrixTimeoutException;
 import com.nuodb.jdbc.RemConnection;
 import com.nuodb.jdbc.RemStatement;
+import com.nuodb.jdbc.SQLException;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import io.vertx.core.AsyncResult;
@@ -2279,6 +2280,9 @@ public class SqlDatabase extends AbstractIdleService {
 //    public class DeleteOrUpdateWithoutWhereException extends RuntimeException {
 //    }
 
+  /**
+   * Sets the JDBC Statement timeout based on current ActionContext.
+   */
   public class TimeoutListener extends DefaultExecuteListener {
 
 
@@ -2360,6 +2364,10 @@ public class SqlDatabase extends AbstractIdleService {
     }
   }
 
+  /**
+   * Cleans rogue NuoDB JDBC Statements.
+   * Calls the SQL "KILL STATEMENT connid ? handle ? count -1" as used by
+   */
   private final class NuoDBStatementCleaner extends AbstractExecutionThreadService {
 
     private final DataSource dataSource;
@@ -2379,7 +2387,8 @@ public class SqlDatabase extends AbstractIdleService {
 
     protected void run() throws Exception {
       while (isRunning()) {
-        final Tuple2<Statement, Boolean> request = rogueStatementQueue.poll(2, TimeUnit.SECONDS);
+        final Tuple2<Statement, Boolean> request =
+            rogueStatementQueue.poll(2, TimeUnit.SECONDS);
 
         if (request == null) {
           continue;
@@ -2391,15 +2400,28 @@ public class SqlDatabase extends AbstractIdleService {
             e -> LOG.error("rogueStatementsCounter.inc() threw an exception", e)
         );
 
+        if (request._1 == null) {
+          LOG.error("NuoDBStatementCleaner received a null statement");
+          continue;
+        }
+
+        if (!(request._1 instanceof RemStatement)) {
+          LOG.error(
+              "NuoDBStatementCleaner only handles com.nuodb.jdbc.RemStatement. Found " + request
+                  .getClass().getCanonicalName());
+          Try.run(() -> request._1.cancel());
+          continue;
+        }
+
         final RemStatement remStatement = (RemStatement) request._1;
         RemConnection remConnection = (RemConnection) remStatement.getConnection();
         remConnection.getServerSideConnectionId();
         final Object handleObj = nuoHandleField.get(remStatement);
 
-        Connection killConn = null;
+        Connection connection = null;
         if (request._2 == Boolean.TRUE) {
           try {
-            killConn = readDataSource.getConnection();
+            connection = readDataSource.getConnection();
           } catch (Throwable e) {
             LOG.error("NuoDBStatementCleaner.readDataSource.getConnection() threw an exception", e);
           }
@@ -2408,7 +2430,7 @@ public class SqlDatabase extends AbstractIdleService {
           ).onFailure(e -> LOG.error("rogueReadStatementsCounter.inc() threw an exception", e));
         } else {
           try {
-            killConn = dataSource.getConnection();
+            connection = dataSource.getConnection();
           } catch (Throwable e) {
             LOG.error("NuoDBStatementCleaner.dataSource.getConnection() threw an exception", e);
           }
@@ -2417,32 +2439,41 @@ public class SqlDatabase extends AbstractIdleService {
           ).onFailure(e -> LOG.error("rogueWriteStatementsCounter.inc() threw an exception", e));
         }
 
-        if (killConn == null) {
+        if (connection == null) {
           rogueStatementQueue.add(request);
           continue;
         }
 
-        try {
-          try {
-            PreparedStatement pstmt = killConn
-                .prepareStatement("KILL STATEMENT connid ? handle ? count -1");
+        try (final Connection killCon = connection) {
+          try (PreparedStatement pstmt = killCon
+              .prepareStatement("KILL STATEMENT connid ? handle ? count -1")) {
             pstmt.setInt(1, remConnection.getServerSideConnectionId());
             pstmt.setInt(2, (int) handleObj);
             pstmt.execute();
-          } finally {
-            killConn.close();
           }
         } catch (Throwable e) {
+          final Throwable root = Throwables.getRootCause(e);
+          if (root instanceof SQLException) {
+            final SQLException ex = (SQLException) root;
+            if (Strings.nullToEmpty(ex.getMessage()).toLowerCase()
+                .contains("already been killed")) {
+              return;
+            }
+          }
           LOG.error("StatementCleaner service caught an exception while calling KILL STATEMENT ",
               e);
           Try.run(
               () -> rogueStatementExceptionsCounter.inc()
-          ).onFailure(e2 -> LOG.error("rogueWriteStatementsCounter.inc() threw an exception", e2));
+          ).onFailure(
+              e2 -> LOG.error("rogueWriteStatementsCounter.inc() threw an exception", e2));
         }
       }
     }
   }
 
+  /**
+   * Cleans rogue JDBC Statements. Uses the Statement.cancel() API to cancel a statement.
+   */
   private final class StatementCleaner extends AbstractExecutionThreadService {
 
     private java.lang.reflect.Field nuoHandleField;

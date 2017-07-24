@@ -41,10 +41,6 @@
             <artifactId>javaslang</artifactId>
         </dependency>
         <dependency>
-            <groupId>io.javaslang</groupId>
-            <artifactId>javaslang-jackson</artifactId>
-        </dependency>
-        <dependency>
             <groupId>io.reactivex</groupId>
             <artifactId>rxjava</artifactId>
         </dependency>
@@ -65,14 +61,6 @@
         <dependency>
             <groupId>com.fasterxml.jackson.datatype</groupId>
             <artifactId>jackson-datatype-jsr310</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.msgpack</groupId>
-            <artifactId>msgpack-core</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.msgpack</groupId>
-            <artifactId>jackson-dataformat-msgpack</artifactId>
         </dependency>
 
         <dependency>
@@ -145,7 +133,7 @@
         <plugins>
             <plugin>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.6.1</version>
+                <version>${maven-compiler-plugin.version}</version>
                 <dependencies>
                     <dependency>
                         <groupId>com.google.dagger</groupId>

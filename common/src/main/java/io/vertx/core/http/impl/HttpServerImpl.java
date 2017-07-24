@@ -388,8 +388,10 @@ public class HttpServerImpl implements HttpServer, Closeable, MetricsProvider {
       pipeline.addLast("inflater", new HttpContentDecompressor(true));
     }
     if (options.isCompressionSupported()) {
-      pipeline.addLast("wsCompression",
-          new WebSocketServerCompressionHandler(options.getMaxWebsocketMessageSize()));
+      if (!DISABLE_WEBSOCKETS) {
+        pipeline.addLast("wsCompression",
+            new WebSocketServerCompressionHandler(options.getMaxWebsocketMessageSize()));
+      }
       pipeline.addLast("deflater", new HttpChunkContentCompressor(options.getCompressionLevel()));
     }
     if (sslHelper.isSSL() || options.isCompressionSupported()) {
@@ -612,7 +614,7 @@ public class HttpServerImpl implements HttpServer, Closeable, MetricsProvider {
               return;
             }
 
-            if (request.getMethod() != HttpMethod.GET) {
+            if (request.method() != HttpMethod.GET) {
               sendError(null, METHOD_NOT_ALLOWED, ch);
               return;
             }
@@ -621,7 +623,7 @@ public class HttpServerImpl implements HttpServer, Closeable, MetricsProvider {
               if (request instanceof FullHttpRequest) {
                 handshake((FullHttpRequest) request, ch, ctx);
               } else {
-                wsRequest = new DefaultFullHttpRequest(request.getProtocolVersion(), request.getMethod(), request.getUri());
+                wsRequest = new DefaultFullHttpRequest(request.protocolVersion(), request.method(), request.uri());
                 wsRequest.headers().set(request.headers());
               }
             }
