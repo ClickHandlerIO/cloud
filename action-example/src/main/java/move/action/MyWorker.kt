@@ -6,9 +6,8 @@ import javax.inject.Inject
 /**
 
  */
-@WorkerAction(fifo = true)
-class MyWorker @Inject
-internal constructor() : BaseWorkerAction<MyWorker.Request>() {
+@WorkerAction(fifo = false)
+class MyWorker @Inject constructor() : BaseWorkerAction<MyWorker.Request>() {
    suspend override fun recover(caught: Throwable, cause: Throwable, isFallback: Boolean): Boolean {
       return false
    }
@@ -20,8 +19,7 @@ internal constructor() : BaseWorkerAction<MyWorker.Request>() {
       return true
    }
 
-   class Request @Inject
-   constructor() {
+   class Request @Inject constructor() {
       var id: String? = null
    }
 }

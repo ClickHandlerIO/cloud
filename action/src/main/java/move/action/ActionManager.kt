@@ -1,7 +1,5 @@
 package move.action
 
-import com.google.common.collect.Multimap
-import com.google.common.collect.Multimaps
 import com.google.common.util.concurrent.AbstractIdleService
 import io.vertx.rxjava.core.Vertx
 import javaslang.control.Try

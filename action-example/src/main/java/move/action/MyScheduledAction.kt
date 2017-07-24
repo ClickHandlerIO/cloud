@@ -1,6 +1,7 @@
 package move.action
 
 import kotlinx.coroutines.experimental.rx1.await
+import move.common.UID
 import javax.inject.Inject
 
 /**
@@ -16,6 +17,12 @@ constructor() : BaseScheduledAction() {
 
    suspend override fun execute() {
       println(javaClass.simpleName + " " + Thread.currentThread().name)
-      AppComponent.instance.actions().move.action.myWorker.send(MyWorker.Request()).await()
+      val r = MyWorker.Request().apply { id = UID.next() }
+      println(r.id)
+      val provider = AppComponent.instance.actions().move.action.myWorker
+      provider(r)
+//      AppComponent.instance.actions().move.action.myWorker.single(r)
+//      val receipt = AppComponent.instance.actions().move.action.myWorker.send {}.await()
+//      println(receipt.messageId)
    }
 }

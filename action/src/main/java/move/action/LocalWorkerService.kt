@@ -7,6 +7,7 @@ import javaslang.control.Try
 import move.common.UID
 import org.slf4j.LoggerFactory
 import rx.Single
+import java.util.*
 import java.util.concurrent.LinkedBlockingDeque
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -80,6 +81,15 @@ internal constructor(val vertx: Vertx) : AbstractIdleService(), WorkerService, W
 
          request.actionProvider.single0(request.request).subscribe()
       }
+   }
+
+
+   private open inner class QueueContext(val queueName: String) {
+
+   }
+
+   private inner class FifoQueueContext(queueName: String) : QueueContext(queueName) {
+
    }
 
    companion object {

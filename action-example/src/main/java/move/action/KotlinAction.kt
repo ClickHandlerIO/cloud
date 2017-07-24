@@ -52,7 +52,6 @@ object KotlinAction {
       Actions.ensureActionMap()
       AppComponent.instance.actionManager().startAsync().awaitRunning()
 
-
       val executor = AppComponent.instance.vertx().createSharedWorkerExecutor("db", 10, Integer.MAX_VALUE.toLong());
 
 //        actions().register()
