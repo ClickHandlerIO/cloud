@@ -44,10 +44,11 @@ constructor(vertx: Vertx,
     *
     */
    fun single(delaySeconds: Int, request: IN): Single<WorkerReceipt> =
-      producer!!.send(WorkerRequest()
-         .actionProvider(this)
-         .request(request)
-         .delaySeconds(delaySeconds))
+      producer!!.send(WorkerRequest(
+         actionProvider = this@WorkerActionProvider as WorkerActionProvider<Action<Any, Boolean>, Any>,
+         delaySeconds = delaySeconds,
+         request = request
+      ))
 
    /**
     *
@@ -79,10 +80,11 @@ constructor(vertx: Vertx,
          producer,
          "WorkerProducer is null. Ensure ActionManager has been started and all actions have been registered."
       )
-      val single = producer!!.send(WorkerRequest()
-         .actionProvider(this)
-         .request(request)
-         .delaySeconds(delaySeconds))
+      val single = producer!!.send(WorkerRequest(
+         actionProvider = this@WorkerActionProvider as WorkerActionProvider<Action<Any, Boolean>, Any>,
+         delaySeconds = delaySeconds,
+         request = request
+      ))
 
       // Dispatch
       single.subscribe()

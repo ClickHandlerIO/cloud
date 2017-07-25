@@ -19,10 +19,10 @@ constructor() : BaseScheduledAction() {
       println(javaClass.simpleName + " " + Thread.currentThread().name)
       val r = MyWorker.Request().apply { id = UID.next() }
       println(r.id)
-      val provider = AppComponent.instance.actions().move.action.myWorker
-      provider(r)
+//      val provider = AppComponent.instance.actions().move.action.myWorker
+//      provider(r)
 //      AppComponent.instance.actions().move.action.myWorker.single(r)
-//      val receipt = AppComponent.instance.actions().move.action.myWorker.send {}.await()
-//      println(receipt.messageId)
+      val receipt = AppComponent.instance.actions().move.action.myWorker.send {}.await()
+      println(receipt.messageId)
    }
 }

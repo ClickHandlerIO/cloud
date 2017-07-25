@@ -47,11 +47,12 @@ constructor(vertx: Vertx,
          "WorkerProducer is null. Ensure ActionManager has been started and all actions have been registered."
       )
 
-      return producer!!.send(WorkerRequest()
-         .actionProvider(this)
-         .request(request)
-         .groupId(groupId)
-         .delaySeconds(delaySeconds))
+      return producer!!.send(WorkerRequest(
+         actionProvider = this@FifoWorkerActionProvider as WorkerActionProvider<Action<Any, Boolean>, Any>,
+         delaySeconds = delaySeconds,
+         groupId = groupId,
+         request = request
+      ))
    }
 
    fun single(groupId: String, block: IN.() -> Unit): Single<WorkerReceipt> = single(groupId, 0, block)
@@ -64,11 +65,12 @@ constructor(vertx: Vertx,
          producer,
          "WorkerProducer is null. Ensure ActionManager has been started and all actions have been registered."
       )
-      return producer!!.send(WorkerRequest()
-         .actionProvider(this)
-         .request(inProvider.get().apply(block))
-         .groupId(groupId)
-         .delaySeconds(delaySeconds))
+      return producer!!.send(WorkerRequest(
+         actionProvider = this@FifoWorkerActionProvider as WorkerActionProvider<Action<Any, Boolean>, Any>,
+         delaySeconds = delaySeconds,
+         groupId = groupId,
+         request = inProvider.get().apply(block)
+      ))
    }
 
    /**
@@ -83,10 +85,11 @@ constructor(vertx: Vertx,
          producer,
          "WorkerProducer is null. Ensure ActionManager has been started and all actions have been registered."
       )
-      return producer!!.send(WorkerRequest()
-         .actionProvider(this)
-         .request(request)
-         .groupId(groupId))
+      return producer!!.send(WorkerRequest(
+         actionProvider = this@FifoWorkerActionProvider as WorkerActionProvider<Action<Any, Boolean>, Any>,
+         groupId = groupId,
+         request = request
+      ))
    }
 
    /**
@@ -101,10 +104,11 @@ constructor(vertx: Vertx,
          producer,
          "WorkerProducer is null. Ensure ActionManager has been started and all actions have been registered."
       )
-      return producer!!.send(WorkerRequest()
-         .actionProvider(this)
-         .request(request)
-         .groupId(groupId))
+      return producer!!.send(WorkerRequest(
+         actionProvider = this@FifoWorkerActionProvider as WorkerActionProvider<Action<Any, Boolean>, Any>,
+         groupId = groupId,
+         request = request
+      ))
    }
 
    /**
@@ -120,11 +124,12 @@ constructor(vertx: Vertx,
          "WorkerProducer is null. Ensure ActionManager has been started and all actions have been registered."
       )
 
-      return producer!!.send(WorkerRequest()
-         .actionProvider(this)
-         .request(request)
-         .groupId(groupId)
-         .delaySeconds(delaySeconds))
+      return producer!!.send(WorkerRequest(
+         actionProvider = this@FifoWorkerActionProvider as WorkerActionProvider<Action<Any, Boolean>, Any>,
+         delaySeconds = delaySeconds,
+         groupId = groupId,
+         request = request
+      ))
    }
 
    fun send(groupId: String, block: IN.() -> Unit): Single<WorkerReceipt> = send(groupId, 0, block)
@@ -137,11 +142,12 @@ constructor(vertx: Vertx,
          producer,
          "WorkerProducer is null. Ensure ActionManager has been started and all actions have been registered."
       )
-      val single = producer!!.send(WorkerRequest()
-         .actionProvider(this)
-         .request(inProvider.get().apply(block))
-         .groupId(groupId)
-         .delaySeconds(delaySeconds))
+      val single = producer!!.send(WorkerRequest(
+         actionProvider = this@FifoWorkerActionProvider as WorkerActionProvider<Action<Any, Boolean>, Any>,
+         delaySeconds = delaySeconds,
+         groupId = groupId,
+         request = inProvider.get().apply(block)
+      ))
 
       // Dispatch
       single.subscribe()

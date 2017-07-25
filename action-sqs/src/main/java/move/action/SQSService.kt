@@ -430,8 +430,6 @@ internal constructor(val vertx: Vertx,
             queueName,
             QueueContext(sender, receiver, queueUrl, queueConfig, ImmutableList.of(entry.value))
          )
-
-         return Unit
       }
 
       // Startup all receivers.
@@ -501,7 +499,7 @@ internal constructor(val vertx: Vertx,
             } else {
                return@create
             }
-            val workerAction: WorkerAction = if (actionProvider.workerAction != null) {
+            val workerAction: WorkerAction = if (actionProvider?.workerAction != null) {
                actionProvider.workerAction!!
             } else {
                return@create
@@ -557,7 +555,7 @@ internal constructor(val vertx: Vertx,
                      if (actionProvider.isFifo) {
                         var groupId = actionProvider.name
 
-                        if (request.groupId != null && !request.groupId.isEmpty()) {
+                        if (!request.groupId.isNullOrBlank()) {
                            groupId = request.groupId
                         }
 
@@ -601,7 +599,7 @@ internal constructor(val vertx: Vertx,
                if (actionProvider.isFifo) {
                   var groupId = actionProvider.name
 
-                  if (request.groupId != null && !request.groupId.isEmpty()) {
+                  if (!request.groupId.isNullOrBlank()) {
                      groupId = request.groupId
                   }
 
@@ -663,7 +661,14 @@ internal constructor(val vertx: Vertx,
       } catch (e: Throwable) {
          registry.metrics[queueName + "-ACTIVE_MESSAGES"] as Gauge<Int>
       }
-      private val receiveThreadsCounter: Counter = registry.counter(queueName + "-CONCURRENCY")
+      private val parallelismGauge: Gauge<Int> = try {
+         registry.register<Gauge<Int>>(
+            queueName + "-PARALLELISM",
+            Gauge<Int> { concurrentRequests }
+         )
+      } catch (e: Throwable) {
+         registry.metrics[queueName + "-PARALLELISM"] as Gauge<Int>
+      }
       private val jobsCounter: Counter = registry.counter(queueName + "-JOBS")
       private val timeoutsCounter: Counter = registry.counter(queueName + "-TIMEOUTS")
       private val completesCounter: Counter = registry.counter(queueName + "-COMPLETES")
