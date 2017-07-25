@@ -1018,7 +1018,7 @@ public class TableMapping {
         dataType = dataType.length(columnLength);
       }
 
-      if (!dataType.nullable()) {
+      if (!dataType.nullable() || getType().isPrimitive()) {
         final Class type = getType();
 
         if (type == byte.class || type == Byte.class) {
