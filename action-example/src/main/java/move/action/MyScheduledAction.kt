@@ -22,7 +22,7 @@ constructor() : BaseScheduledAction() {
 //      val provider = AppComponent.instance.actions().move.action.myWorker
 //      provider(r)
 //      AppComponent.instance.actions().move.action.myWorker.single(r)
-      val receipt = AppComponent.instance.actions().move.action.myWorker.send {}.await()
-      println(receipt.messageId)
+//      val receipt = AppComponent.instance.actions().move.action.myWorker.send {}.await()
+//      println(receipt.messageId)
    }
 }

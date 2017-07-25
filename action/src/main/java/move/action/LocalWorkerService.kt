@@ -127,7 +127,12 @@ internal constructor(val vertx: Vertx) : AbstractIdleService(), WorkerService, W
 
       fun add(request: WorkerRequest) {
          jobs.add(request)
-         next()
+         val ctx = Vertx.currentContext()
+         if (ctx == null || !ctx.isEventLoopContext) {
+            vertx.runOnContext { next() }
+         } else {
+            next()
+         }
       }
 
       fun next() {
@@ -154,27 +159,32 @@ internal constructor(val vertx: Vertx) : AbstractIdleService(), WorkerService, W
 
          actionProvider?.single(r)?.subscribe(
             {
-               activeMessages.decrementAndGet()
+               try {
+                  activeMessages.decrementAndGet()
 
-               if (it != null && it.isSuccess) {
-                  completesCounter.inc()
-                  next()
-               } else {
-                  inCompletesCounter.inc()
-                  LOG.error("Job was incomplete. Removing from JobQueue. " + actionProvider.actionClass.canonicalName)
-                  next()
+                  if (it != null && it.isSuccess) {
+                     completesCounter.inc()
+                  } else {
+                     inCompletesCounter.inc()
+                     LOG.error("Job was incomplete. Removing from JobQueue. " + actionProvider.actionClass.canonicalName)
+                  }
+               } finally {
+                  vertx.runOnContext { next() }
                }
             },
             {
-               activeMessages.decrementAndGet()
-               next()
-               LOG.error("Action " + actionProvider.actionClass.canonicalName + " threw an exception", it)
+               try {
+                  activeMessages.decrementAndGet()
+                  LOG.error("Action " + actionProvider.actionClass.canonicalName + " threw an exception", it)
 
-               val rootCause = Throwables.getRootCause(it)
-               if (rootCause is HystrixTimeoutException || rootCause is TimeoutException) {
-                  timeoutsCounter.inc()
-               } else {
-                  exceptionsCounter.inc()
+                  val rootCause = Throwables.getRootCause(it)
+                  if (rootCause is HystrixTimeoutException || rootCause is TimeoutException) {
+                     timeoutsCounter.inc()
+                  } else {
+                     exceptionsCounter.inc()
+                  }
+               } finally {
+                  vertx.runOnContext { next() }
                }
             }
          )
