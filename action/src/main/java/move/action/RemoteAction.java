@@ -1,6 +1,8 @@
 package move.action;
 
 
+import static move.action.ActionConfig.DEFAULT_PARALLELISM;
+
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -19,9 +21,27 @@ public @interface RemoteAction {
 
   String method() default "POST";
 
-  long timeoutMillis() default 15000;
+  /**
+   *
+   * @return
+   */
+  int timeoutMillis() default 15_000;
 
+  /**
+   *
+   * @return
+   */
+  int parallelism() default DEFAULT_PARALLELISM;
+
+  /**
+   *
+   * @return
+   */
   boolean guarded() default true;
 
-  String path();
+  /**
+   *
+   * @return
+   */
+  String path() default "";
 }

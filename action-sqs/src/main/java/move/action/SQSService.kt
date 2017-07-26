@@ -274,22 +274,11 @@ internal constructor(val vertx: Vertx,
       val numberOfQueues = ActionManager.workerActionQueueGroupMap.size
 
       // Create SQS QueueBuffer Executor.
-      // Uses a capped cached thread strategy with the core size set to 0.
+      // Uses a cached thread strategy with the core size set to 0.
       // So it won't consume any threads if there isn't any activity.
       bufferExecutor = ThreadPoolExecutor(
          0,
-         if (config.worker == true && MAX_THREADS < numberOfQueues * THREADS_MULTIPLIER) {
-            var newSize = (numberOfQueues * THREADS_MULTIPLIER).toInt()
-            if (newSize <= 0) {
-               newSize = MAX_THREADS
-            } else {
-               LOG.warn("maxThreads is set too low for node with 'worker = true'. Setting to the number of Queues '" + numberOfQueues + "' x " + THREADS_MULTIPLIER + " = " + newSize)
-            }
-
-            newSize
-         } else {
-            MAX_THREADS
-         },
+         Integer.MAX_VALUE,
          KEEP_ALIVE_SECONDS,
          TimeUnit.SECONDS,
          SynchronousQueue<Runnable>(),
@@ -365,7 +354,7 @@ internal constructor(val vertx: Vertx,
          // If there are more than 1 action mapped to this queue then find the max "parallelism"
          val maxParalellism = entry.value.map {
             it.parallelism()
-         }.max()?.toInt() ?: DEFAULT_PARALELLISM
+         }.max()?.toInt() ?: DEFAULT_PARALLELISM
          // If there are more than 1 action mapped to this queue then find largest "timeoutMillis"
          val maxExecutionMillis = entry.value.map {
             it.timeoutMillis()
@@ -484,8 +473,14 @@ internal constructor(val vertx: Vertx,
       }
    }
 
+   /**
+    *
+    */
    data class SQSEnvelope(val l: Boolean, val s: Int? = null, val name: String, val p: String)
 
+   /**
+    *
+    */
    data class S3Pointer(val b: String, val k: String, val e: String)
 
    private inner class SQSQueueSender(
@@ -838,7 +833,11 @@ internal constructor(val vertx: Vertx,
                                        if (body == null) {
                                           receiveMore()
                                        } else {
-                                          val payload = String(body, StandardCharsets.UTF_8)
+                                          val payload = if (body.isEmpty())
+                                             ""
+                                          else
+                                             String(body, StandardCharsets.UTF_8)
+
                                           vertx.runOnContext {
                                              call(message, envelope, payload)
                                           }
@@ -970,14 +969,14 @@ internal constructor(val vertx: Vertx,
       private val FILE_RETRY_AGE_SECONDS = 10L
       private val MAX_CACHE_AGE_MINUTES = 120L
       private val MAX_FILE_CACHE = 100_000L
-      private val MAX_UPLOADS = 50_000L
-      private val MAX_DOWNLOADS = 50_000L
+      private val MAX_UPLOADS = 100_000L
+      private val MAX_DOWNLOADS = 100_000L
       private val SQS_POLL_WAIT_SECONDS = 20 // Can be a value between 1 and 20
       private val KEEP_ALIVE_SECONDS = 60L
       private val MAX_PAYLOAD_SIZE = 255000
       private val MIN_RECEIVE_THREADS = 1
       private val MAX_RECEIVE_THREADS = 1024
-      private val DEFAULT_PARALELLISM = Runtime.getRuntime().availableProcessors() * 2
+      private val DEFAULT_PARALLELISM = Runtime.getRuntime().availableProcessors() * 2
       private val DEFAULT_WORKER_TIMEOUT_MILLIS = 10000
 
       private val NULL_ENVELOPE = SQSEnvelope(false, 0, "", "")

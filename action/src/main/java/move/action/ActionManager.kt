@@ -9,7 +9,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Central repository of all actions registered from ActionProviders.
+ * Central repository of all actions.
 
  * @author Clay Molocznik
  */
@@ -22,14 +22,19 @@ internal constructor(val vertx: Vertx,
 
    @Throws(Exception::class)
    override fun startUp() {
+      // Startup worker service.
       workerService.startAsync().awaitRunning()
+      // Startup scheduled actions.
       scheduledActionManager.startAsync().awaitRunning()
    }
 
    @Throws(Exception::class)
    override fun shutDown() {
+      // Shutdown scheduled actions.
       Try.run { scheduledActionManager.stopAsync().awaitTerminated() }
          .onFailure { e -> LOG.error("Failed to stop ScheduledActionManager", e) }
+
+      // Shutdown worker service.
       Try.run { workerService.stopAsync().awaitTerminated() }
          .onFailure { e ->
             LOG.error(
@@ -39,63 +44,7 @@ internal constructor(val vertx: Vertx,
          }
    }
 
-   companion object {
+   companion object : ActionLocator() {
       private val LOG = LoggerFactory.getLogger(ActionManager::class.java)
-      val threadPoolConfigs: Map<String, ThreadPoolConfig> = HashMap()
-      val actionProviderMap = HashMap<Any, ActionProvider<Action<Any, Any>, Any, Any>>()
-      val remoteActionMap = HashMap<Any, RemoteActionProvider<Action<Any, Any>, Any, Any>>()
-      val internalActionMap = HashMap<Any, InternalActionProvider<Action<Any, Any>, Any, Any>>()
-      val workerActionMap = HashMap<Any, WorkerActionProvider<Action<Any, Boolean>, Any>>()
-      val workerActionQueueGroupMap: HashMap<String, List<WorkerActionProvider<Action<Any, Boolean>, Any>>> =
-         LinkedHashMap<String, List<WorkerActionProvider<Action<Any, Boolean>, Any>>>()
-      val scheduledActionMap = HashMap<Any, ScheduledActionProvider<Action<Unit, Unit>>>()
-      var isWorker = true
-
-      fun bindProducer(provider: WorkerActionProvider<*, *>, producer: WorkerProducer) {
-         provider.producer = producer
-      }
-
-      fun setExecutionTimeoutEnabled(enabled: Boolean) {
-         actionProviderMap.forEach { k, v -> v.isExecutionTimeoutEnabled = enabled }
-      }
-
-      fun getThreadPoolConfig(groupKey: String): ThreadPoolConfig? {
-         return threadPoolConfigs[groupKey]
-      }
-
-      @Synchronized internal fun register(map: Map<Any, ActionProvider<Action<Any, Any>, Any, Any>>?) {
-         if (map == null || map.isEmpty()) {
-            return
-         }
-
-         actionProviderMap.putAll(map)
-
-         map.forEach { key, value ->
-            if (value.javaClass.isAssignableFrom(RemoteActionProvider::class.java)) {
-               if (key is String) {
-                  if (remoteActionMap.containsKey(key)) {
-                     val actionProvider = remoteActionMap[key]
-                     throw RuntimeException("Duplicate RemoteAction Entry for key [" + key + "]. " +
-                        value.actionClass.canonicalName + " and " +
-                        actionProvider!!.actionClass.canonicalName)
-                  }
-               }
-               remoteActionMap.put(key, value as RemoteActionProvider<Action<Any, Any>, Any, Any>)
-            } else if (value.javaClass.isAssignableFrom(InternalActionProvider::class.java)) {
-               internalActionMap.put(key, value as InternalActionProvider<Action<Any, Any>, Any, Any>)
-            } else if (value.javaClass.isAssignableFrom(WorkerActionProvider::class.java) || value.javaClass.isAssignableFrom(FifoWorkerActionProvider::class.java)) {
-               workerActionMap.put(key, value as WorkerActionProvider<Action<Any, Boolean>, Any>)
-               workerActionMap.put(value.actionClass.canonicalName, value)
-               var list: List<WorkerActionProvider<Action<Any, Boolean>, Any>>? = workerActionQueueGroupMap.get(value.queueName)
-               if (list == null) {
-                  list = listOf()
-                  workerActionQueueGroupMap.put(value.queueName, list)
-               }
-               list += value
-            } else if (value.javaClass.isAssignableFrom(ScheduledActionProvider::class.java)) {
-               scheduledActionMap.put(key, value as ScheduledActionProvider<Action<Unit, Unit>>)
-            }
-         }
-      }
    }
 }

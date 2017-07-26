@@ -55,6 +55,9 @@ constructor(vertx: Vertx,
       ))
    }
 
+   /**
+    *
+    */
    fun single(groupId: String, block: IN.() -> Unit): Single<WorkerReceipt> = single(groupId, 0, block)
 
    /**
@@ -132,6 +135,9 @@ constructor(vertx: Vertx,
       ))
    }
 
+   /**
+    *
+    */
    fun send(groupId: String, block: IN.() -> Unit): Single<WorkerReceipt> = send(groupId, 0, block)
 
    /**
@@ -155,22 +161,46 @@ constructor(vertx: Vertx,
       return single
    }
 
+   /**
+    *
+    */
    suspend operator fun invoke(groupId: String, request: IN): Single<WorkerReceipt> = send(groupId, request)
 
+   /**
+    *
+    */
    suspend operator fun invoke(groupId: String, delaySeconds: Int, request: IN): Single<WorkerReceipt> = send(groupId, delaySeconds, request)
 
+   /**
+    *
+    */
    suspend operator fun invoke(groupId: String, block: IN.() -> Unit): Single<WorkerReceipt> = send(groupId, block)
 
+   /**
+    *
+    */
    suspend operator fun invoke(groupId: String, delaySeconds: Int, block: IN.() -> Unit): Single<WorkerReceipt> =
       send(groupId, delaySeconds, block)
 
+   /**
+    *
+    */
    suspend fun await(groupId: String, request: IN): WorkerReceipt = single(groupId, request).await()
 
+   /**
+    *
+    */
    suspend fun await(groupId: String, delaySeconds: Int, request: IN): WorkerReceipt = single(groupId, delaySeconds, request).await()
 
+   /**
+    *
+    */
    suspend fun await(groupId: String, block: IN.() -> Unit): WorkerReceipt =
       single(groupId, block).await()
 
+   /**
+    *
+    */
    suspend fun await(groupId: String, delaySeconds: Int, block: IN.() -> Unit): WorkerReceipt =
       single(groupId, delaySeconds, block).await()
 }

@@ -5,7 +5,7 @@ package move.action
  */
 class SQSQueueConfig {
    /**
-    * Application queue name.
+    * SQS queue name.
     */
    var name: String? = null
    /**

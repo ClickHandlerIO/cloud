@@ -17,7 +17,7 @@ import java.lang.annotation.Target;
 @Target({ElementType.TYPE})
 public @interface ActionConfig {
 
-  int DEFAULT_CONCURRENCY = 10000;
+  int DEFAULT_PARALLELISM = 10000;
   int DEFAULT_TIMEOUT_MILLIS = 120_000;
 
   /**
@@ -40,7 +40,7 @@ public @interface ActionConfig {
    * @return
    */
   @Deprecated
-  int maxConcurrentRequests() default DEFAULT_CONCURRENCY;
+  int maxConcurrentRequests() default DEFAULT_PARALLELISM;
 
   /**
    *
@@ -52,7 +52,7 @@ public @interface ActionConfig {
    *
    * @return
    */
-  int parallelism() default DEFAULT_TIMEOUT_MILLIS;
+  int parallelism() default DEFAULT_PARALLELISM;
 
   /**
    * @return

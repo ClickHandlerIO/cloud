@@ -31,20 +31,70 @@ constructor(vertx: Vertx,
    val isGuarded: Boolean
       get() = remoteAction?.guarded ?: false
 
+   lateinit var path: String
+
+   init {
+      path = remoteAction?.path!!
+
+      if (path.isNullOrBlank()) {
+         var begin = false
+         val p = actionClass.canonicalName
+         var newP = ""
+
+         p.split(".").forEach {
+            if (begin) {
+               newP += "/" + it
+            } else if (it == "action") {
+               begin = true
+            }
+         }
+
+         if (newP.isEmpty()) {
+            newP = p.replace(".", "/")
+         }
+
+         path = newP
+      }
+   }
+
+   /**
+    *
+    */
    fun blockingLocal(request: IN): OUT = blocking(request)
 
+   /**
+    *
+    */
    fun execute(callable: Try.CheckedConsumer<IN>): OUT = super.execute0(callable)
 
+   /**
+    *
+    */
    fun execute(request: IN): OUT = super.execute0(request)
 
+   /**
+    *
+    */
    fun blocking(request: IN): OUT = super.blockingBuilder(request)
 
+   /**
+    *
+    */
    fun blocking(data: Any?, request: IN): OUT = super.blockingBuilder(data, request)
 
+   /**
+    *
+    */
    fun blocking(block: IN.() -> Unit): OUT = super.blockingBuilder(inProvider.get().apply(block))
 
+   /**
+    *
+    */
    fun blocking(data: Any?, block: IN.() -> Unit): OUT = super.blockingBuilder(data, inProvider.get().apply(block))
 
+   /**
+    *
+    */
    fun singleBuilder(callback: Consumer<IN>): Single<OUT> {
       val request = inProvider.get()
       callback.accept(request)
@@ -100,7 +150,13 @@ constructor(vertx: Vertx,
 
    suspend fun await(data: Any?, request: IN): OUT = super.single0(data, request).await()
 
+   /**
+    *
+    */
    suspend fun await(block: IN.() -> Unit): OUT = super.single0(inProvider.get().apply(block)).await()
 
+   /**
+    *
+    */
    suspend fun await(data: Any?, block: IN.() -> Unit): OUT = super.single0(data, inProvider.get().apply(block)).await()
 }

@@ -125,6 +125,11 @@ abstract class Action<IN : Any, OUT : Any> : IAction<IN, OUT>() {
    /**
     * Runs a block on the default vertx WorkerExecutor in a coroutine.
     */
+   suspend fun <T> blockingSingle(block: suspend () -> T): Single<T> = worker(false, block)
+
+   /**
+    * Runs a block on the default vertx WorkerExecutor in a coroutine.
+    */
    suspend fun <T> worker(ordered: Boolean, block: suspend () -> T): Single<T> =
       vertx.rxExecuteBlocking<T>({
          try {

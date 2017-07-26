@@ -88,9 +88,9 @@ constructor(
          }
 
          return DEFAULT_CONCURRENCY_INTERNAL
-      } else if (actionConfig.maxConcurrentRequests == ActionConfig.DEFAULT_CONCURRENCY) {
+      } else if (actionConfig.maxConcurrentRequests == ActionConfig.DEFAULT_PARALLELISM) {
          val p = actionConfig.parallelism
-         if (p == ActionConfig.DEFAULT_CONCURRENCY) {
+         if (p == ActionConfig.DEFAULT_PARALLELISM) {
             if (isInternal) {
                return DEFAULT_CONCURRENCY_INTERNAL
             }
@@ -107,7 +107,7 @@ constructor(
          }
       } else {
          val p = actionConfig.parallelism
-         if (p == ActionConfig.DEFAULT_CONCURRENCY) {
+         if (p == ActionConfig.DEFAULT_PARALLELISM) {
             if (isInternal) {
                return DEFAULT_CONCURRENCY_INTERNAL
             }

@@ -1,7 +1,5 @@
 package move.action
 
-import com.google.common.collect.Multimap
-import com.google.common.collect.Multimaps
 import java.util.*
 import javax.inject.Inject
 
@@ -9,13 +7,13 @@ import javax.inject.Inject
 
  */
 abstract class ActionLocator {
-   protected val children: List<ActionLocator> = ArrayList()
-   private val remoteActionMap = HashMap<Any, RemoteActionProvider<Action<Any, Any>, Any, Any>>()
-   private val internalActionMap = HashMap<Any, InternalActionProvider<Action<Any, Any>, Any, Any>>()
-   private val workerActionMap = HashMap<Any, WorkerActionProvider<Action<Any, Boolean>, Any>>()
+   protected val children = mutableSetOf<ActionLocator>()
+   val remoteActionMap = HashMap<Any, RemoteActionProvider<Action<Any, Any>, Any, Any>>()
+   val internalActionMap = HashMap<Any, InternalActionProvider<Action<Any, Any>, Any, Any>>()
+   val workerActionMap = HashMap<Any, WorkerActionProvider<Action<Any, Boolean>, Any>>()
    val workerActionQueueGroupMap: HashMap<String, List<WorkerActionProvider<Action<Any, Boolean>, Any>>> =
       LinkedHashMap<String, List<WorkerActionProvider<Action<Any, Boolean>, Any>>>()
-   private val scheduledActionMap = HashMap<Any, ScheduledActionProvider<Action<Unit, Unit>>>()
+   val scheduledActionMap = HashMap<Any, ScheduledActionProvider<Action<Unit, Unit>>>()
    val actionMap: MutableMap<Any, ActionProvider<Action<Any, Any>, Any, Any>> = HashMap()
    var actionManager: ActionManager? = null
    private var inited: Boolean = false
@@ -25,8 +23,46 @@ abstract class ActionLocator {
       this.actionManager = actionManager
    }
 
-   fun register() {
+   fun register(actionMap: MutableMap<Any, ActionProvider<Action<Any, Any>, Any, Any>>) {
       ensureActionMap()
+
+      children.forEach { locator ->
+         val childActions = locator.ensureActionMap()
+         if (childActions != null) {
+            actionMap.putAll(childActions)
+         }
+      }
+
+      if (actionMap != this.actionMap) {
+         this.actionMap += actionMap
+      }
+
+      actionMap.forEach { key, value ->
+         if (value.javaClass.isAssignableFrom(RemoteActionProvider::class.java)) {
+            if (key is String) {
+               if (remoteActionMap.containsKey(key)) {
+                  val actionProvider = remoteActionMap[key]
+                  throw RuntimeException("Duplicate RemoteAction Entry for key [" + key + "]. " +
+                     value.actionClass.canonicalName + " and " +
+                     actionProvider!!.actionClass.canonicalName)
+               }
+            }
+            remoteActionMap.put(key, value as RemoteActionProvider<Action<Any, Any>, Any, Any>)
+         } else if (value.javaClass.isAssignableFrom(InternalActionProvider::class.java)) {
+            internalActionMap.put(key, value as InternalActionProvider<Action<Any, Any>, Any, Any>)
+         } else if (value.javaClass.isAssignableFrom(WorkerActionProvider::class.java)) {
+            workerActionMap.put(key, value as WorkerActionProvider<Action<Any, Boolean>, Any>)
+            workerActionMap.put(value.actionClass.canonicalName, value)
+            var list: List<WorkerActionProvider<Action<Any, Boolean>, Any>>? = ActionManager.workerActionQueueGroupMap.get(value.queueName)
+            if (list == null) {
+               list = listOf()
+               ActionManager.workerActionQueueGroupMap.put(value.queueName, list)
+            }
+            list += value
+         } else if (value.javaClass.isAssignableFrom(ScheduledActionProvider::class.java)) {
+            scheduledActionMap.put(key, value as ScheduledActionProvider<Action<Unit, Unit>>)
+         }
+      }
    }
 
    fun ensureActionMap(): Map<Any, ActionProvider<Action<Any, Any>, Any, Any>>? {
@@ -36,6 +72,14 @@ abstract class ActionLocator {
 
    fun put(cls: Any, provider: ActionProvider<*, *, *>) {
       actionMap.put(cls, provider as ActionProvider<Action<Any, Any>, Any, Any>)
+   }
+
+   fun bindProducer(provider: WorkerActionProvider<*, *>, producer: WorkerProducer) {
+      provider.producer = producer
+   }
+
+   fun timeoutEnabled(enabled: Boolean) {
+      actionMap.forEach { k, v -> v.isExecutionTimeoutEnabled = enabled }
    }
 
    /**
@@ -137,46 +181,17 @@ abstract class ActionLocator {
 
       inited = true
 
+      if (this == ActionManager) {
+         return
+      }
+
       // Init actions.
       initActions()
 
       // Load child locators.
       initChildren()
 
-      children.forEach { locator ->
-         val childActions = locator.ensureActionMap()
-         if (childActions != null) {
-            actionMap.putAll(childActions)
-         }
-      }
-
-      actionMap.forEach { key, value ->
-         if (value.javaClass.isAssignableFrom(RemoteActionProvider::class.java)) {
-            if (key is String) {
-               if (ActionManager.remoteActionMap.containsKey(key)) {
-                  val actionProvider = ActionManager.remoteActionMap[key]
-                  throw RuntimeException("Duplicate RemoteAction Entry for key [" + key + "]. " +
-                     value.actionClass.canonicalName + " and " +
-                     actionProvider!!.actionClass.canonicalName)
-               }
-            }
-            remoteActionMap.put(key, value as RemoteActionProvider<Action<Any, Any>, Any, Any>)
-         } else if (value.javaClass.isAssignableFrom(InternalActionProvider::class.java)) {
-            internalActionMap.put(key, value as InternalActionProvider<Action<Any, Any>, Any, Any>)
-         } else if (value.javaClass.isAssignableFrom(WorkerActionProvider::class.java)) {
-            workerActionMap.put(key, value as WorkerActionProvider<Action<Any, Boolean>, Any>)
-            workerActionMap.put(value.actionClass.canonicalName, value)
-            var list: List<WorkerActionProvider<Action<Any, Boolean>, Any>>? = ActionManager.workerActionQueueGroupMap.get(value.queueName)
-            if (list == null) {
-               list = listOf()
-               ActionManager.workerActionQueueGroupMap.put(value.queueName, list)
-            }
-            list += value
-         } else if (value.javaClass.isAssignableFrom(ScheduledActionProvider::class.java)) {
-            scheduledActionMap.put(key, value as ScheduledActionProvider<Action<Unit, Unit>>)
-         }
-      }
-
+      register(actionMap)
       ActionManager.register(actionMap)
    }
 

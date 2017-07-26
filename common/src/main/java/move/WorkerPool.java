@@ -5,6 +5,10 @@ import io.vertx.core.Handler;
 import io.vertx.rxjava.core.Future;
 import io.vertx.rxjava.core.Vertx;
 import io.vertx.rxjava.core.WorkerExecutor;
+import java.util.List;
+import java.util.concurrent.AbstractExecutorService;
+import java.util.concurrent.TimeUnit;
+import org.jetbrains.annotations.NotNull;
 import rx.Single;
 
 /**
@@ -153,6 +157,51 @@ public abstract class WorkerPool {
     @Override
     public void close() {
       executor.close();
+    }
+  }
+
+  private static class ExecutorServiceWrapper extends AbstractExecutorService {
+
+    private final WorkerPool pool;
+    private boolean shutdown;
+
+    public ExecutorServiceWrapper(WorkerPool pool) {
+      this.pool = pool;
+    }
+
+    @Override
+    public void shutdown() {
+      this.shutdown = true;
+      pool.close();
+    }
+
+    @NotNull
+    @Override
+    public List<Runnable> shutdownNow() {
+      pool.close();
+      return null;
+    }
+
+    @Override
+    public boolean isShutdown() {
+      return shutdown;
+    }
+
+    @Override
+    public boolean isTerminated() {
+      return shutdown;
+    }
+
+    @Override
+    public boolean awaitTermination(long timeout, @NotNull TimeUnit unit)
+        throws InterruptedException {
+      return true;
+    }
+
+    @Override
+    public void execute(@NotNull Runnable command) {
+      pool.executeBlocking(f -> command.run(), f -> {
+      });
     }
   }
 }

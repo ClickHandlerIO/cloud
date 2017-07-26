@@ -31,6 +31,9 @@ constructor(vertx: Vertx,
 
    internal var producer: WorkerProducer? = null
 
+   /**
+    *
+    */
    fun blockingLocal(request: IN): Boolean {
       return super.blockingBuilder(request)
    }
@@ -106,26 +109,53 @@ constructor(vertx: Vertx,
     */
    fun send(delaySeconds: Int, block: IN.() -> Unit): Single<WorkerReceipt> = send(delaySeconds, inProvider.get().apply(block))
 
+   /**
+    *
+    */
    suspend operator fun invoke(request: IN): Single<WorkerReceipt> = send(request)
 
+   /**
+    *
+    */
    suspend operator fun invoke(delaySeconds: Int, request: IN): Single<WorkerReceipt> = send(delaySeconds, request)
 
+   /**
+    *
+    */
    suspend operator fun invoke(block: IN.() -> Unit): Single<WorkerReceipt> = send(0, block)
 
+   /**
+    *
+    */
    suspend operator fun invoke(delaySeconds: Int, block: IN.() -> Unit): Single<WorkerReceipt> =
       send(delaySeconds, inProvider.get().apply(block))
 
+   /**
+    *
+    */
    suspend fun await(request: IN): WorkerReceipt = single(request).await()
 
+   /**
+    *
+    */
    suspend fun await(delaySeconds: Int, request: IN): WorkerReceipt = single(delaySeconds, request).await()
 
+   /**
+    *
+    */
    suspend fun await(block: IN.() -> Unit): WorkerReceipt =
       single(inProvider.get().apply(block)).await()
 
+   /**
+    *
+    */
    suspend fun await(delaySeconds: Int, block: IN.() -> Unit): WorkerReceipt =
       single(delaySeconds, inProvider.get().apply(block)).await()
 }
 
+/**
+ *
+ */
 class WorkerReceipt @Inject constructor() {
    /**
     * <p>
@@ -169,5 +199,5 @@ class WorkerReceipt @Inject constructor() {
    /**
     *
     */
-   val isSuccess = messageId != null && messageId!!.isNotEmpty()
+   val isSuccess = !messageId.isNullOrBlank()
 }

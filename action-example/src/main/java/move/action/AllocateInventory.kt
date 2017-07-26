@@ -54,17 +54,17 @@ constructor() :
       println(blockingParallel)
 
       val blockingOrdered = ordered(
-         worker {
+         blockingSingle {
             delay(1000)
             println("Worker 1")
             Thread.currentThread().name
          },
-         worker {
+         blockingSingle {
             delay(1000)
             println("Worker 2")
             Thread.currentThread().name
          },
-         worker {
+         blockingSingle {
             delay(1000)
             println("Worker 3")
             Thread.currentThread().name
