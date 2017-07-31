@@ -254,16 +254,6 @@ internal constructor(val vertx: Vertx,
          method?.invoke(amazonClientLogger, value)
       }
 
-      // Sanitize maxThreads property.
-      config.maxThreads = if (config.maxThreads < MIN_THREADS) {
-         LOG.warn("'maxThreads was set too low. Setting maxThreads to '" + MIN_THREADS + "'")
-         MIN_THREADS
-      } else if (config.maxThreads > MAX_THREADS) {
-         LOG.warn("'maxThreads was set too high. Setting maxThreads to '" + MAX_THREADS + "'")
-         MAX_THREADS
-      } else
-         config.maxThreads
-
       // Sanitize namespace property.
       config.namespace = config.namespace?.trim() ?: ""
 
@@ -330,7 +320,7 @@ internal constructor(val vertx: Vertx,
 
       builder.withClientConfiguration(ClientConfiguration()
          // Give a nice buffer to max connections based on max threads.
-         .withMaxConnections(config.maxThreads * 2)
+         .withMaxConnections(MAX_CONNECTIONS)
       )
 
       // Build SQS client and the Buffered client based on the "Real" SQS client.
@@ -963,6 +953,7 @@ internal constructor(val vertx: Vertx,
       private val MIN_THREADS = 1
       private val MAX_THREADS = 10000
       private val THREADS_MULTIPLIER = 2.0
+      private val MAX_CONNECTIONS = 100
       // Default to 2 hours.
       private val VISIBILITY_MULTIPLIER = 2.1
       private val VISIBILITY_PADDING_MILLIS = 2_000L

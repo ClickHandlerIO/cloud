@@ -8,7 +8,7 @@ import java.util.*
 
  */
 class SQSConfig {
-   var enabled: Boolean? = true
+   var enabled: Boolean? = false
 
    /**
     *
@@ -53,11 +53,6 @@ class SQSConfig {
     *
     */
    var maxPayloadSize = 1024 * 1024 * 10
-
-   /**
-
-    */
-   var maxThreads = 1024
 
    /**
     * The maximum number of entries in a batch command
