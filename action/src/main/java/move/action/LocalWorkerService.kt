@@ -157,12 +157,12 @@ internal constructor(val vertx: Vertx) : AbstractIdleService(), WorkerService, W
          activeMessages.incrementAndGet()
          val actionProvider = job.actionProvider
 
-         actionProvider?.single(r)?.subscribe(
+         actionProvider?.single0(r)?.subscribe(
             {
                try {
                   activeMessages.decrementAndGet()
 
-                  if (it != null && it.isSuccess) {
+                  if (it != null && it) {
                      completesCounter.inc()
                   } else {
                      inCompletesCounter.inc()
