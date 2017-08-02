@@ -14,7 +14,7 @@ class MyWorker @Inject constructor() : BaseWorkerAction<MyWorker.Request>() {
 
    suspend override fun execute(): Boolean {
       println("Started worker")
-      delay(1000)
+//      delay(1000)
       println("Finishing worker")
       return true
    }

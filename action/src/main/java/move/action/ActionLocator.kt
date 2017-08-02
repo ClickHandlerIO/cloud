@@ -53,10 +53,10 @@ abstract class ActionLocator {
          } else if (value.javaClass.isAssignableFrom(WorkerActionProvider::class.java)) {
             workerActionMap.put(key, value as WorkerActionProvider<Action<Any, Boolean>, Any>)
             workerActionMap.put(value.actionClass.canonicalName, value)
-            var list: List<WorkerActionProvider<Action<Any, Boolean>, Any>>? = ActionManager.workerActionQueueGroupMap.get(value.queueName)
+
+            var list: List<WorkerActionProvider<Action<Any, Boolean>, Any>>? = workerActionQueueGroupMap.get(value.queueName)
             if (list == null) {
                list = listOf()
-               ActionManager.workerActionQueueGroupMap.put(value.queueName, list)
             }
             list += value
          } else if (value.javaClass.isAssignableFrom(ScheduledActionProvider::class.java)) {
