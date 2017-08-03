@@ -59,6 +59,8 @@ abstract class ActionLocator {
                list = listOf()
             }
             list += value
+
+            workerActionQueueGroupMap.put(value.queueName, list)
          } else if (value.javaClass.isAssignableFrom(ScheduledActionProvider::class.java)) {
             scheduledActionMap.put(key, value as ScheduledActionProvider<Action<Unit, Unit>>)
          }
