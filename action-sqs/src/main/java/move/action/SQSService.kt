@@ -668,6 +668,7 @@ internal constructor(val vertx: Vertx,
       private val downloadedBytesCounter: Counter = registry.counter(queueName + "-DOWNLOADED_BYTES")
 
       @Volatile private var lastPoll: Long = 0
+      private var starting:Boolean = true
 
       private val activeMessages = AtomicInteger(0)
 
@@ -682,7 +683,9 @@ internal constructor(val vertx: Vertx,
       @Throws(Exception::class)
       override fun startUp() {
 //            LOG.debug("Starting up SQS service.")
+         LOG.info("SQS Queue: ")
          receiveMore()
+         starting = false
       }
 
       @Throws(Exception::class)
@@ -710,11 +713,13 @@ internal constructor(val vertx: Vertx,
       }
 
       fun receiveMore() {
-         if (!isRunning)
-            return
+         if (!starting) {
+            if (!isRunning)
+               return
 
-         if (activeMessages.get() >= concurrentRequests)
-            return
+            if (activeMessages.get() >= concurrentRequests)
+               return
+         }
 
          val request = ReceiveMessageRequest(queueUrl)
          // SQS max number of messages is capped at 10.
@@ -722,17 +727,24 @@ internal constructor(val vertx: Vertx,
          // Give it the max 20 second poll. This will make it as cheap as possible.
          request.waitTimeSeconds = SQS_POLL_WAIT_SECONDS
 
-         if (request.maxNumberOfMessages <= 0)
+         if (request.maxNumberOfMessages <= 0) {
+            if (starting) {
+               throw RuntimeException("SQS Queue '" + queueName + "' failed to start. maxNumberOfMessages = " + request.maxNumberOfMessages);
+            }
             return
+         }
 
          lastPoll = Math.max(System.currentTimeMillis(), lastPoll)
          val start = System.currentTimeMillis()
 
          sqsBuffer.receiveMessage(request, object : AsyncHandler<ReceiveMessageRequest, ReceiveMessageResult> {
             override fun onError(exception: java.lang.Exception?) {
-               receiveLatencyCounter.inc(System.currentTimeMillis() - start)
-               LOG.error("ReceiveMessage for " + queueName + " threw an exception", exception)
-               receiveMore()
+               try {
+                  receiveLatencyCounter.inc(System.currentTimeMillis() - start)
+                  LOG.error("ReceiveMessage for " + queueName + " threw an exception", exception)
+               } finally {
+                  receiveMore()
+               }
             }
 
             override fun onSuccess(receiveRequest: ReceiveMessageRequest?, result: ReceiveMessageResult?) {
@@ -745,111 +757,115 @@ internal constructor(val vertx: Vertx,
                   return
                }
 
-               activeMessages.addAndGet(result.messages.size)
+               try {
+                  activeMessages.addAndGet(result.messages.size)
 
-               result.messages.forEach { message ->
-                  // Parse request.
-                  val envelope = parse(Strings.nullToEmpty(message.body))
+                  result.messages.forEach { message ->
+                     // Parse request.
+                     val envelope = parse(Strings.nullToEmpty(message.body))
 
-                  if (envelope.l) {
-                     val s3Pointer = WireFormat.parse(S3Pointer::class.java, envelope.p)
+                     if (envelope.l) {
+                        val s3Pointer = WireFormat.parse(S3Pointer::class.java, envelope.p)
 
-                     if (s3Pointer == null) {
-                        LOG.error("Invalid S3Pointer json: " + envelope.p)
-                        deleteMessage(message.receiptHandle)
-                     } else {
-                        downloadsCounter.inc()
-                        val downloadStarted = System.nanoTime()
+                        if (s3Pointer == null) {
+                           LOG.error("Invalid S3Pointer json: " + envelope.p)
+                           deleteMessage(message.receiptHandle)
+                        } else {
+                           downloadsCounter.inc()
+                           val downloadStarted = System.nanoTime()
 
-                        vertx.rxExecuteBlocking<Unit> {
-                           // Create a temp file and let's keep track of it.
-                           val file = File.createTempFile("move_sqs_" + s3Pointer.k, "json")
-                           activeFiles.put(s3Pointer.k, file)
+                           vertx.rxExecuteBlocking<Unit> {
+                              // Create a temp file and let's keep track of it.
+                              val file = File.createTempFile("move_sqs_" + s3Pointer.k, "json")
+                              activeFiles.put(s3Pointer.k, file)
 
-                           // Start S3 Download.
-                           val download = s3TransferManager.download(s3Pointer.b, s3Pointer.k, file)
-                           activeDownloads.put(s3Pointer.k, download)
+                              // Start S3 Download.
+                              val download = s3TransferManager.download(s3Pointer.b, s3Pointer.k, file)
+                              activeDownloads.put(s3Pointer.k, download)
 
-                           (download as AbstractTransfer).addStateChangeListener { transfer, state ->
-                              if (state == Transfer.TransferState.Completed) {
-                                 activeDownloads.invalidate(s3Pointer.k)
-                                 val length = file.length()
-                                 downloadedBytesCounter.inc(length)
-                                 downloadsNanosCounter.inc(System.nanoTime() - downloadStarted)
+                              (download as AbstractTransfer).addStateChangeListener { transfer, state ->
+                                 if (state == Transfer.TransferState.Completed) {
+                                    activeDownloads.invalidate(s3Pointer.k)
+                                    val length = file.length()
+                                    downloadedBytesCounter.inc(length)
+                                    downloadsNanosCounter.inc(System.nanoTime() - downloadStarted)
 
-                                 if (length > config.maxPayloadSize) {
-                                    if (!file.delete()) {
-                                       needToDeleteFiles.put(s3Pointer.k, file)
-                                    }
-                                    activeFiles.invalidate(s3Pointer.k)
-
-                                    LOG.error("Payload of size '" + length + "' exceeded max allowable '" + config.maxPayloadSize + "'")
-                                    return@addStateChangeListener
-                                 }
-
-                                 if (isRunning) {
-                                    val ctx = Vertx.currentContext()
-                                    if (ctx != null && ctx.isEventLoopContext) {
-                                       fileSystem.rxReadFile(file.absolutePath).subscribe(
-                                          {
-                                             if (!file.delete()) {
-                                                needToDeleteFiles.put(s3Pointer.k, file)
-                                             }
-                                             activeFiles.invalidate(s3Pointer.k)
-
-                                             call(message, envelope, it.toString())
-                                          },
-                                          {
-                                             if (!file.delete()) {
-                                                needToDeleteFiles.put(s3Pointer.k, file)
-                                             }
-                                             activeFiles.invalidate(s3Pointer.k)
-                                             LOG.error("Failed to read File '" + file.absoluteFile + "'", it)
-                                          }
-                                       )
-                                    } else {
-                                       val body = try {
-                                          Files.readAllBytes(file.toPath())
-                                       } catch (e: Throwable) {
-                                          LOG.error("Failed to read file '" + file.absolutePath + "'", e)
-                                          null
-                                       }
-
+                                    if (length > config.maxPayloadSize) {
                                        if (!file.delete()) {
                                           needToDeleteFiles.put(s3Pointer.k, file)
                                        }
                                        activeFiles.invalidate(s3Pointer.k)
 
-                                       if (body == null) {
-                                          receiveMore()
-                                       } else {
-                                          val payload = if (body.isEmpty())
-                                             ""
-                                          else
-                                             String(body, StandardCharsets.UTF_8)
+                                       LOG.error("Payload of size '" + length + "' exceeded max allowable '" + config.maxPayloadSize + "'")
+                                       return@addStateChangeListener
+                                    }
 
-                                          vertx.runOnContext {
-                                             call(message, envelope, payload)
+                                    if (isRunning) {
+                                       val ctx = Vertx.currentContext()
+                                       if (ctx != null && ctx.isEventLoopContext) {
+                                          fileSystem.rxReadFile(file.absolutePath).subscribe(
+                                             {
+                                                if (!file.delete()) {
+                                                   needToDeleteFiles.put(s3Pointer.k, file)
+                                                }
+                                                activeFiles.invalidate(s3Pointer.k)
+
+                                                call(message, envelope, it.toString())
+                                             },
+                                             {
+                                                if (!file.delete()) {
+                                                   needToDeleteFiles.put(s3Pointer.k, file)
+                                                }
+                                                activeFiles.invalidate(s3Pointer.k)
+                                                LOG.error("Failed to read File '" + file.absoluteFile + "'", it)
+                                             }
+                                          )
+                                       } else {
+                                          val body = try {
+                                             Files.readAllBytes(file.toPath())
+                                          } catch (e: Throwable) {
+                                             LOG.error("Failed to read file '" + file.absolutePath + "'", e)
+                                             null
+                                          }
+
+                                          if (!file.delete()) {
+                                             needToDeleteFiles.put(s3Pointer.k, file)
+                                          }
+                                          activeFiles.invalidate(s3Pointer.k)
+
+                                          if (body == null) {
+                                             receiveMore()
+                                          } else {
+                                             val payload = if (body.isEmpty())
+                                                ""
+                                             else
+                                                String(body, StandardCharsets.UTF_8)
+
+                                             vertx.runOnContext {
+                                                call(message, envelope, payload)
+                                             }
                                           }
                                        }
                                     }
+                                 } else if (state == Transfer.TransferState.Failed || state == Transfer.TransferState.Canceled) {
+                                    activeDownloads.invalidate(s3Pointer.k)
+                                    LOG.warn("Failed to Download payload from S3 for message handle '" + message.receiptHandle + "'. Reason '" + state.name + "'")
                                  }
-                              } else if (state == Transfer.TransferState.Failed || state == Transfer.TransferState.Canceled) {
-                                 activeDownloads.invalidate(s3Pointer.k)
-                                 LOG.warn("Failed to Download payload from S3 for message handle '" + message.receiptHandle + "'. Reason '" + state.name + "'")
                               }
-                           }
-                        }.subscribe(
-                           {
-                           },
-                           {
-                              LOG.error("Failed to start Download", it)
-                           }
-                        )
+                           }.subscribe(
+                              {
+                              },
+                              {
+                                 LOG.error("Failed to start Download", it)
+                              }
+                           )
+                        }
+                     } else {
+                        call(message, envelope, envelope.p)
                      }
-                  } else {
-                     call(message, envelope, envelope.p)
                   }
+               } finally {
+                  receiveMore()
                }
             }
          })
