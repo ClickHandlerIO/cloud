@@ -327,6 +327,15 @@ constructor(
     * *
     * @return
     */
+   open fun local(request: IN): Single<OUT> {
+      return observe0(create(request)).toSingle()
+   }
+
+   /**
+    * @param request
+    * *
+    * @return
+    */
    open internal fun single0(request: IN): Single<OUT> {
       return observe0(create(request)).toSingle()
    }

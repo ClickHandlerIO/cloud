@@ -28,6 +28,7 @@ import com.google.common.cache.RemovalListener
 import com.google.common.cache.RemovalNotification
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.AbstractIdleService
+import com.google.common.util.concurrent.Service
 import com.netflix.hystrix.exception.HystrixTimeoutException
 import io.vertx.rxjava.core.TimeoutStream
 import io.vertx.rxjava.core.Vertx
@@ -668,7 +669,6 @@ internal constructor(val vertx: Vertx,
       private val downloadedBytesCounter: Counter = registry.counter(queueName + "-DOWNLOADED_BYTES")
 
       @Volatile private var lastPoll: Long = 0
-      private var starting:Boolean = true
 
       private val activeMessages = AtomicInteger(0)
 
@@ -685,12 +685,16 @@ internal constructor(val vertx: Vertx,
 //            LOG.debug("Starting up SQS service.")
          LOG.info("SQS Queue: ")
          receiveMore()
-         starting = false
       }
 
       @Throws(Exception::class)
       override fun shutDown() {
          sqsBuffer.shutdown()
+      }
+
+      fun shouldRun(): Boolean = when (state()) {
+         Service.State.STARTING, Service.State.NEW, Service.State.RUNNING -> true
+         else -> false
       }
 
       fun deleteMessage(receiptHandle: String) {
@@ -712,34 +716,32 @@ internal constructor(val vertx: Vertx,
          })
       }
 
+      @Synchronized
       fun receiveMore() {
-         if (!starting) {
-            if (!isRunning)
-               return
+         if (!shouldRun())
+            return
 
-            if (activeMessages.get() >= concurrentRequests)
-               return
-         }
+         if (activeMessages.get() >= concurrentRequests)
+            return
 
          val request = ReceiveMessageRequest(queueUrl)
          // SQS max number of messages is capped at 10.
-         request.maxNumberOfMessages = Math.min(10, concurrentRequests - activeMessages.get())
+         request.maxNumberOfMessages = Math.min(MAX_NUMBER_OF_MESSAGES, concurrentRequests - activeMessages.get())
          // Give it the max 20 second poll. This will make it as cheap as possible.
          request.waitTimeSeconds = SQS_POLL_WAIT_SECONDS
 
          if (request.maxNumberOfMessages <= 0) {
-            if (starting) {
-               throw RuntimeException("SQS Queue '" + queueName + "' failed to start. maxNumberOfMessages = " + request.maxNumberOfMessages);
-            }
             return
          }
 
          lastPoll = Math.max(System.currentTimeMillis(), lastPoll)
          val start = System.currentTimeMillis()
+         activeMessages.addAndGet(request.maxNumberOfMessages)
 
          sqsBuffer.receiveMessage(request, object : AsyncHandler<ReceiveMessageRequest, ReceiveMessageResult> {
             override fun onError(exception: java.lang.Exception?) {
                try {
+                  activeMessages.addAndGet(-request.maxNumberOfMessages)
                   receiveLatencyCounter.inc(System.currentTimeMillis() - start)
                   LOG.error("ReceiveMessage for " + queueName + " threw an exception", exception)
                } finally {
@@ -752,13 +754,14 @@ internal constructor(val vertx: Vertx,
 
                // Were there any messages?
                if (result == null || result.messages == null || result.messages.isEmpty()) {
+                  activeMessages.addAndGet(-request.maxNumberOfMessages)
                   noMessagesCounter.inc()
                   receiveMore()
                   return
                }
 
                try {
-                  activeMessages.addAndGet(result.messages.size)
+                  activeMessages.addAndGet(result.messages.size - request.maxNumberOfMessages)
 
                   result.messages.forEach { message ->
                      // Parse request.
@@ -875,8 +878,10 @@ internal constructor(val vertx: Vertx,
       }
 
       fun call(message: Message, envelope: SQSEnvelope, body: String) {
-         if (!isRunning)
+         if (!shouldRun()) {
+            activeMessages.decrementAndGet()
             return
+         }
 
          val actionProvider = ActionManager.workerActionMap[envelope.name]
          if (actionProvider == null) {
@@ -899,29 +904,28 @@ internal constructor(val vertx: Vertx,
 
             jobsCounter.inc()
 
-            actionProvider.single(request).subscribe(
+            actionProvider.local(request).subscribe(
                {
                   activeMessages.decrementAndGet()
+                  Try.run { receiveMore() }
 
-                  if (it != null && it.isSuccess) {
+                  if (it != null && it) {
                      completesCounter.inc()
                      deletesCounter.inc()
-                     receiveMore()
 
                      try {
                         deleteMessage(message.receiptHandle)
                      } catch (e: Throwable) {
                         LOG.error("Delete message from queue '" + queueUrl + "' with receipt handle '" + message.receiptHandle + "' failed", e)
                         deleteFailuresCounter.inc()
-                        receiveMore()
                      }
                   } else {
                      inCompletesCounter.inc()
-                     receiveMore()
                   }
                },
                {
                   activeMessages.decrementAndGet()
+                  Try.run { receiveMore() }
                   LOG.error("Action " + actionProvider.actionClass.canonicalName + " threw an exception", it)
 
                   val rootCause = Throwables.getRootCause(it)
@@ -933,7 +937,9 @@ internal constructor(val vertx: Vertx,
                }
             )
          } catch (e: Exception) {
-            receiveMore()
+            activeMessages.decrementAndGet()
+            Try.run { receiveMore() }
+
             LOG.error("Action " + actionProvider.actionClass.canonicalName + " threw an exception", e)
 
             val rootCause = Throwables.getRootCause(e)
@@ -970,6 +976,7 @@ internal constructor(val vertx: Vertx,
       private val MAX_THREADS = 10000
       private val THREADS_MULTIPLIER = 2.0
       private val MAX_CONNECTIONS = 100
+      private val MAX_NUMBER_OF_MESSAGES = 10
       // Default to 2 hours.
       private val VISIBILITY_MULTIPLIER = 2.1
       private val VISIBILITY_PADDING_MILLIS = 2_000L
