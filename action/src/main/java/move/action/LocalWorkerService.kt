@@ -4,6 +4,7 @@ import com.codahale.metrics.Counter
 import com.codahale.metrics.Gauge
 import com.google.common.base.Throwables
 import com.google.common.util.concurrent.AbstractIdleService
+import com.google.common.util.concurrent.Service
 import com.netflix.hystrix.exception.HystrixTimeoutException
 import io.vertx.rxjava.core.Vertx
 import move.common.Metrics
@@ -30,11 +31,17 @@ internal constructor(val vertx: Vertx) : AbstractIdleService(), WorkerService, W
    override fun startUp() {
       ActionManager.workerActionMap.values.forEach { provider -> provider.producer = this }
       ActionManager.workerActionQueueGroupMap.forEach { entry ->
+         // Is Fifo?
+         val fifo = entry.value.map { it.isFifo }.first()
 
          // If there are more than 1 action mapped to this queue then find the max "parallelism"
-         val maxParalellism = entry.value.map {
-            it.parallelism()
-         }.max()?.toInt() ?: DEFAULT_PARALELLISM
+         val maxParalellism = if (fifo) {
+            1
+         } else {
+            entry.value.map {
+               it.parallelism()
+            }.max()?.toInt() ?: DEFAULT_PARALELLISM
+         }
          // If there are more than 1 action mapped to this queue then find largest "timeoutMillis"
          val maxExecutionMillis = entry.value.map {
             it.timeoutMillis()
@@ -135,8 +142,13 @@ internal constructor(val vertx: Vertx) : AbstractIdleService(), WorkerService, W
          }
       }
 
+      fun shouldRun(): Boolean = when (state()) {
+         Service.State.STARTING, Service.State.NEW, Service.State.RUNNING -> true
+         else -> false
+      }
+
       fun next() {
-         if (!isRunning) {
+         if (!shouldRun()) {
             return
          }
 

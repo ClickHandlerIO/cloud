@@ -11,8 +11,8 @@ abstract class ActionLocator {
    val remoteActionMap = HashMap<Any, RemoteActionProvider<Action<Any, Any>, Any, Any>>()
    val internalActionMap = HashMap<Any, InternalActionProvider<Action<Any, Any>, Any, Any>>()
    val workerActionMap = HashMap<Any, WorkerActionProvider<Action<Any, Boolean>, Any>>()
-   val workerActionQueueGroupMap: HashMap<String, List<WorkerActionProvider<Action<Any, Boolean>, Any>>> =
-      LinkedHashMap<String, List<WorkerActionProvider<Action<Any, Boolean>, Any>>>()
+   val workerActionQueueGroupMap: HashMap<String, Set<WorkerActionProvider<Action<Any, Boolean>, Any>>> =
+      LinkedHashMap<String, Set<WorkerActionProvider<Action<Any, Boolean>, Any>>>()
    val scheduledActionMap = HashMap<Any, ScheduledActionProvider<Action<Unit, Unit>>>()
    val actionMap: MutableMap<Any, ActionProvider<Action<Any, Any>, Any, Any>> = HashMap()
    var actionManager: ActionManager? = null
@@ -54,15 +54,28 @@ abstract class ActionLocator {
             workerActionMap.put(key, value as WorkerActionProvider<Action<Any, Boolean>, Any>)
             workerActionMap.put(value.actionClass.canonicalName, value)
 
-            var list: List<WorkerActionProvider<Action<Any, Boolean>, Any>>? = workerActionQueueGroupMap.get(value.queueName)
+            var list: Set<WorkerActionProvider<Action<Any, Boolean>, Any>>? = workerActionQueueGroupMap[value.queueName]
             if (list == null) {
-               list = listOf()
+               list = setOf()
+            }
+            list += value
+
+            workerActionQueueGroupMap.put(value.queueName, list)
+         } else if (value.javaClass.isAssignableFrom(FifoWorkerActionProvider::class.java)) {
+            workerActionMap.put(key, value as FifoWorkerActionProvider<Action<Any, Boolean>, Any>)
+            workerActionMap.put(value.actionClass.canonicalName, value)
+
+            var list: Set<WorkerActionProvider<Action<Any, Boolean>, Any>>? = workerActionQueueGroupMap[value.queueName]
+            if (list == null) {
+               list = setOf()
             }
             list += value
 
             workerActionQueueGroupMap.put(value.queueName, list)
          } else if (value.javaClass.isAssignableFrom(ScheduledActionProvider::class.java)) {
             scheduledActionMap.put(key, value as ScheduledActionProvider<Action<Unit, Unit>>)
+         } else {
+            throw RuntimeException("ActionType: " + value.actionClass.canonicalName + ": is an unknown type.");
          }
       }
    }

@@ -27,6 +27,7 @@ import com.google.common.cache.CacheBuilder
 import com.google.common.cache.RemovalListener
 import com.google.common.cache.RemovalNotification
 import com.google.common.collect.ImmutableList
+import com.google.common.collect.ImmutableSet
 import com.google.common.util.concurrent.AbstractIdleService
 import com.google.common.util.concurrent.Service
 import com.netflix.hystrix.exception.HystrixTimeoutException
@@ -408,7 +409,7 @@ internal constructor(val vertx: Vertx,
 
          queueMap.put(
             queueName,
-            QueueContext(sender, receiver, queueUrl, queueConfig, ImmutableList.of(entry.value))
+            QueueContext(sender, receiver, queueUrl, queueConfig, ImmutableSet.of(entry.value))
          )
       }
 
@@ -961,7 +962,7 @@ internal constructor(val vertx: Vertx,
                                     val receiver: SQSQueueReceiver?,
                                     val queueUrl: String,
                                     val config: SQSQueueConfig,
-                                    var actionProviders: ImmutableList<List<WorkerActionProvider<Action<Any, Boolean>, Any>>>)
+                                    var actionProviders: ImmutableSet<Set<WorkerActionProvider<Action<Any, Boolean>, Any>>>)
 
    class QueueConfiguration {
       var name: String? = null
