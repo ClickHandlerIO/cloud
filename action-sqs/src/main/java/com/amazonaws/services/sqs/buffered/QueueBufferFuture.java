@@ -21,6 +21,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import javaslang.control.Try;
 
 /**
  * QueueBufferFuture class is used to deliver asynchronous results of various QueueBuffer
@@ -62,17 +63,21 @@ class QueueBufferFuture<Req extends AmazonWebServiceRequest, Res> implements Fut
     done = true;
     notifyAll();
 
+    if (callback != null) {
+      Try.run(() -> callback.onSuccess(result));
+    }
+
     // if we have a callback to call, schedule
     // it on a different thread. Who knows what this
     // thread is doing.
-    if (callback != null && issuingBuffer != null) {
-      issuingBuffer.executor.submit(new Callable<Void>() {
-        public Void call() throws Exception {
-          callback.onSuccess(result);
-          return null;
-        }
-      });
-    }
+//    if (callback != null && issuingBuffer != null) {
+//      issuingBuffer.executor.submit(new Callable<Void>() {
+//        public Void call() throws Exception {
+//          callback.onSuccess(result);
+//          return null;
+//        }
+//      });
+//    }
   }
 
   /**
@@ -86,18 +91,21 @@ class QueueBufferFuture<Req extends AmazonWebServiceRequest, Res> implements Fut
     done = true;
     notifyAll();
 
+    if (callback != null) {
+      Try.run(() -> callback.onError(paramE));
+    }
+
     // if we have a callback to call, schedule
     // it on a different thread. Who knows what this
     // thread is doing.
-    if (callback != null && issuingBuffer != null) {
-      issuingBuffer.executor.submit(new Callable<Void>() {
-        public Void call() throws Exception {
-          callback.onError(e);
-          return null;
-        }
-      });
-    }
-
+//    if (callback != null && issuingBuffer != null) {
+//      issuingBuffer.executor.submit(new Callable<Void>() {
+//        public Void call() throws Exception {
+//          callback.onError(e);
+//          return null;
+//        }
+//      });
+//    }
   }
 
   @Override

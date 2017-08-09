@@ -26,7 +26,6 @@ import com.google.common.cache.Cache
 import com.google.common.cache.CacheBuilder
 import com.google.common.cache.RemovalListener
 import com.google.common.cache.RemovalNotification
-import com.google.common.collect.ImmutableList
 import com.google.common.collect.ImmutableSet
 import com.google.common.util.concurrent.AbstractIdleService
 import com.google.common.util.concurrent.Service
@@ -40,8 +39,8 @@ import move.common.UID
 import move.common.WireFormat
 import org.slf4j.LoggerFactory
 import rx.Single
+import java.io.ByteArrayInputStream
 import java.io.File
-import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.util.*
 import java.util.concurrent.*
@@ -468,7 +467,7 @@ internal constructor(val vertx: Vertx,
    /**
     *
     */
-   data class SQSEnvelope(val l: Boolean, val s: Int? = null, val name: String, val p: String)
+   //   data class SQSEnvelope(val l: Boolean, val s: Int? = null, val name: String, val p: String)
 
    /**
     *
@@ -492,12 +491,12 @@ internal constructor(val vertx: Vertx,
                return@create
             }
 
-            val payload = WireFormat.stringify(request.request)
+            val payload = WireFormat.byteify(request.request)
 
-            if (payload.length > MAX_PAYLOAD_SIZE || workerAction.encrypted) {
-               if (payload.length > config.maxPayloadSize) {
+            if (payload.size > MAX_PAYLOAD_SIZE || workerAction.encrypted) {
+               if (payload.size > config.maxPayloadSize) {
                   if (!subscriber.isUnsubscribed) {
-                     subscriber.onError(RuntimeException("Payload of size '" + payload.length + "' exceeded max allowable '" + config.maxPayloadSize + "'"))
+                     subscriber.onError(RuntimeException("Payload of size '" + payload.size + "' exceeded max allowable '" + config.maxPayloadSize + "'"))
                   }
                   return@create
                }
@@ -508,7 +507,7 @@ internal constructor(val vertx: Vertx,
                val putRequest = PutObjectRequest(
                   config.s3BucketName,
                   id,
-                  payload.byteInputStream(Charsets.UTF_8),
+                  ByteArrayInputStream(payload),
                   ObjectMetadata()
                )
 
@@ -522,11 +521,11 @@ internal constructor(val vertx: Vertx,
 
                      val sendRequest = SendMessageRequest(
                         queueUrl,
-                        stringify(SQSEnvelope(
-                           true,
-                           payload.length,
+                        WorkerPacker.stringify(WorkerEnvelope(
+                           1,
                            actionProvider.name,
-                           WireFormat.stringify(S3Pointer(
+                           payload.size,
+                           WireFormat.byteify(S3Pointer(
                               uploadResult.bucketName,
                               uploadResult.key,
                               uploadResult.eTag)
@@ -575,7 +574,7 @@ internal constructor(val vertx: Vertx,
             } else {
                val sendRequest = SendMessageRequest(
                   queueUrl,
-                  stringify(SQSEnvelope(false, payload.length, actionProvider.name, payload))
+                  WorkerPacker.stringify(WorkerEnvelope(0, actionProvider.name, payload.size, payload))
                )
 
                if (request.delaySeconds > 0) {
@@ -766,13 +765,13 @@ internal constructor(val vertx: Vertx,
 
                   result.messages.forEach { message ->
                      // Parse request.
-                     val envelope = parse(Strings.nullToEmpty(message.body))
+                     val envelope = WorkerPacker.parse(Strings.nullToEmpty(message.body))
 
-                     if (envelope.l) {
-                        val s3Pointer = WireFormat.parse(S3Pointer::class.java, envelope.p)
+                     if (envelope.option == 1) {
+                        val s3Pointer = WireFormat.parse(S3Pointer::class.java, envelope.body)
 
                         if (s3Pointer == null) {
-                           LOG.error("Invalid S3Pointer json: " + envelope.p)
+                           LOG.error("Invalid S3Pointer json: " + envelope.body)
                            deleteMessage(message.receiptHandle)
                         } else {
                            downloadsCounter.inc()
@@ -814,7 +813,7 @@ internal constructor(val vertx: Vertx,
                                                 }
                                                 activeFiles.invalidate(s3Pointer.k)
 
-                                                call(message, envelope, it.toString())
+                                                call(message, envelope, it.delegate.bytes)
                                              },
                                              {
                                                 if (!file.delete()) {
@@ -840,13 +839,8 @@ internal constructor(val vertx: Vertx,
                                           if (body == null) {
                                              receiveMore()
                                           } else {
-                                             val payload = if (body.isEmpty())
-                                                ""
-                                             else
-                                                String(body, StandardCharsets.UTF_8)
-
                                              vertx.runOnContext {
-                                                call(message, envelope, payload)
+                                                call(message, envelope, body)
                                              }
                                           }
                                        }
@@ -865,7 +859,7 @@ internal constructor(val vertx: Vertx,
                            )
                         }
                      } else {
-                        call(message, envelope, envelope.p)
+                        call(message, envelope, envelope.body)
                      }
                   }
                } finally {
@@ -878,7 +872,7 @@ internal constructor(val vertx: Vertx,
          receiveMore()
       }
 
-      fun call(message: Message, envelope: SQSEnvelope, body: String) {
+      fun call(message: Message, envelope: WorkerEnvelope, body: ByteArray) {
          if (!shouldRun()) {
             activeMessages.decrementAndGet()
             return
@@ -895,7 +889,7 @@ internal constructor(val vertx: Vertx,
          }
 
          try {
-            val request: Any = if (body.isEmpty() || "{}" == body)
+            val request: Any = if (body.isEmpty() || (body.size == 2 && body[0] == '{'.toByte() && body[1] == '}'.toByte()))
                actionProvider.inProvider.get()
             else
                WireFormat.parse(
@@ -994,66 +988,105 @@ internal constructor(val vertx: Vertx,
       private val DEFAULT_PARALLELISM = Runtime.getRuntime().availableProcessors() * 2
       private val DEFAULT_WORKER_TIMEOUT_MILLIS = 10000
 
-      private val NULL_ENVELOPE = SQSEnvelope(false, 0, "", "")
+      private val COMPRESSION_MIN = 500
 
-      fun stringify(e: SQSEnvelope): String {
-         val builder = StringBuilder()
-
-         if (e.l)
-            builder.append("1")
-         else
-            builder.append("0")
-
-         return builder.append(e.s).append("|").append(e.name).append("|").append(e.p).toString()
-      }
-
-      fun parse(p: String): SQSEnvelope {
-         if (p.isNullOrBlank()) {
-            return NULL_ENVELOPE
-         }
-
-         val large = p[0] == '1'
-
-         var indexOfBar = p.indexOf('|')
-         if (indexOfBar < 2) {
-            return NULL_ENVELOPE
-         }
-
-         val sizeSubstr = p.substring(1, indexOfBar)
-         val size = try {
-            Integer.parseInt(sizeSubstr)
-         } catch (e: Exception) {
-            0
-         }
-
-         val remaining = p.substring(indexOfBar + 1)
-
-         indexOfBar = remaining.indexOf('|')
-
-         val name = if (indexOfBar <= 0) "" else try {
-            remaining.substring(0, indexOfBar)
-         } catch (e: Exception) {
-            return NULL_ENVELOPE
-         }
-
-         val payload = if (indexOfBar <= 0 || indexOfBar + 1 == remaining.length) "" else try {
-            remaining.substring(indexOfBar + 1)
-         } catch (e: Exception) {
-            ""
-         }
-
-         return SQSEnvelope(large, size, name, payload)
-      }
-
-      @JvmStatic
-      fun main(args: Array<String>) {
-         val envelopeSerialized = stringify(SQSEnvelope(false, 1000, "move.MyAction", "{}"))
-         println(stringify(SQSEnvelope(false, 1000, "move.MyAction", "{}")))
-         println(stringify(SQSEnvelope(true, 1000, "move.MyAction", "{}")))
-
-         val envelope = parse(envelopeSerialized)
-
-         println(envelope)
-      }
+//      private val NULL_ENVELOPE = SQSEnvelope(false, 0, "", "")
+//
+//      fun stringify(e: SQSEnvelope): String {
+//         val builder = StringBuilder()
+//
+//         if (e.p.length < COMPRESSION_MIN) {
+//            builder.append("-")
+//         }
+//
+//         if (e.l)
+//            builder.append("1")
+//         else
+//            builder.append("0")
+//
+//         builder.append(e.s).append("|").append(e.name).append("|").append(e.p)
+//
+//         if (e.p.length < COMPRESSION_MIN) {
+//            return builder.toString()
+//         }
+//
+//         return GZIPCompression.pack(builder.toString())
+//      }
+//
+//      fun parse(packed: String): SQSEnvelope {
+//         if (packed.isNullOrBlank()) {
+//            return NULL_ENVELOPE
+//         }
+//
+//         val p = if (packed[0] == '-') {
+//            packed.substring(1)
+//         } else {
+//            GZIPCompression.unpack(packed)
+//         }
+//
+//         val large = p[0] == '1'
+//
+//         var indexOfBar = p.indexOf('|')
+//         if (indexOfBar < 2) {
+//            return NULL_ENVELOPE
+//         }
+//
+//         val sizeSubstr = p.substring(1, indexOfBar)
+//         val size = try {
+//            Integer.parseInt(sizeSubstr)
+//         } catch (e: Exception) {
+//            0
+//         }
+//
+//         val remaining = p.substring(indexOfBar + 1)
+//
+//         indexOfBar = remaining.indexOf('|')
+//
+//         val name = if (indexOfBar <= 0) "" else try {
+//            remaining.substring(0, indexOfBar)
+//         } catch (e: Exception) {
+//            return NULL_ENVELOPE
+//         }
+//
+//         val payload = if (indexOfBar <= 0 || indexOfBar + 1 == remaining.length) "" else try {
+//            remaining.substring(indexOfBar + 1)
+//         } catch (e: Exception) {
+//            ""
+//         }
+//
+//         return SQSEnvelope(large, size, name, payload)
+//      }
+//
+//      @JvmStatic
+//      fun main(args: Array<String>) {
+//
+//         val payload = "{\"doc\":{\"orgId\":\"a1acf243e8dc44f3bbb734327b40cd04\",\"orgUnitId\":\"ab6542f861b7476cae96ef65f19532f7\",\"generatedByUserId\":\"20133faf53554c2eb6cf21551e7517ff\",\"docReportType\":\"SALES_ORDER_PO_REQUEST\",\"format\":\"PDF\",\"displayType\":\"WEB\",\"requestClassName\":\"action.worker.docreport.order.GenerateSalesOrderPORequest\",\"parameters\":\"{\\\"orderId\\\":\\\"544c71a4631a430582f56c54aa8def0e\\\"}\",\"startDate\":\"2017-08-08T19:43:01.109Z\",\"endDate\":null,\"processingTimeSeconds\":0.0,\"expiresOnDate\":\"2017-08-09T19:43:01.109Z\",\"status\":\"PENDING\",\"timeout\":\"2017-08-08T20:43:01.109Z\",\"attempt\":1,\"maxDownloads\":5,\"v\":0,\"id\":\"9e859f44280a4501a15126d08fffe915\"},\"orderId\":\"544c71a4631a430582f56c54aa8def0e\"}"
+////         val payload = "{\"doc\":{\"orgId\":\"a1acf243e8dc44f3bbb734327b40cd04\",\"orgUnitId\":\"ab6542f861b7476cae96ef65f19532f7\",\"generatedByUserId\":\"20133faf53554c2eb6cf21551e7517ff\",\"docReportType\":\"SALES_ORDER_PO_REQUEST\",\"format\":\"PDF\",\"displayType\":\"WEB\",\"requestClassName\":\"action.worker.docreport.order.GenerateSalesOrderPORequest\",\"parameters\":\"{\\\"orderId\\\":\\\"544c71a4631a430582f56c54aa8def0e\\\"}\",\"startDate\":\"2017-08-08T19:43:01.109Z\",\"endDate\":null,\"processingTimeSeconds\":0.0,\"expiresOnDate\":\"2017-08-09T19:43:01.109Z\",\"status\":\"PENDING\",\"timeout\":\"2017-08-08T20:43:01.109Z\",\"attempt\":1,\"maxDownloads\":5,\"v\":0,\"id\":\"9e859f44280a4501a15126d08fffe915\"},\"orderId\":\"544c71a4631a430582f56c54aa8def0e\"}/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/bin/java -agentlib:jdwp=transport=dt_socket,address=127.0.0.1:51853,suspend=y,server=n -Dfile.encoding=UTF-8 -classpath \"/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/charsets.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/deploy.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/ext/cldrdata.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/ext/dnsns.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/ext/jaccess.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/ext/jfxrt.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/ext/localedata.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/ext/nashorn.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/ext/sunec.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/ext/sunjce_provider.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/ext/sunpkcs11.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/ext/zipfs.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/javaws.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/jce.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/jfr.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/jfxswt.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/jsse.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/management-agent.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/plugin.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/resources.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/rt.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/lib/ant-javafx.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/lib/dt.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/lib/javafx-mx.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/lib/jconsole.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/lib/packager.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/lib/sa-jdi.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/lib/tools.jar:/Users/clay/repos/move/cloud/action-sqs/target/classes:/Users/clay/.m2/repository/com/google/dagger/dagger/2.11/dagger-2.11.jar:/Users/clay/.m2/repository/javax/inject/javax.inject/1/javax.inject-1.jar:/Users/clay/.m2/repository/org/jetbrains/kotlin/kotlin-stdlib-jre8/1.1.3-2/kotlin-stdlib-jre8-1.1.3-2.jar:/Users/clay/.m2/repository/org/jetbrains/kotlin/kotlin-stdlib/1.1.3-2/kotlin-stdlib-1.1.3-2.jar:/Users/clay/.m2/repository/org/jetbrains/annotations/13.0/annotations-13.0.jar:/Users/clay/.m2/repository/org/jetbrains/kotlin/kotlin-stdlib-jre7/1.1.3-2/kotlin-stdlib-jre7-1.1.3-2.jar:/Users/clay/repos/move/cloud/action/target/classes:/Users/clay/repos/move/cloud/common/target/classes:/Users/clay/.m2/repository/org/jetbrains/kotlinx/kotlinx-coroutines-core/0.16/kotlinx-coroutines-core-0.16.jar:/Users/clay/.m2/repository/org/jetbrains/kotlinx/kotlinx-coroutines-rx1/0.16/kotlinx-coroutines-rx1-0.16.jar:/Users/clay/.m2/repository/io/javaslang/javaslang/2.0.4/javaslang-2.0.4.jar:/Users/clay/.m2/repository/io/javaslang/javaslang-match/2.0.4/javaslang-match-2.0.4.jar:/Users/clay/.m2/repository/com/fasterxml/jackson/core/jackson-core/2.8.9/jackson-core-2.8.9.jar:/Users/clay/.m2/repository/com/fasterxml/jackson/core/jackson-databind/2.8.9/jackson-databind-2.8.9.jar:/Users/clay/.m2/repository/com/fasterxml/jackson/core/jackson-annotations/2.8.9/jackson-annotations-2.8.9.jar:/Users/clay/.m2/repository/com/fasterxml/jackson/datatype/jackson-datatype-jsr310/2.8.9/jackson-datatype-jsr310-2.8.9.jar:/Users/clay/.m2/repository/com/fasterxml/jackson/datatype/jackson-datatype-jdk8/2.8.9/jackson-datatype-jdk8-2.8.9.jar:/Users/clay/.m2/repository/com/fasterxml/jackson/datatype/jackson-datatype-guava/2.8.9/jackson-datatype-guava-2.8.9.jar:/Users/clay/.m2/repository/com/hazelcast/hazelcast-all/3.8.3/hazelcast-all-3.8.3.jar:/Users/clay/.m2/repository/io/vertx/vertx-core/3.4.2/vertx-core-3.4.2.jar:/Users/clay/.m2/repository/io/netty/netty-common/4.1.8.Final/netty-common-4.1.8.Final.jar:/Users/clay/.m2/repository/io/netty/netty-buffer/4.1.8.Final/netty-buffer-4.1.8.Final.jar:/Users/clay/.m2/repository/io/netty/netty-transport/4.1.8.Final/netty-transport-4.1.8.Final.jar:/Users/clay/.m2/repository/io/netty/netty-handler/4.1.8.Final/netty-handler-4.1.8.Final.jar:/Users/clay/.m2/repository/io/netty/netty-codec/4.1.8.Final/netty-codec-4.1.8.Final.jar:/Users/clay/.m2/repository/io/netty/netty-handler-proxy/4.1.8.Final/netty-handler-proxy-4.1.8.Final.jar:/Users/clay/.m2/repository/io/netty/netty-codec-socks/4.1.8.Final/netty-codec-socks-4.1.8.Final.jar:/Users/clay/.m2/repository/io/netty/netty-codec-http/4.1.8.Final/netty-codec-http-4.1.8.Final.jar:/Users/clay/.m2/repository/io/netty/netty-codec-http2/4.1.8.Final/netty-codec-http2-4.1.8.Final.jar:/Users/clay/.m2/repository/io/netty/netty-resolver/4.1.8.Final/netty-resolver-4.1.8.Final.jar:/Users/clay/.m2/repository/io/netty/netty-resolver-dns/4.1.8.Final/netty-resolver-dns-4.1.8.Final.jar:/Users/clay/.m2/repository/io/netty/netty-codec-dns/4.1.8.Final/netty-codec-dns-4.1.8.Final.jar:/Users/clay/.m2/repository/io/vertx/vertx-web/3.4.2/vertx-web-3.4.2.jar:/Users/clay/.m2/repository/io/vertx/vertx-auth-common/3.4.2/vertx-auth-common-3.4.2.jar:/Users/clay/.m2/repository/io/vertx/vertx-rx-java/3.4.2/vertx-rx-java-3.4.2.jar:/Users/clay/.m2/repository/io/vertx/vertx-hazelcast/3.4.2/vertx-hazelcast-3.4.2.jar:/Users/clay/.m2/repository/io/vertx/vertx-dropwizard-metrics/3.4.2/vertx-dropwizard-metrics-3.4.2.jar:/Users/clay/.m2/repository/com/google/guava/guava/21.0/guava-21.0.jar:/Users/clay/.m2/repository/org/reflections/reflections/0.9.11/reflections-0.9.11.jar:/Users/clay/.m2/repository/org/javassist/javassist/3.21.0-GA/javassist-3.21.0-GA.jar:/Users/clay/.m2/repository/javax/validation/validation-api/1.1.0.Final/validation-api-1.1.0.Final.jar:/Users/clay/.m2/repository/joda-time/joda-time/2.9.4/joda-time-2.9.4.jar:/Users/clay/.m2/repository/io/dropwizard/metrics/metrics-core/3.2.3/metrics-core-3.2.3.jar:/Users/clay/.m2/repository/io/dropwizard/metrics/metrics-healthchecks/3.2.3/metrics-healthchecks-3.2.3.jar:/Users/clay/.m2/repository/io/dropwizard/metrics/metrics-graphite/3.2.3/metrics-graphite-3.2.3.jar:/Users/clay/.m2/repository/io/vertx/vertx-circuit-breaker/3.4.2/vertx-circuit-breaker-3.4.2.jar:/Users/clay/.m2/repository/com/netflix/hystrix/hystrix-core/1.5.12/hystrix-core-1.5.12.jar:/Users/clay/.m2/repository/org/slf4j/slf4j-api/1.7.24/slf4j-api-1.7.24.jar:/Users/clay/.m2/repository/com/netflix/archaius/archaius-core/0.4.1/archaius-core-0.4.1.jar:/Users/clay/.m2/repository/commons-configuration/commons-configuration/1.8/commons-configuration-1.8.jar:/Users/clay/.m2/repository/commons-lang/commons-lang/2.6/commons-lang-2.6.jar:/Users/clay/.m2/repository/io/reactivex/rxjava/1.3.0/rxjava-1.3.0.jar:/Users/clay/.m2/repository/org/hdrhistogram/HdrHistogram/2.1.9/HdrHistogram-2.1.9.jar:/Users/clay/.m2/repository/com/amazonaws/aws-java-sdk-sqs/1.11.166/aws-java-sdk-sqs-1.11.166.jar:/Users/clay/.m2/repository/com/amazonaws/aws-java-sdk-core/1.11.166/aws-java-sdk-core-1.11.166.jar:/Users/clay/.m2/repository/commons-logging/commons-logging/1.1.3/commons-logging-1.1.3.jar:/Users/clay/.m2/repository/org/apache/httpcomponents/httpclient/4.5.2/httpclient-4.5.2.jar:/Users/clay/.m2/repository/org/apache/httpcomponents/httpcore/4.4.4/httpcore-4.4.4.jar:/Users/clay/.m2/repository/commons-codec/commons-codec/1.9/commons-codec-1.9.jar:/Users/clay/.m2/repository/software/amazon/ion/ion-java/1.0.2/ion-java-1.0.2.jar:/Users/clay/.m2/repository/com/fasterxml/jackson/dataformat/jackson-dataformat-cbor/2.6.7/jackson-dataformat-cbor-2.6.7.jar:/Users/clay/.m2/repository/com/amazonaws/jmespath-java/1.11.166/jmespath-java-1.11.166.jar:/Users/clay/.m2/repository/com/amazonaws/aws-java-sdk-s3/1.11.166/aws-java-sdk-s3-1.11.166.jar:/Users/clay/.m2/repository/com/amazonaws/aws-java-sdk-kms/1.11.166/aws-java-sdk-kms-1.11.166.jar:/Users/clay/.m2/repository/com/squareup/javapoet/1.9.0/javapoet-1.9.0.jar:/Applications/IntelliJ IDEA.app/Contents/lib/idea_rt.jar\" move.action.SQSService\n" +
+////            "Connected to the target VM, address: '127.0.0.1:51853', transport: 'socket'\n" +
+////            "SLF4J: Failed to load class \"org.slf4j.impl.StaticLoggerBinder\".\n" +
+////            "SLF4J: Defaulting to no-operation (NOP) logger implementation\n" +
+////            "SLF4J: See http://www.slf4j.org/codes.html#StaticLoggerBinder for further details.\n" +
+////            "Raw: 692   Packed: 648   FastLZ: 587    FastLZ-Packed: 784      GZIP: 462\n" +
+////            "Disconnected from the target VM, address: '127.0.0.1:51853', transport: 'socket'\n" +
+////            "01000|move.MyAction|{}\n" +
+////            "11000|move.MyAction|{}\n" +
+////            "SQSEnvelope(l=false, s=1000, name=move.MyAction, p={})\n" +
+////            "\n" +
+////            "Process finished with exit code 0"
+//         val packed = GZIPCompression.pack(payload)
+//         val compressed = FastLZ.compress(payload)
+//         val gzipCompressed = GZIPCompression.compress(payload)
+//         val lzPacked = BaseEncoding.base64().encode(compressed)
+//         println("Raw: " + payload.length + "   Packed: " + packed.length + "   FastLZ: " + compressed.size + "    FastLZ-Packed: " + lzPacked.length + "      GZIP: " + gzipCompressed.size)
+//         val unpacked = GZIPCompression.unpack(packed)
+//
+//         val envelopeSerialized = stringify(SQSEnvelope(false, 1000, "move.MyAction", "{}"))
+//         println(stringify(SQSEnvelope(false, 1000, "move.MyAction", "{}")))
+//         println(stringify(SQSEnvelope(true, 1000, "move.MyAction", "{}")))
+//
+//         val envelope = parse(envelopeSerialized)
+//
+//         println(envelope)
+//      }
    }
 }
