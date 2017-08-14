@@ -19,29 +19,7 @@ data class WorkerEnvelope(val option: Int = 0,
  *
  */
 object WorkerPacker {
-   private val MIN_THREADS = 1
-   private val MAX_THREADS = 10000
-   private val THREADS_MULTIPLIER = 2.0
-   private val MAX_CONNECTIONS = 100
-   private val MAX_NUMBER_OF_MESSAGES = 10
-   // Default to 2 hours.
-   private val VISIBILITY_MULTIPLIER = 2.1
-   private val VISIBILITY_PADDING_MILLIS = 2_000L
-   private val FILE_RETRY_AGE_SECONDS = 10L
-   private val MAX_CACHE_AGE_MINUTES = 120L
-   private val MAX_FILE_CACHE = 100_000L
-   private val MAX_UPLOADS = 100_000L
-   private val MAX_DOWNLOADS = 100_000L
-   private val SQS_POLL_WAIT_SECONDS = 20 // Can be a value between 1 and 20
-   private val KEEP_ALIVE_SECONDS = 60L
-   private val MAX_PAYLOAD_SIZE = 255000
-   private val MIN_RECEIVE_THREADS = 1
-   private val MAX_RECEIVE_THREADS = 1024
-   private val DEFAULT_PARALLELISM = Runtime.getRuntime().availableProcessors() * 2
-   private val DEFAULT_WORKER_TIMEOUT_MILLIS = 10000
-
    val COMPRESSION_MIN = 384
-
    val NULL_ENVELOPE = WorkerEnvelope(0, "", 0, ByteArray(0))
 
    fun stringify(envelope: WorkerEnvelope): String {
@@ -180,7 +158,7 @@ object WorkerPacker {
    }
 
    @Throws(IOException::class)
-   fun unpack(compressed: ByteArray): ByteArray {
+   fun unpack(compressed: ByteArray?): ByteArray {
       if (compressed == null || compressed.isEmpty()) {
          return ByteArray(0)
       }

@@ -5,6 +5,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.guava.GuavaModule;
+import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.io.InputStream;
 import java.time.Clock;
@@ -29,6 +31,9 @@ public class WireFormat {
 
   static {
     MAPPER.registerModule(new JavaTimeModule());
+    MAPPER.registerModule(new Jdk8Module());
+    MAPPER.registerModule(new GuavaModule());
+
     MAPPER.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     MAPPER.configure(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES, false);
     MAPPER.configure(DeserializationFeature.FAIL_ON_IGNORED_PROPERTIES, false);

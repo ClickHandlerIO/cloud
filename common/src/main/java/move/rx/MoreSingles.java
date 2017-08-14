@@ -1,5 +1,8 @@
 package move.rx;
 
+import com.google.common.collect.Iterables;
+import java.util.ArrayList;
+import java.util.List;
 import move.Tuple;
 import move.Tuple2;
 import move.Tuple3;
@@ -840,30 +843,57 @@ public interface MoreSingles {
 
   /**
    * Returns a Single that emits the result of specified combiner function applied to combination of
-   * items emitted, in sequence, by an Iterable of other Singles.
-   * <p>
-   * {@code zip} applies this function in strict sequence.
-   * <p>
-   * <img width="640" height="380" src="https://raw.github.com/wiki/ReactiveX/RxJava/images/rx-operators/zip.png" alt="">
-   * <dl>
-   *  <dt><b>Scheduler:</b></dt>
-   *  <dd>{@code zip} does not operate by default on a particular {@link Scheduler}.</dd>
-   * </dl>
+   * items emitted, in sequence, by an Iterable of other Singles. <p> {@code zip} applies this
+   * function in strict sequence. <p> <img width="640" height="380" src="https://raw.github.com/wiki/ReactiveX/RxJava/images/rx-operators/zip.png"
+   * alt=""> <dl> <dt><b>Scheduler:</b></dt> <dd>{@code zip} does not operate by default on a
+   * particular {@link Scheduler}.</dd> </dl>
    *
    * @param <R> the result value type
-   * @param singles
-   *            an Iterable of source Singles. Should not be empty because {@link Single} either emits result or error.
-   *            {@link java.util.NoSuchElementException} will be emit as error if Iterable will be empty.
-   * @param zipFunction
-   *            a function that, when applied to an item emitted by each of the source Singles, results in
-   *            an item that will be emitted by the resulting Single
+   * @param singles an Iterable of source Singles. Should not be empty because {@link Single} either
+   * emits result or error. {@link java.util.NoSuchElementException} will be emit as error if
+   * Iterable will be empty.
+   * @param zipFunction a function that, when applied to an item emitted by each of the source
+   * Singles, results in an item that will be emitted by the resulting Single
    * @return a Single that emits the zipped results
-   * @see <a href="http://reactivex.io/documentation/operators/zip.html">ReactiveX operators documentation: Zip</a>
+   * @see <a href="http://reactivex.io/documentation/operators/zip.html">ReactiveX operators
+   * documentation: Zip</a>
    */
-//    @SuppressWarnings("unchecked")
-//    public static <R> Single<R> ordered(Iterable<? extends Single<?>> singles, FuncN<? extends R> zipFunction) {
-//        @SuppressWarnings("rawtypes")
-//        Single[] iterableToArray = iterableToArray(singles);
-//        return SingleOperatorOrderedZip.zip(iterableToArray, zipFunction);
-//    }
+  @SuppressWarnings("unchecked")
+  public static <R> Single<R> ordered(Iterable<? extends Single<?>> singles,
+      FuncN<? extends R> zipFunction) {
+    @SuppressWarnings("rawtypes")
+    Single[] iterableToArray = Iterables.toArray(singles, Single.class);
+    return SingleOperatorOrderedZip.zip(iterableToArray, zipFunction);
+  }
+
+  /**
+   * Returns a Single that emits the result of specified combiner function applied to combination of
+   * items emitted, in sequence, by an Iterable of other Singles. <p> {@code zip} applies this
+   * function in strict sequence. <p> <img width="640" height="380" src="https://raw.github.com/wiki/ReactiveX/RxJava/images/rx-operators/zip.png"
+   * alt=""> <dl> <dt><b>Scheduler:</b></dt> <dd>{@code zip} does not operate by default on a
+   * particular {@link Scheduler}.</dd> </dl>
+   *
+   * @param <R> the result value type
+   * @param singles an Iterable of source Singles. Should not be empty because {@link Single} either
+   * emits result or error. {@link java.util.NoSuchElementException} will be emit as error if
+   * Iterable will be empty.
+   * @return a Single that emits the zipped results
+   * @see <a href="http://reactivex.io/documentation/operators/zip.html">ReactiveX operators
+   * documentation: Zip</a>
+   */
+  @SuppressWarnings("unchecked")
+  public static <R> Single<List<R>> orderedList(Iterable<? extends Single<R>> singles) {
+    @SuppressWarnings("rawtypes")
+    Single[] iterableToArray = Iterables.toArray(singles, Single.class);
+    return SingleOperatorOrderedZip.zip(iterableToArray, new FuncN<List<R>>() {
+      @Override
+      public List<R> call(Object... args) {
+        final List<R> list = new ArrayList<>(args.length);
+        for (Object arg : args) {
+          list.add((R) arg);
+        }
+        return list;
+      }
+    });
+  }
 }
