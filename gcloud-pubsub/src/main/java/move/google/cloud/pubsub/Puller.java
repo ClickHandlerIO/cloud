@@ -21,6 +21,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 
 import com.google.common.util.concurrent.MoreExecutors;
 import com.swrve.ratelimitedlogger.RateLimitedLog;
+import io.vertx.core.Vertx;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.Objects;
@@ -42,8 +43,7 @@ public class Puller implements Closeable {
       .maxRate(MAX_LOG_RATE)
       .every(MAX_LOG_DURATION)
       .build();
-  private final ScheduledExecutorService scheduler =
-      MoreExecutors.getExitingScheduledExecutorService(new ScheduledThreadPoolExecutor(1));
+  private final ScheduledExecutorService scheduler;
   private final Acker acker;
   private final Pubsub pubsub;
   private final String project;
@@ -57,6 +57,9 @@ public class Puller implements Closeable {
   private final Backoff backoff;
   private final AtomicInteger outstandingRequests = new AtomicInteger();
   private final AtomicInteger outstandingMessages = new AtomicInteger();
+  private final Vertx vertx;
+  private final long timerID;
+
   public Puller(final Builder builder) {
     this.pubsub = Objects.requireNonNull(builder.pubsub, "pubsub");
     this.project = Objects.requireNonNull(builder.project, "project");
@@ -86,9 +89,19 @@ public class Puller implements Closeable {
     // Start pulling
     pull();
 
-    // Schedule pulling to compensate for failures and exceeding the outstanding message limit
-    scheduler
-        .scheduleWithFixedDelay(this::pull, pullIntervalMillis, pullIntervalMillis, MILLISECONDS);
+    if (builder.vertx == null) {
+      vertx = null;
+      timerID = 0L;
+      // Schedule pulling to compensate for failures and exceeding the outstanding message limit
+      scheduler =
+          MoreExecutors.getExitingScheduledExecutorService(new ScheduledThreadPoolExecutor(1));
+      scheduler
+          .scheduleWithFixedDelay(this::pull, pullIntervalMillis, pullIntervalMillis, MILLISECONDS);
+    } else {
+      scheduler = null;
+      vertx = builder.vertx;
+      timerID = vertx.setPeriodic(pullIntervalMillis, event -> pull());
+    }
   }
 
   /**
@@ -100,11 +113,15 @@ public class Puller implements Closeable {
 
   @Override
   public void close() throws IOException {
-    scheduler.shutdownNow();
-    try {
-      scheduler.awaitTermination(30, SECONDS);
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
+    if (scheduler != null) {
+      scheduler.shutdownNow();
+      try {
+        scheduler.awaitTermination(30, SECONDS);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+      }
+    } else if (vertx != null) {
+      vertx.cancelTimer(timerID);
     }
   }
 
@@ -157,7 +174,7 @@ public class Puller implements Closeable {
     pubsub.pull(
         project,
         subscription,
-        true,
+        false,
         batchSize
     ).whenComplete((messages, ex) -> {
 
@@ -240,12 +257,13 @@ public class Puller implements Closeable {
     private String project;
     private String subscription;
     private MessageHandler handler;
-    private int concurrency = 64;
+    private int concurrency = 1;
     private int batchSize = 1000;
     private int maxOutstandingMessages = 64_000;
     private int maxAckQueueSize = 10 * batchSize;
     private long pullIntervalMillis = 1000;
     private int maxBackoffMultiplier = 0;
+    private Vertx vertx;
 
     /**
      * Set the {@link Pubsub} client to use. The client will be closed when this {@link Puller} is
@@ -330,6 +348,16 @@ public class Puller implements Closeable {
      */
     public Builder maxBackoffMultiplier(final int maxBackoffMultiplier) {
       this.maxBackoffMultiplier = maxBackoffMultiplier;
+      return this;
+    }
+
+    public Builder handler(MessageHandler handler) {
+      this.handler = handler;
+      return this;
+    }
+
+    public Builder vertx(Vertx vertx) {
+      this.vertx = vertx;
       return this;
     }
 

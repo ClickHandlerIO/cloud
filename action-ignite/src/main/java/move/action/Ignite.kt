@@ -2,12 +2,14 @@ package move.action
 
 import com.google.common.util.concurrent.AbstractIdleService
 import io.vertx.core.DeploymentOptions
+import io.vertx.core.net.NetClientOptions
 import io.vertx.rxjava.core.AbstractVerticle
 import io.vertx.rxjava.core.Vertx
 import org.apache.ignite.IgniteCache
 import org.apache.ignite.IgniteDataStreamer
 import org.apache.ignite.Ignition
 import org.apache.ignite.cache.CacheMode
+import org.apache.ignite.cache.eviction.sorted.SortedEvictionPolicy
 import org.apache.ignite.cache.query.SqlFieldsQuery
 import org.apache.ignite.cache.query.SqlQuery
 import org.apache.ignite.cluster.ClusterNode
@@ -39,6 +41,31 @@ class IgniteService : AbstractIdleService {
       TODO("not implemented")
    }
 
+}
+
+object DNS {
+   @JvmStatic
+   fun main(args: Array<String>) {
+      val vertx = Vertx.vertx()
+      val client = vertx.createDnsClient(53, "8.8.4.4")
+      client.lookup4("zproxy.luminati.io") { ar ->
+         if (ar.succeeded()) {
+            val records = ar.result()
+            records.forEach { println(it) }
+         } else {
+            println("Failed to resolve entry" + ar.cause())
+         }
+      }
+
+//      client.resolveA("zproxy.luminati.io", { ar ->
+//         if (ar.succeeded()) {
+//            val records = ar.result()
+//            records.forEach { println(it) }
+//         } else {
+//            println("Failed to resolve entry" + ar.cause())
+//         }
+//      })
+   }
 }
 
 
@@ -101,6 +128,9 @@ object Runner {
    fun main(args: Array<String>) {
       ignite.active(true)
 
+      val usedIps = ignite.cache<String, UtUsedIp>("usedIps")
+      usedIps.getAndPutIfAbsentAsync("test", UtUsedIp(groupId = "", created = System.currentTimeMillis(), ip = "127.0.0.1"))
+
       val deploymentOptions = DeploymentOptions()
       deploymentOptions.instances = 1
       vertx.deployVerticle(MyVerticle::class.java.name)
@@ -126,7 +156,7 @@ object Runner {
 
       vertx.periodicStream(1000).handler {
 
-         ignite.message().send("user1", WorkerPacker.byteify(WorkerEnvelope(0, "MyAction", 0, ByteArray(0))))
+         ignite.message().send("user1", WorkerPacker.byteify(WorkerEnvelope(0, System.currentTimeMillis(), 0, "MyAction", 0, ByteArray(0))))
       }
 
       val streamer: IgniteDataStreamer<Long, UtConnection> = ignite.dataStreamer("connections")
@@ -175,7 +205,14 @@ object Runner {
       cacheConfig.setIndexedTypes(String.javaClass, UtConnection::class.java)
       cacheConfig.setCacheMode(CacheMode.PARTITIONED)
 
-      config.setCacheConfiguration(cacheConfig)
+      val usedIpConfig = CacheConfiguration<String, Long>("usedIps")
+      usedIpConfig.setIndexedTypes(String.javaClass, Long.javaClass)
+      usedIpConfig.setCacheMode(CacheMode.PARTITIONED)
+      usedIpConfig.setOnheapCacheEnabled(true)
+      usedIpConfig.setEvictionPolicy(SortedEvictionPolicy<String, Long>(100_000_000))
+      usedIpConfig.backups = 2
+
+      config.setCacheConfiguration(cacheConfig, usedIpConfig)
 
       return config
    }
@@ -222,4 +259,11 @@ object RunClient {
    }
 }
 
+/**
+ * Used to determine if IP was used recently.
+ */
+data class UtUsedIp(var groupId: String, var created: Long, var ip: String)
+
 data class UtConnection(val id: Long, val created: Long = System.currentTimeMillis())
+
+data class UtRotatableConnection(var id: Long, var created: Long = System.currentTimeMillis(), var frequency: Int)

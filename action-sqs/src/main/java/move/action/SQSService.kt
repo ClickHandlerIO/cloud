@@ -30,7 +30,6 @@ import com.google.common.collect.ImmutableSet
 import com.google.common.util.concurrent.AbstractIdleService
 import com.google.common.util.concurrent.Service
 import com.netflix.hystrix.exception.HystrixTimeoutException
-import io.vertx.rxjava.core.TimeoutStream
 import io.vertx.rxjava.core.Vertx
 import javaslang.control.Try
 import move.cluster.HazelcastProvider
@@ -66,6 +65,8 @@ internal constructor(val vertx: Vertx,
    private lateinit var bufferExecutor: ExecutorService
    //   private lateinit var s3Client: AmazonS3Client
    private lateinit var s3TransferManager: TransferManager
+   private var receiveTimerID: Long = 0L
+   private var fileTimerID: Long = 0L
 
    private val activeFiles: Cache<String, File> = CacheBuilder
       .newBuilder()
@@ -122,7 +123,6 @@ internal constructor(val vertx: Vertx,
       }).build()
 
    private val fileSystem = vertx.fileSystem()
-   private lateinit var timer: TimeoutStream
 
    /**
     * Determines if this instance allows for "any" worker actions.
@@ -319,9 +319,14 @@ internal constructor(val vertx: Vertx,
                   config.awsAccessKey, config.awsSecretKey)))
       }
 
+      // Set a good limit to max HTTP connections in SQS client.
+      val maxConnections = ActionManager.workerActionQueueGroupMap.map { it.value.size }.sum() * 2
+
       builder.withClientConfiguration(ClientConfiguration()
-         // Give a nice buffer to max connections based on max threads.
-         .withMaxConnections(MAX_CONNECTIONS)
+         // WorkerPacker takes care of GZIP compression already.
+         .withGzip(false)
+         .withThrottledRetries(true)
+         .withMaxConnections(Math.max(MIN_MAX_CONNECTIONS, maxConnections))
       )
 
       // Build SQS client and the Buffered client based on the "Real" SQS client.
@@ -343,7 +348,7 @@ internal constructor(val vertx: Vertx,
             }
 
          // If there are more than 1 action mapped to this queue then find the max "parallelism"
-         val maxParalellism = entry.value.map {
+         val maxParallelism = entry.value.map {
             it.parallelism()
          }.max()?.toInt() ?: DEFAULT_PARALLELISM
          // If there are more than 1 action mapped to this queue then find largest "timeoutMillis"
@@ -367,7 +372,7 @@ internal constructor(val vertx: Vertx,
          if (workerEnabled) {
             // Enable pre-fetching
             bufferConfig.withLongPoll(true)
-            bufferConfig.withLongPollWaitTimeoutSeconds(20)
+            bufferConfig.withLongPollWaitTimeoutSeconds(SQS_POLL_WAIT_SECONDS)
             bufferConfig.withMaxInflightReceiveBatches(queueConfig.maxInflightReceiveBatches)
             bufferConfig.withMaxDoneReceiveBatches(queueConfig.maxDoneReceiveBatches)
 
@@ -425,13 +430,30 @@ internal constructor(val vertx: Vertx,
          }
       }
 
-      timer = vertx.periodicStream(FILE_RETRY_AGE_SECONDS * 1000L).handler {
+      val hasReceivers = queueMap.filter { it.value.receiver != null }.count()
+
+      // Set a periodic timer if there are receivers to ensure
+      receiveTimerID =
+         if (hasReceivers < 1)
+            0L
+         else
+            vertx.setPeriodic(ENSURE_RECEIVERS_POLL_MILLIS) {
+               queueMap.values.forEach {
+                  it.receiver?.receiveMore()
+               }
+            }
+
+      fileTimerID = vertx.setPeriodic(FILE_RETRY_AGE_SECONDS * 1000L) {
          cleanUpCaches()
       }
    }
 
    @Throws(Exception::class)
    override fun shutDown() {
+      if (receiveTimerID != 0L) {
+         vertx.cancelTimer(receiveTimerID)
+      }
+
       queueMap.values.forEach { queueContext ->
          if (queueContext.receiver != null) {
             queueContext.receiver.stopAsync().awaitTerminated()
@@ -440,7 +462,11 @@ internal constructor(val vertx: Vertx,
 
       client.shutdown()
       s3TransferManager.shutdownNow(true)
-      timer.cancel()
+
+      if (fileTimerID != 0L) {
+         vertx.cancelTimer(fileTimerID)
+         cleanUpCaches()
+      }
    }
 
    private fun cleanUpCaches() {
@@ -523,6 +549,8 @@ internal constructor(val vertx: Vertx,
                         queueUrl,
                         WorkerPacker.stringify(WorkerEnvelope(
                            1,
+                           System.currentTimeMillis(),
+                           request.delaySeconds,
                            actionProvider.name,
                            payload.size,
                            WireFormat.byteify(S3Pointer(
@@ -574,7 +602,14 @@ internal constructor(val vertx: Vertx,
             } else {
                val sendRequest = SendMessageRequest(
                   queueUrl,
-                  WorkerPacker.stringify(WorkerEnvelope(0, actionProvider.name, payload.size, payload))
+                  WorkerPacker.stringify(WorkerEnvelope(
+                     0,
+                     System.currentTimeMillis(),
+                     request.delaySeconds,
+                     actionProvider.name,
+                     payload.size,
+                     payload
+                  ))
                )
 
                if (request.delaySeconds > 0) {
@@ -672,10 +707,10 @@ internal constructor(val vertx: Vertx,
 
       private val activeMessages = AtomicInteger(0)
 
-      var concurrentRequests = if (parallelism < MIN_RECEIVE_THREADS) {
-         MIN_RECEIVE_THREADS
-      } else if (parallelism > MAX_RECEIVE_THREADS) {
-         MAX_RECEIVE_THREADS
+      var concurrentRequests = if (parallelism < MIN_PARALLELISM) {
+         MIN_PARALLELISM
+      } else if (parallelism > MAX_PARALLELISM) {
+         MAX_PARALLELISM
       } else {
          parallelism
       }
@@ -958,20 +993,12 @@ internal constructor(val vertx: Vertx,
                                     val config: SQSQueueConfig,
                                     var actionProviders: ImmutableSet<Set<WorkerActionProvider<Action<Any, Boolean>, Any>>>)
 
-   class QueueConfiguration {
-      var name: String? = null
-      var config: SQSQueueConfig? = null
-      var actions: List<String>? = null
-   }
-
    companion object {
       private val LOG = LoggerFactory.getLogger(SQSService::class.java)
 
-      private val MIN_THREADS = 1
-      private val MAX_THREADS = 10000
-      private val THREADS_MULTIPLIER = 2.0
-      private val MAX_CONNECTIONS = 100
+      private val MIN_MAX_CONNECTIONS = 100
       private val MAX_NUMBER_OF_MESSAGES = 10
+      private val ENSURE_RECEIVERS_POLL_MILLIS = 2500L
       // Default to 2 hours.
       private val VISIBILITY_MULTIPLIER = 2.1
       private val VISIBILITY_PADDING_MILLIS = 2_000L
@@ -983,110 +1010,9 @@ internal constructor(val vertx: Vertx,
       private val SQS_POLL_WAIT_SECONDS = 20 // Can be a value between 1 and 20
       private val KEEP_ALIVE_SECONDS = 60L
       private val MAX_PAYLOAD_SIZE = 255000
-      private val MIN_RECEIVE_THREADS = 1
-      private val MAX_RECEIVE_THREADS = 1024
+      private val MIN_PARALLELISM = 1
+      private val MAX_PARALLELISM = 1024 * 10
       private val DEFAULT_PARALLELISM = Runtime.getRuntime().availableProcessors() * 2
       private val DEFAULT_WORKER_TIMEOUT_MILLIS = 10000
-
-      private val COMPRESSION_MIN = 500
-
-//      private val NULL_ENVELOPE = SQSEnvelope(false, 0, "", "")
-//
-//      fun stringify(e: SQSEnvelope): String {
-//         val builder = StringBuilder()
-//
-//         if (e.p.length < COMPRESSION_MIN) {
-//            builder.append("-")
-//         }
-//
-//         if (e.l)
-//            builder.append("1")
-//         else
-//            builder.append("0")
-//
-//         builder.append(e.s).append("|").append(e.name).append("|").append(e.p)
-//
-//         if (e.p.length < COMPRESSION_MIN) {
-//            return builder.toString()
-//         }
-//
-//         return GZIPCompression.pack(builder.toString())
-//      }
-//
-//      fun parse(packed: String): SQSEnvelope {
-//         if (packed.isNullOrBlank()) {
-//            return NULL_ENVELOPE
-//         }
-//
-//         val p = if (packed[0] == '-') {
-//            packed.substring(1)
-//         } else {
-//            GZIPCompression.unpack(packed)
-//         }
-//
-//         val large = p[0] == '1'
-//
-//         var indexOfBar = p.indexOf('|')
-//         if (indexOfBar < 2) {
-//            return NULL_ENVELOPE
-//         }
-//
-//         val sizeSubstr = p.substring(1, indexOfBar)
-//         val size = try {
-//            Integer.parseInt(sizeSubstr)
-//         } catch (e: Exception) {
-//            0
-//         }
-//
-//         val remaining = p.substring(indexOfBar + 1)
-//
-//         indexOfBar = remaining.indexOf('|')
-//
-//         val name = if (indexOfBar <= 0) "" else try {
-//            remaining.substring(0, indexOfBar)
-//         } catch (e: Exception) {
-//            return NULL_ENVELOPE
-//         }
-//
-//         val payload = if (indexOfBar <= 0 || indexOfBar + 1 == remaining.length) "" else try {
-//            remaining.substring(indexOfBar + 1)
-//         } catch (e: Exception) {
-//            ""
-//         }
-//
-//         return SQSEnvelope(large, size, name, payload)
-//      }
-//
-//      @JvmStatic
-//      fun main(args: Array<String>) {
-//
-//         val payload = "{\"doc\":{\"orgId\":\"a1acf243e8dc44f3bbb734327b40cd04\",\"orgUnitId\":\"ab6542f861b7476cae96ef65f19532f7\",\"generatedByUserId\":\"20133faf53554c2eb6cf21551e7517ff\",\"docReportType\":\"SALES_ORDER_PO_REQUEST\",\"format\":\"PDF\",\"displayType\":\"WEB\",\"requestClassName\":\"action.worker.docreport.order.GenerateSalesOrderPORequest\",\"parameters\":\"{\\\"orderId\\\":\\\"544c71a4631a430582f56c54aa8def0e\\\"}\",\"startDate\":\"2017-08-08T19:43:01.109Z\",\"endDate\":null,\"processingTimeSeconds\":0.0,\"expiresOnDate\":\"2017-08-09T19:43:01.109Z\",\"status\":\"PENDING\",\"timeout\":\"2017-08-08T20:43:01.109Z\",\"attempt\":1,\"maxDownloads\":5,\"v\":0,\"id\":\"9e859f44280a4501a15126d08fffe915\"},\"orderId\":\"544c71a4631a430582f56c54aa8def0e\"}"
-////         val payload = "{\"doc\":{\"orgId\":\"a1acf243e8dc44f3bbb734327b40cd04\",\"orgUnitId\":\"ab6542f861b7476cae96ef65f19532f7\",\"generatedByUserId\":\"20133faf53554c2eb6cf21551e7517ff\",\"docReportType\":\"SALES_ORDER_PO_REQUEST\",\"format\":\"PDF\",\"displayType\":\"WEB\",\"requestClassName\":\"action.worker.docreport.order.GenerateSalesOrderPORequest\",\"parameters\":\"{\\\"orderId\\\":\\\"544c71a4631a430582f56c54aa8def0e\\\"}\",\"startDate\":\"2017-08-08T19:43:01.109Z\",\"endDate\":null,\"processingTimeSeconds\":0.0,\"expiresOnDate\":\"2017-08-09T19:43:01.109Z\",\"status\":\"PENDING\",\"timeout\":\"2017-08-08T20:43:01.109Z\",\"attempt\":1,\"maxDownloads\":5,\"v\":0,\"id\":\"9e859f44280a4501a15126d08fffe915\"},\"orderId\":\"544c71a4631a430582f56c54aa8def0e\"}/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/bin/java -agentlib:jdwp=transport=dt_socket,address=127.0.0.1:51853,suspend=y,server=n -Dfile.encoding=UTF-8 -classpath \"/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/charsets.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/deploy.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/ext/cldrdata.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/ext/dnsns.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/ext/jaccess.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/ext/jfxrt.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/ext/localedata.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/ext/nashorn.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/ext/sunec.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/ext/sunjce_provider.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/ext/sunpkcs11.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/ext/zipfs.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/javaws.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/jce.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/jfr.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/jfxswt.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/jsse.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/management-agent.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/plugin.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/resources.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/jre/lib/rt.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/lib/ant-javafx.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/lib/dt.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/lib/javafx-mx.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/lib/jconsole.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/lib/packager.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/lib/sa-jdi.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_141.jdk/Contents/Home/lib/tools.jar:/Users/clay/repos/move/cloud/action-sqs/target/classes:/Users/clay/.m2/repository/com/google/dagger/dagger/2.11/dagger-2.11.jar:/Users/clay/.m2/repository/javax/inject/javax.inject/1/javax.inject-1.jar:/Users/clay/.m2/repository/org/jetbrains/kotlin/kotlin-stdlib-jre8/1.1.3-2/kotlin-stdlib-jre8-1.1.3-2.jar:/Users/clay/.m2/repository/org/jetbrains/kotlin/kotlin-stdlib/1.1.3-2/kotlin-stdlib-1.1.3-2.jar:/Users/clay/.m2/repository/org/jetbrains/annotations/13.0/annotations-13.0.jar:/Users/clay/.m2/repository/org/jetbrains/kotlin/kotlin-stdlib-jre7/1.1.3-2/kotlin-stdlib-jre7-1.1.3-2.jar:/Users/clay/repos/move/cloud/action/target/classes:/Users/clay/repos/move/cloud/common/target/classes:/Users/clay/.m2/repository/org/jetbrains/kotlinx/kotlinx-coroutines-core/0.16/kotlinx-coroutines-core-0.16.jar:/Users/clay/.m2/repository/org/jetbrains/kotlinx/kotlinx-coroutines-rx1/0.16/kotlinx-coroutines-rx1-0.16.jar:/Users/clay/.m2/repository/io/javaslang/javaslang/2.0.4/javaslang-2.0.4.jar:/Users/clay/.m2/repository/io/javaslang/javaslang-match/2.0.4/javaslang-match-2.0.4.jar:/Users/clay/.m2/repository/com/fasterxml/jackson/core/jackson-core/2.8.9/jackson-core-2.8.9.jar:/Users/clay/.m2/repository/com/fasterxml/jackson/core/jackson-databind/2.8.9/jackson-databind-2.8.9.jar:/Users/clay/.m2/repository/com/fasterxml/jackson/core/jackson-annotations/2.8.9/jackson-annotations-2.8.9.jar:/Users/clay/.m2/repository/com/fasterxml/jackson/datatype/jackson-datatype-jsr310/2.8.9/jackson-datatype-jsr310-2.8.9.jar:/Users/clay/.m2/repository/com/fasterxml/jackson/datatype/jackson-datatype-jdk8/2.8.9/jackson-datatype-jdk8-2.8.9.jar:/Users/clay/.m2/repository/com/fasterxml/jackson/datatype/jackson-datatype-guava/2.8.9/jackson-datatype-guava-2.8.9.jar:/Users/clay/.m2/repository/com/hazelcast/hazelcast-all/3.8.3/hazelcast-all-3.8.3.jar:/Users/clay/.m2/repository/io/vertx/vertx-core/3.4.2/vertx-core-3.4.2.jar:/Users/clay/.m2/repository/io/netty/netty-common/4.1.8.Final/netty-common-4.1.8.Final.jar:/Users/clay/.m2/repository/io/netty/netty-buffer/4.1.8.Final/netty-buffer-4.1.8.Final.jar:/Users/clay/.m2/repository/io/netty/netty-transport/4.1.8.Final/netty-transport-4.1.8.Final.jar:/Users/clay/.m2/repository/io/netty/netty-handler/4.1.8.Final/netty-handler-4.1.8.Final.jar:/Users/clay/.m2/repository/io/netty/netty-codec/4.1.8.Final/netty-codec-4.1.8.Final.jar:/Users/clay/.m2/repository/io/netty/netty-handler-proxy/4.1.8.Final/netty-handler-proxy-4.1.8.Final.jar:/Users/clay/.m2/repository/io/netty/netty-codec-socks/4.1.8.Final/netty-codec-socks-4.1.8.Final.jar:/Users/clay/.m2/repository/io/netty/netty-codec-http/4.1.8.Final/netty-codec-http-4.1.8.Final.jar:/Users/clay/.m2/repository/io/netty/netty-codec-http2/4.1.8.Final/netty-codec-http2-4.1.8.Final.jar:/Users/clay/.m2/repository/io/netty/netty-resolver/4.1.8.Final/netty-resolver-4.1.8.Final.jar:/Users/clay/.m2/repository/io/netty/netty-resolver-dns/4.1.8.Final/netty-resolver-dns-4.1.8.Final.jar:/Users/clay/.m2/repository/io/netty/netty-codec-dns/4.1.8.Final/netty-codec-dns-4.1.8.Final.jar:/Users/clay/.m2/repository/io/vertx/vertx-web/3.4.2/vertx-web-3.4.2.jar:/Users/clay/.m2/repository/io/vertx/vertx-auth-common/3.4.2/vertx-auth-common-3.4.2.jar:/Users/clay/.m2/repository/io/vertx/vertx-rx-java/3.4.2/vertx-rx-java-3.4.2.jar:/Users/clay/.m2/repository/io/vertx/vertx-hazelcast/3.4.2/vertx-hazelcast-3.4.2.jar:/Users/clay/.m2/repository/io/vertx/vertx-dropwizard-metrics/3.4.2/vertx-dropwizard-metrics-3.4.2.jar:/Users/clay/.m2/repository/com/google/guava/guava/21.0/guava-21.0.jar:/Users/clay/.m2/repository/org/reflections/reflections/0.9.11/reflections-0.9.11.jar:/Users/clay/.m2/repository/org/javassist/javassist/3.21.0-GA/javassist-3.21.0-GA.jar:/Users/clay/.m2/repository/javax/validation/validation-api/1.1.0.Final/validation-api-1.1.0.Final.jar:/Users/clay/.m2/repository/joda-time/joda-time/2.9.4/joda-time-2.9.4.jar:/Users/clay/.m2/repository/io/dropwizard/metrics/metrics-core/3.2.3/metrics-core-3.2.3.jar:/Users/clay/.m2/repository/io/dropwizard/metrics/metrics-healthchecks/3.2.3/metrics-healthchecks-3.2.3.jar:/Users/clay/.m2/repository/io/dropwizard/metrics/metrics-graphite/3.2.3/metrics-graphite-3.2.3.jar:/Users/clay/.m2/repository/io/vertx/vertx-circuit-breaker/3.4.2/vertx-circuit-breaker-3.4.2.jar:/Users/clay/.m2/repository/com/netflix/hystrix/hystrix-core/1.5.12/hystrix-core-1.5.12.jar:/Users/clay/.m2/repository/org/slf4j/slf4j-api/1.7.24/slf4j-api-1.7.24.jar:/Users/clay/.m2/repository/com/netflix/archaius/archaius-core/0.4.1/archaius-core-0.4.1.jar:/Users/clay/.m2/repository/commons-configuration/commons-configuration/1.8/commons-configuration-1.8.jar:/Users/clay/.m2/repository/commons-lang/commons-lang/2.6/commons-lang-2.6.jar:/Users/clay/.m2/repository/io/reactivex/rxjava/1.3.0/rxjava-1.3.0.jar:/Users/clay/.m2/repository/org/hdrhistogram/HdrHistogram/2.1.9/HdrHistogram-2.1.9.jar:/Users/clay/.m2/repository/com/amazonaws/aws-java-sdk-sqs/1.11.166/aws-java-sdk-sqs-1.11.166.jar:/Users/clay/.m2/repository/com/amazonaws/aws-java-sdk-core/1.11.166/aws-java-sdk-core-1.11.166.jar:/Users/clay/.m2/repository/commons-logging/commons-logging/1.1.3/commons-logging-1.1.3.jar:/Users/clay/.m2/repository/org/apache/httpcomponents/httpclient/4.5.2/httpclient-4.5.2.jar:/Users/clay/.m2/repository/org/apache/httpcomponents/httpcore/4.4.4/httpcore-4.4.4.jar:/Users/clay/.m2/repository/commons-codec/commons-codec/1.9/commons-codec-1.9.jar:/Users/clay/.m2/repository/software/amazon/ion/ion-java/1.0.2/ion-java-1.0.2.jar:/Users/clay/.m2/repository/com/fasterxml/jackson/dataformat/jackson-dataformat-cbor/2.6.7/jackson-dataformat-cbor-2.6.7.jar:/Users/clay/.m2/repository/com/amazonaws/jmespath-java/1.11.166/jmespath-java-1.11.166.jar:/Users/clay/.m2/repository/com/amazonaws/aws-java-sdk-s3/1.11.166/aws-java-sdk-s3-1.11.166.jar:/Users/clay/.m2/repository/com/amazonaws/aws-java-sdk-kms/1.11.166/aws-java-sdk-kms-1.11.166.jar:/Users/clay/.m2/repository/com/squareup/javapoet/1.9.0/javapoet-1.9.0.jar:/Applications/IntelliJ IDEA.app/Contents/lib/idea_rt.jar\" move.action.SQSService\n" +
-////            "Connected to the target VM, address: '127.0.0.1:51853', transport: 'socket'\n" +
-////            "SLF4J: Failed to load class \"org.slf4j.impl.StaticLoggerBinder\".\n" +
-////            "SLF4J: Defaulting to no-operation (NOP) logger implementation\n" +
-////            "SLF4J: See http://www.slf4j.org/codes.html#StaticLoggerBinder for further details.\n" +
-////            "Raw: 692   Packed: 648   FastLZ: 587    FastLZ-Packed: 784      GZIP: 462\n" +
-////            "Disconnected from the target VM, address: '127.0.0.1:51853', transport: 'socket'\n" +
-////            "01000|move.MyAction|{}\n" +
-////            "11000|move.MyAction|{}\n" +
-////            "SQSEnvelope(l=false, s=1000, name=move.MyAction, p={})\n" +
-////            "\n" +
-////            "Process finished with exit code 0"
-//         val packed = GZIPCompression.pack(payload)
-//         val compressed = FastLZ.compress(payload)
-//         val gzipCompressed = GZIPCompression.compress(payload)
-//         val lzPacked = BaseEncoding.base64().encode(compressed)
-//         println("Raw: " + payload.length + "   Packed: " + packed.length + "   FastLZ: " + compressed.size + "    FastLZ-Packed: " + lzPacked.length + "      GZIP: " + gzipCompressed.size)
-//         val unpacked = GZIPCompression.unpack(packed)
-//
-//         val envelopeSerialized = stringify(SQSEnvelope(false, 1000, "move.MyAction", "{}"))
-//         println(stringify(SQSEnvelope(false, 1000, "move.MyAction", "{}")))
-//         println(stringify(SQSEnvelope(true, 1000, "move.MyAction", "{}")))
-//
-//         val envelope = parse(envelopeSerialized)
-//
-//         println(envelope)
-//      }
    }
 }

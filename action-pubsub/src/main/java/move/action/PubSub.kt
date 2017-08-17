@@ -1,18 +1,23 @@
 package move.action
 
 import com.google.common.util.concurrent.AbstractIdleService
+import move.google.cloud.pubsub.Pubsub
 
 /**
  *
  */
-class GCloudPubSubService : AbstractIdleService {
-   constructor() : super()
+class GCloudPubSubService : AbstractIdleService() {
+   var pubsub: Pubsub? = null
 
    override fun startUp() {
-      TODO("not implemented")
+
    }
 
    override fun shutDown() {
-      TODO("not implemented")
+
+   }
+
+   inner class Receiver {
+
    }
 }

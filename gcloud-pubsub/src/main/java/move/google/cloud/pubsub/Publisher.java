@@ -22,7 +22,6 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 
 import com.google.common.util.concurrent.MoreExecutors;
 import io.vertx.core.Vertx;
-import io.vertx.core.VertxOptions;
 import java.io.Closeable;
 import java.util.ArrayList;
 import java.util.List;
@@ -58,74 +57,6 @@ import org.slf4j.LoggerFactory;
 public class Publisher implements Closeable {
 
   private static final Logger log = LoggerFactory.getLogger(Publisher.class);
-
-  /**
-   * A listener for monitoring operations performed by the {@link Publisher}.
-   */
-  public interface Listener {
-
-    /**
-     * Called when a new {@link Publisher} is instantiated.
-     *
-     * @param publisher The {@link Publisher}
-     */
-    void publisherCreated(Publisher publisher);
-
-    /**
-     * Called when a {@link Publisher} is closed.
-     *
-     * @param publisher The {@link Publisher}
-     */
-    void publisherClosed(Publisher publisher);
-
-    /**
-     * Called when a {@link Publisher} receieves a new message for publication.
-     *
-     * @param publisher The {@link Publisher}
-     * @param topic The message topic.
-     * @param message The message.
-     * @param future The future result.
-     */
-    void publishingMessage(Publisher publisher, String topic, Message message,
-        CompletableFuture<String> future);
-
-    /**
-     * Called when a {@link Publisher} is sending a batch of messages to Google Cloud Pub/Sub.
-     *
-     * @param publisher The {@link Publisher}
-     * @param topic The topic of the message batch.
-     * @param batch The batch of messages being sent.
-     * @param future The future result of the entire batch.
-     */
-    @Deprecated
-    void sendingBatch(Publisher publisher, String topic, List<Message> batch,
-        CompletableFuture<List<String>> future);
-
-    /**
-     * Called when a {@link Publisher} is sending a batch of messages to Google Cloud Pub/Sub.
-     *
-     * @param publisher The {@link Publisher}
-     * @param topic The topic of the message batch.
-     * @param batch The batch of messages being sent.
-     * @param future The future result of the entire batch.
-     */
-    default void sendingBatch(Publisher publisher, String topic, List<Message> batch,
-        PubsubFuture<List<String>> future) {
-      sendingBatch(publisher, topic, batch, (CompletableFuture<List<String>>) future);
-    }
-
-    /**
-     * Called when a topic is enqueued as pending for future batch sending due to the publisher
-     * hitting the concurrency limit.
-     *
-     * @param publisher The {@link Publisher}
-     * @param topic The topic.
-     * @param outstanding The current number of outstanding batch requests to Google Cloud Pub/Sub.
-     * @param concurrency The configured concurrency limit.
-     */
-    void topicPending(Publisher publisher, String topic, int outstanding, int concurrency);
-  }
-
   private final Pubsub pubsub;
   private final String project;
   private final int queueSize;
@@ -134,7 +65,6 @@ public class Publisher implements Closeable {
   private final long maxLatencyMs;
   private final Listener listener;
   private final Vertx vertx;
-
   private final AtomicInteger outstanding = new AtomicInteger();
   private final ConcurrentLinkedQueue<TopicQueue> pendingTopics = new ConcurrentLinkedQueue<>();
   private final ConcurrentMap<String, TopicQueue> topics = new ConcurrentHashMap<>();
@@ -160,6 +90,13 @@ public class Publisher implements Closeable {
       vertx = builder.vertx;
       scheduler = null;
     }
+  }
+
+  /**
+   * Create a builder that can be used to build a {@link Publisher}.
+   */
+  public static Builder builder() {
+    return new Builder();
   }
 
   /**
@@ -263,196 +200,6 @@ public class Publisher implements Closeable {
   }
 
   /**
-   * The per-topic queue of messages.
-   */
-  private class TopicQueue {
-
-    private final AtomicInteger size = new AtomicInteger();
-    private final ConcurrentLinkedQueue<QueuedMessage> queue = new ConcurrentLinkedQueue<>();
-    private final String topic;
-
-    private volatile boolean pending;
-    private final AtomicBoolean scheduled = new AtomicBoolean();
-
-    private TopicQueue(final String topic) {
-      this.topic = topic;
-    }
-
-    /**
-     * Enqueue a message for sending on this topic queue.
-     */
-    private CompletableFuture<String> send(final Message message) {
-      final CompletableFuture<String> future = new CompletableFuture<>();
-
-      // Enforce queue size limit
-      int currentSize;
-      int newSize;
-      do {
-        currentSize = size.get();
-        newSize = currentSize + 1;
-        if (newSize > queueSize) {
-          future.completeExceptionally(new QueueFullException());
-          return future;
-        }
-      } while (!size.compareAndSet(currentSize, newSize));
-
-      // Enqueue outgoing message
-      queue.add(new QueuedMessage(message, future));
-
-      // Schedule future batch sending
-      scheduleSend(newSize);
-
-      return future;
-    }
-
-    /**
-     * Schedule this topic for future enqueuing for batch sending. If the batch size has been
-     * reached, enqueue for sending immediately.
-     *
-     * @param queueSize The current number of enqueued messages in this topic.
-     */
-    private void scheduleSend(final int queueSize) {
-
-      // Bail if this topic is already enqueued for sending.
-      if (pending) {
-        return;
-      }
-
-      // Reached the batch size? Enqueue topic for sending immediately.
-      if (queueSize >= batchSize) {
-        enqueueSend();
-        return;
-      }
-
-      // Schedule this topic for later enqueuing, allowing more messages to gather into a larger batch.
-      if (scheduled.compareAndSet(false, true)) {
-        try {
-          if (scheduler != null) {
-            scheduler.schedule(this::scheduledEnqueueSend, maxLatencyMs, MILLISECONDS);
-          } else if (vertx != null) {
-            vertx.setTimer(maxLatencyMs, event -> scheduledEnqueueSend());
-          } else {
-            scheduledEnqueueSend();
-          }
-          schedulerQueueSize.incrementAndGet();
-        } catch (RejectedExecutionException ignore) {
-          // Race with a call to close(). Ignore.
-        }
-      }
-    }
-
-    /**
-     * Decrements the scheduled queue counter and enqueues the request.
-     */
-    private void scheduledEnqueueSend() {
-      schedulerQueueSize.decrementAndGet();
-      // Clear the scheduled flag before enqueuing or sending.
-      scheduled.set(false);
-      enqueueSendWithErrorLogging();
-    }
-
-    /**
-     * A wrapper around enqueueSend which catches and logs any exceptions that are thrown. This is
-     * called by the executor, which will silently swallow exceptions if we don't handle them here.
-     */
-    private void enqueueSendWithErrorLogging() {
-      try {
-        enqueueSend();
-      } catch (Exception e) {
-        log.error("Error while enqueueing or sending messages on background thread", e);
-      }
-    }
-
-    /**
-     * Enqueue this topic for batch sending. If the request concurrency level is below the limit,
-     * send immediately.
-     */
-    private void enqueueSend() {
-
-      final int currentOutstanding = outstanding.get();
-
-      // Below outstanding limit so we can send immediately?
-      if (currentOutstanding < concurrency) {
-        sendBatch();
-        return;
-      }
-
-      // Enqueue as pending for sending by the earliest available concurrent request slot
-      pending = true;
-      pendingTopics.offer(this);
-
-      // Tell the listener that a topic became pending for sending as early as possible.
-      listener.topicPending(Publisher.this, topic, currentOutstanding, concurrency);
-
-      // Attempt to send pending to guard against losing a race while enqueuing this topic as pending.
-      sendPending();
-    }
-
-    /**
-     * Send a batch of messages.
-     */
-    private int sendBatch() {
-      final List<Message> batch = new ArrayList<>();
-      final List<CompletableFuture<String>> futures = new ArrayList<>();
-
-      // Drain queue up to batch size
-      while (batch.size() < batchSize) {
-        final QueuedMessage message = queue.poll();
-        if (message == null) {
-          break;
-        }
-        batch.add(message.message);
-        futures.add(message.future);
-      }
-
-      // Was there anything to send?
-      if (batch.size() == 0) {
-        return 0;
-      }
-
-      // Decrement the queue size counter
-      size.updateAndGet(i -> i - batch.size());
-
-      // Send the batch request and increment the outstanding request counter
-      outstanding.incrementAndGet();
-      final PubsubFuture<List<String>> batchFuture = pubsub.publish(project, topic, batch);
-      listener.sendingBatch(Publisher.this, topic, unmodifiableList(batch), batchFuture);
-      batchFuture.whenComplete(
-          (List<String> messageIds, Throwable ex) -> {
-
-            // Decrement the outstanding request counter
-            outstanding.decrementAndGet();
-
-            // Fail all futures if the batch request failed
-            if (ex != null) {
-              futures.forEach(f -> f.completeExceptionally(ex));
-              return;
-            }
-
-            // Verify that the number of message id's and messages match up
-            if (futures.size() != messageIds.size()) {
-              futures.forEach(f -> f.completeExceptionally(
-                  new PubsubException(
-                      "message id count mismatch: " +
-                          futures.size() + " != " + messageIds.size())));
-            }
-
-            // Complete each future with the appropriate message id
-            for (int i = 0; i < futures.size(); i++) {
-              final String messageId = messageIds.get(i);
-              final CompletableFuture<String> future = futures.get(i);
-              future.complete(messageId);
-            }
-          })
-
-          // When batch is complete, process pending topics.
-          .whenComplete((v, t) -> sendPending());
-
-      return batch.size();
-    }
-  }
-
-  /**
    * Send any pending topics.
    */
   private void sendPending() {
@@ -474,6 +221,73 @@ public class Publisher implements Closeable {
   }
 
   /**
+   * A listener for monitoring operations performed by the {@link Publisher}.
+   */
+  public interface Listener {
+
+    /**
+     * Called when a new {@link Publisher} is instantiated.
+     *
+     * @param publisher The {@link Publisher}
+     */
+    void publisherCreated(Publisher publisher);
+
+    /**
+     * Called when a {@link Publisher} is closed.
+     *
+     * @param publisher The {@link Publisher}
+     */
+    void publisherClosed(Publisher publisher);
+
+    /**
+     * Called when a {@link Publisher} receieves a new message for publication.
+     *
+     * @param publisher The {@link Publisher}
+     * @param topic The message topic.
+     * @param message The message.
+     * @param future The future result.
+     */
+    void publishingMessage(Publisher publisher, String topic, Message message,
+        CompletableFuture<String> future);
+
+    /**
+     * Called when a {@link Publisher} is sending a batch of messages to Google Cloud Pub/Sub.
+     *
+     * @param publisher The {@link Publisher}
+     * @param topic The topic of the message batch.
+     * @param batch The batch of messages being sent.
+     * @param future The future result of the entire batch.
+     */
+    @Deprecated
+    void sendingBatch(Publisher publisher, String topic, List<Message> batch,
+        CompletableFuture<List<String>> future);
+
+    /**
+     * Called when a {@link Publisher} is sending a batch of messages to Google Cloud Pub/Sub.
+     *
+     * @param publisher The {@link Publisher}
+     * @param topic The topic of the message batch.
+     * @param batch The batch of messages being sent.
+     * @param future The future result of the entire batch.
+     */
+    default void sendingBatch(Publisher publisher, String topic, List<Message> batch,
+        PubsubFuture<List<String>> future) {
+      sendingBatch(publisher, topic, batch, (CompletableFuture<List<String>>) future);
+    }
+
+    /**
+     * Called when a topic is enqueued as pending for future batch sending due to the publisher
+     * hitting the concurrency limit.
+     *
+     * @param publisher The {@link Publisher}
+     * @param topic The topic.
+     * @param outstanding The current number of outstanding batch requests to Google Cloud Pub/Sub.
+     * @param concurrency The configured concurrency limit.
+     */
+    void topicPending(Publisher publisher, String topic, int outstanding, int concurrency);
+  }
+
+  /**
    * An outgoing message with the future that should be completed when the message has been
    * published.
    */
@@ -486,13 +300,6 @@ public class Publisher implements Closeable {
       this.message = message;
       this.future = future;
     }
-  }
-
-  /**
-   * Create a builder that can be used to build a {@link Publisher}.
-   */
-  public static Builder builder() {
-    return new Builder();
   }
 
   /**
@@ -613,6 +420,194 @@ public class Publisher implements Closeable {
     public void topicPending(final Publisher publisher, final String topic, final int outstanding,
         final int concurrency) {
 
+    }
+  }
+
+  /**
+   * The per-topic queue of messages.
+   */
+  private class TopicQueue {
+
+    private final AtomicInteger size = new AtomicInteger();
+    private final ConcurrentLinkedQueue<QueuedMessage> queue = new ConcurrentLinkedQueue<>();
+    private final String topic;
+    private final AtomicBoolean scheduled = new AtomicBoolean();
+    private volatile boolean pending;
+
+    private TopicQueue(final String topic) {
+      this.topic = topic;
+    }
+
+    /**
+     * Enqueue a message for sending on this topic queue.
+     */
+    private CompletableFuture<String> send(final Message message) {
+      final CompletableFuture<String> future = new CompletableFuture<>();
+
+      // Enforce queue size limit
+      int currentSize;
+      int newSize;
+      do {
+        currentSize = size.get();
+        newSize = currentSize + 1;
+        if (newSize > queueSize) {
+          future.completeExceptionally(new QueueFullException());
+          return future;
+        }
+      } while (!size.compareAndSet(currentSize, newSize));
+
+      // Enqueue outgoing message
+      queue.add(new QueuedMessage(message, future));
+
+      // Schedule future batch sending
+      scheduleSend(newSize);
+
+      return future;
+    }
+
+    /**
+     * Schedule this topic for future enqueuing for batch sending. If the batch size has been
+     * reached, enqueue for sending immediately.
+     *
+     * @param queueSize The current number of enqueued messages in this topic.
+     */
+    private void scheduleSend(final int queueSize) {
+
+      // Bail if this topic is already enqueued for sending.
+      if (pending) {
+        return;
+      }
+
+      // Reached the batch size? Enqueue topic for sending immediately.
+      if (queueSize >= batchSize) {
+        enqueueSend();
+        return;
+      }
+
+      // Schedule this topic for later enqueuing, allowing more messages to gather into a larger batch.
+      if (scheduled.compareAndSet(false, true)) {
+        try {
+          if (scheduler != null) {
+            scheduler.schedule(this::scheduledEnqueueSend, maxLatencyMs, MILLISECONDS);
+          } else if (vertx != null) {
+            vertx.setTimer(maxLatencyMs, event -> scheduledEnqueueSend());
+          } else {
+            scheduledEnqueueSend();
+          }
+          schedulerQueueSize.incrementAndGet();
+        } catch (RejectedExecutionException ignore) {
+          // Race with a call to close(). Ignore.
+        }
+      }
+    }
+
+    /**
+     * Decrements the scheduled queue counter and enqueues the request.
+     */
+    private void scheduledEnqueueSend() {
+      schedulerQueueSize.decrementAndGet();
+      // Clear the scheduled flag before enqueuing or sending.
+      scheduled.set(false);
+      enqueueSendWithErrorLogging();
+    }
+
+    /**
+     * A wrapper around enqueueSend which catches and logs any exceptions that are thrown. This is
+     * called by the executor, which will silently swallow exceptions if we don't handle them here.
+     */
+    private void enqueueSendWithErrorLogging() {
+      try {
+        enqueueSend();
+      } catch (Exception e) {
+        log.error("Error while enqueueing or sending messages on background thread", e);
+      }
+    }
+
+    /**
+     * Enqueue this topic for batch sending. If the request concurrency level is below the limit,
+     * send immediately.
+     */
+    private void enqueueSend() {
+      final int currentOutstanding = outstanding.get();
+
+      // Below outstanding limit so we can send immediately?
+      if (currentOutstanding < concurrency) {
+        sendBatch();
+        return;
+      }
+
+      // Enqueue as pending for sending by the earliest available concurrent request slot
+      pending = true;
+      pendingTopics.offer(this);
+
+      // Tell the listener that a topic became pending for sending as early as possible.
+      listener.topicPending(Publisher.this, topic, currentOutstanding, concurrency);
+
+      // Attempt to send pending to guard against losing a race while enqueuing this topic as pending.
+      sendPending();
+    }
+
+    /**
+     * Send a batch of messages.
+     */
+    private int sendBatch() {
+      final List<Message> batch = new ArrayList<>();
+      final List<CompletableFuture<String>> futures = new ArrayList<>();
+
+      // Drain queue up to batch size
+      while (batch.size() < batchSize) {
+        final QueuedMessage message = queue.poll();
+        if (message == null) {
+          break;
+        }
+        batch.add(message.message);
+        futures.add(message.future);
+      }
+
+      // Was there anything to send?
+      if (batch.size() == 0) {
+        return 0;
+      }
+
+      // Decrement the queue size counter
+      size.updateAndGet(i -> i - batch.size());
+
+      // Send the batch request and increment the outstanding request counter
+      outstanding.incrementAndGet();
+      final PubsubFuture<List<String>> batchFuture = pubsub.publish(project, topic, batch);
+      listener.sendingBatch(Publisher.this, topic, unmodifiableList(batch), batchFuture);
+      batchFuture.whenComplete(
+          (List<String> messageIds, Throwable ex) -> {
+
+            // Decrement the outstanding request counter
+            outstanding.decrementAndGet();
+
+            // Fail all futures if the batch request failed
+            if (ex != null) {
+              futures.forEach(f -> f.completeExceptionally(ex));
+              return;
+            }
+
+            // Verify that the number of message id's and messages match up
+            if (futures.size() != messageIds.size()) {
+              futures.forEach(f -> f.completeExceptionally(
+                  new PubsubException(
+                      "message id count mismatch: " +
+                          futures.size() + " != " + messageIds.size())));
+            }
+
+            // Complete each future with the appropriate message id
+            for (int i = 0; i < futures.size(); i++) {
+              final String messageId = messageIds.get(i);
+              final CompletableFuture<String> future = futures.get(i);
+              future.complete(messageId);
+            }
+          })
+
+          // When batch is complete, process pending topics.
+          .whenComplete((v, t) -> sendPending());
+
+      return batch.size();
     }
   }
 }

@@ -19,6 +19,7 @@ package move.google.cloud.pubsub.example;
 import static move.google.cloud.pubsub.Puller.MessageHandler;
 import static move.google.cloud.pubsub.Puller.builder;
 
+import java.util.concurrent.CancellationException;
 import move.google.cloud.pubsub.Pubsub;
 import move.google.cloud.pubsub.Puller;
 import java.util.concurrent.CompletableFuture;

@@ -64,7 +64,7 @@ http://www.w3.org/2001/XMLSchema-instance ">
     <hazelcast.version>3.8.3</hazelcast.version>
     <aws.version>1.11.166</aws.version>
     <cglib-nodep.version>3.2.1</cglib-nodep.version>
-    <dropwizard-metrics.version>3.2.3</dropwizard-metrics.version>
+    <dropwizard-metrics.version>3.2.4</dropwizard-metrics.version>
     <guava.version>21.0</guava.version>
     <hikaricp.version>2.6.3</hikaricp.version>
     <hystrix.version>1.5.12</hystrix.version>
@@ -85,8 +85,8 @@ http://www.w3.org/2001/XMLSchema-instance ">
 
     <pdfbox.version>2.0.7</pdfbox.version>
 
-    <kotlin.version>1.1.3-2</kotlin.version>
-    <kotlinx-coroutines.version>0.16</kotlinx-coroutines.version>
+    <kotlin.version>1.1.4</kotlin.version>
+    <kotlinx-coroutines.version>0.17</kotlinx-coroutines.version>
     <msgpack.version>0.8.13</msgpack.version>
   </properties>
 
@@ -442,6 +442,18 @@ http://www.w3.org/2001/XMLSchema-instance ">
       <dependency>
         <groupId>com.netflix.hystrix</groupId>
         <artifactId>hystrix-core</artifactId>
+        <version>${hystrix.version}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>com.netflix.hystrix</groupId>
+        <artifactId>hystrix-metrics-event-stream</artifactId>
+        <version>${hystrix.version}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>com.netflix.hystrix</groupId>
+        <artifactId>hystrix-codahale-metrics-publisher</artifactId>
         <version>${hystrix.version}</version>
       </dependency>
 

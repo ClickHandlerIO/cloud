@@ -271,9 +271,9 @@ abstract class Action<IN : Any, OUT : Any> : IAction<IN, OUT>() {
       }
 
       inner class HystrixSingleCoroutine<T>(
-         override val parentContext: CoroutineContext,
+         val parentContext: CoroutineContext,
          private val subscriber: SingleSubscriber<T>
-      ) : AbstractCoroutine<T>(true), Subscription {
+      ) : AbstractCoroutine<T>(parentContext, true), Subscription {
 
          @Suppress("UNCHECKED_CAST")
          override fun afterCompletion(state: Any?, mode: Int) {
