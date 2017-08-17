@@ -17,8 +17,10 @@ import rx.Subscription
 import java.util.concurrent.TimeoutException
 
 import javax.inject.Provider
+import kotlin.coroutines.experimental.Continuation
 import kotlin.coroutines.experimental.CoroutineContext
 import kotlin.coroutines.experimental.startCoroutine
+import kotlin.coroutines.experimental.suspendCoroutine
 
 /**
  * @author Clay Molocznik
@@ -63,6 +65,12 @@ abstract class Action<IN : Any, OUT : Any> : IAction<IN, OUT>() {
 
    open fun afterInit() {
 
+   }
+
+   suspend fun suspend(block: (Continuation<OUT>) -> Unit): OUT {
+      return suspendCoroutine {
+         block(it)
+      }
    }
 
    open fun createDispatcher(): CoroutineDispatcher {
