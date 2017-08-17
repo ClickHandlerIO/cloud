@@ -335,6 +335,7 @@ internal constructor(val vertx: Vertx,
 
       ActionManager.workerActionQueueGroupMap.forEach { entry ->
          val queueName = config.namespace + entry.key
+         val queueMetricName = "action-worker-queue" + entry.key
          LOG.info("Calling getQueueUrl() for " + queueName)
 
          val result = realSQS.getQueueUrl(queueName)
@@ -400,6 +401,7 @@ internal constructor(val vertx: Vertx,
             SQSQueueReceiver(
                vertx,
                queueName,
+               queueMetricName,
                queueUrl,
                buffer,
                if (queueConfig.parallelism > 0)
@@ -660,48 +662,49 @@ internal constructor(val vertx: Vertx,
     */
    private inner class SQSQueueReceiver(val vertx: Vertx,
                                         val queueName: String,
+                                        val queueMetricName: String,
                                         val queueUrl: String,
                                         val sqsBuffer: QueueBuffer,
                                         parallelism: Int) : AbstractIdleService() {
       val registry = Metrics.registry()
 
-      private val secondsSinceLastPollGauge: Gauge<Long> = try {
-         registry.register<Gauge<Long>>(
-            queueName + "-SECONDS_SINCE_LAST_POLL",
-            Gauge<Long> { TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis() - lastPoll) }
-         )
-      } catch (e: Throwable) {
-         registry.metrics[queueName + "-SECONDS_SINCE_LAST_POLL"] as Gauge<Long>
-      }
+       private val secondsSinceLastPollGauge: Gauge<Long> = try {
+           registry.register<Gauge<Long>>(
+                   queueMetricName + "-SECONDS_SINCE_LAST_POLL",
+                   Gauge<Long> { TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis() - lastPoll) }
+           )
+       } catch (e: Throwable) {
+           registry.metrics[queueMetricName + "-SECONDS_SINCE_LAST_POLL"] as Gauge<Long>
+       }
 
-      private val activeMessagesGauge: Gauge<Int> = try {
-         registry.register<Gauge<Int>>(
-            queueName + "-ACTIVE_MESSAGES",
-            Gauge<Int> { activeMessages.get() }
-         )
-      } catch (e: Throwable) {
-         registry.metrics[queueName + "-ACTIVE_MESSAGES"] as Gauge<Int>
-      }
-      private val parallelismGauge: Gauge<Int> = try {
-         registry.register<Gauge<Int>>(
-            queueName + "-PARALLELISM",
-            Gauge<Int> { concurrentRequests }
-         )
-      } catch (e: Throwable) {
-         registry.metrics[queueName + "-PARALLELISM"] as Gauge<Int>
-      }
-      private val jobsCounter: Counter = registry.counter(queueName + "-JOBS")
-      private val timeoutsCounter: Counter = registry.counter(queueName + "-TIMEOUTS")
-      private val completesCounter: Counter = registry.counter(queueName + "-COMPLETES")
-      private val inCompletesCounter: Counter = registry.counter(queueName + "-IN_COMPLETES")
-      private val exceptionsCounter: Counter = registry.counter(queueName + "-EXCEPTIONS")
-      private val deletesCounter: Counter = registry.counter(queueName + "-DELETES")
-      private val deleteFailuresCounter: Counter = registry.counter(queueName + "-DELETE_FAILURES")
-      private val receiveLatencyCounter: Counter = registry.counter(queueName + "-RECEIVE_LATENCY")
-      private val noMessagesCounter: Counter = registry.counter(queueName + "-NO_MESSAGES")
-      private val downloadsCounter: Counter = registry.counter(queueName + "-DOWNLOADS")
-      private val downloadsNanosCounter: Counter = registry.counter(queueName + "-DOWNLOAD_NANOS")
-      private val downloadedBytesCounter: Counter = registry.counter(queueName + "-DOWNLOADED_BYTES")
+       private val activeMessagesGauge: Gauge<Int> = try {
+           registry.register<Gauge<Int>>(
+                   queueMetricName + "-ACTIVE_MESSAGES",
+                   Gauge<Int> { activeMessages.get() }
+           )
+       } catch (e: Throwable) {
+           registry.metrics[queueMetricName + "-ACTIVE_MESSAGES"] as Gauge<Int>
+       }
+       private val parallelismGauge: Gauge<Int> = try {
+           registry.register<Gauge<Int>>(
+                   queueMetricName + "-PARALLELISM",
+                   Gauge<Int> { concurrentRequests }
+           )
+       } catch (e: Throwable) {
+           registry.metrics[queueMetricName + "-PARALLELISM"] as Gauge<Int>
+       }
+       private val jobsCounter: Counter = registry.counter(queueMetricName + "-JOBS")
+       private val timeoutsCounter: Counter = registry.counter(queueMetricName + "-TIMEOUTS")
+       private val completesCounter: Counter = registry.counter(queueMetricName + "-COMPLETES")
+       private val inCompletesCounter: Counter = registry.counter(queueMetricName + "-IN_COMPLETES")
+       private val exceptionsCounter: Counter = registry.counter(queueMetricName + "-EXCEPTIONS")
+       private val deletesCounter: Counter = registry.counter(queueMetricName + "-DELETES")
+       private val deleteFailuresCounter: Counter = registry.counter(queueMetricName + "-DELETE_FAILURES")
+       private val receiveLatencyCounter: Counter = registry.counter(queueMetricName + "-RECEIVE_LATENCY")
+       private val noMessagesCounter: Counter = registry.counter(queueMetricName + "-NO_MESSAGES")
+       private val downloadsCounter: Counter = registry.counter(queueMetricName + "-DOWNLOADS")
+       private val downloadsNanosCounter: Counter = registry.counter(queueMetricName + "-DOWNLOAD_NANOS")
+       private val downloadedBytesCounter: Counter = registry.counter(queueMetricName + "-DOWNLOADED_BYTES")
 
       @Volatile private var lastPoll: Long = 0
 
