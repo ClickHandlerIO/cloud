@@ -41,7 +41,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * objects or as exceptions.
  * <p>
  * When the buffer is not used, all internal processing associated with the buffer stops when any
- * outstanding request to SQS completes. In that idle state, the buffer uses neither connections nor
+ * outstanding _request to SQS completes. In that idle state, the buffer uses neither connections nor
  * threads.
  * <p>
  * Instances of {@code QueueBuffer} are thread-safe.
@@ -52,7 +52,7 @@ public class QueueBuffer {
   /**
    * This executor that will be shared among all queue buffers. Since a single JVM can access
    * hundreds of queues, it won't do to have hundreds of executors spinning up hundreds of threads
-   * for each queue. The DaemonThreadFactory creates daemon threads, which means they won't block
+   * for each queue. The DaemonThreadFactory creates daemon threads, which means they won't coroutineBlock
    * the JVM from exiting if only they are still around.
    */
 //  public static ExecutorService executor = null;//Executors.newCachedThreadPool(new DaemonThreadFactory());
@@ -162,7 +162,7 @@ public class QueueBuffer {
   }
 
   /**
-   * Submits a request to receive some messages from SQS.
+   * Submits a _request to receive some messages from SQS.
    *
    * @return a Future object that will be notified when the operation is completed; never null;
    */
@@ -219,13 +219,13 @@ public class QueueBuffer {
   }
 
   /**
-   * We prefetch and load results in the buffer by making basic requests. I.E. we don't request
-   * queue or message attributes and we have a default visibility timeout. If the user's request
-   * deviates from the basic request we can't fulfill the request directly from the buffer, we
+   * We prefetch and load results in the buffer by making basic requests. I.E. we don't _request
+   * queue or message attributes and we have a default visibility timeout. If the user's _request
+   * deviates from the basic _request we can't fulfill the _request directly from the buffer, we
    * have to hit SQS directly (Note that when going to SQS directly messages currently in the
    * buffer may be unavailable due to the visibility timeout).
    *
-   * @return True if the request can be fulfilled directly from the buffer, false if we have to go
+   * @return True if the _request can be fulfilled directly from the buffer, false if we have to go
    * back to the service to fetch the results
    */
   private boolean canBeRetrievedFromQueueBuffer(ReceiveMessageRequest rq) {
@@ -235,14 +235,14 @@ public class QueueBuffer {
   }
 
   /**
-   * @return True if request has been configured to return queue attributes. False otherwise
+   * @return True if _request has been configured to return queue attributes. False otherwise
    */
   private boolean hasRequestedQueueAttributes(ReceiveMessageRequest rq) {
     return rq.getAttributeNames() != null && !rq.getAttributeNames().isEmpty();
   }
 
   /**
-   * @return True if request has been configured to return message attributes. False otherwise
+   * @return True if _request has been configured to return message attributes. False otherwise
    */
   private boolean hasRequestedMessageAttributes(ReceiveMessageRequest rq) {
     return rq.getMessageAttributeNames() != null && !rq.getMessageAttributeNames().isEmpty();
@@ -281,7 +281,7 @@ public class QueueBuffer {
       }
 
       AmazonClientException ce = new AmazonClientException(
-          "Caught an exception while waiting for request to complete...");
+          "Caught an exception while waiting for _request to complete...");
       ce.initCause(ee);
       throw ce;
     }

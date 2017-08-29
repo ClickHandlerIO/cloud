@@ -89,12 +89,20 @@ abstract class ActionLocator {
       actionMap.put(cls, provider as ActionProvider<Action<Any, Any>, Any, Any>)
    }
 
+   fun put(map: Map<Class<*>, ActionProvider<*, *, *>>) {
+      map.forEach { put(it.key, it.value) }
+   }
+
    fun bindProducer(provider: WorkerActionProvider<*, *>, producer: WorkerProducer) {
       provider.producer = producer
    }
 
    fun timeoutEnabled(enabled: Boolean) {
       actionMap.forEach { k, v -> v.isExecutionTimeoutEnabled = enabled }
+   }
+
+   operator fun <A : Action<IN, OUT>, IN : Any, OUT : Any> get(cls: Any): ActionProvider<A, IN, OUT> {
+      return actionMap[cls] as ActionProvider<A, IN, OUT>
    }
 
    /**
@@ -216,5 +224,27 @@ abstract class ActionLocator {
 
    protected open fun initChildren() {
 
+   }
+
+   inline fun <reified A : Action<IN, OUT>, IN : Any, OUT : Any> providerOf(): ActionProvider<A, IN, OUT>? {
+      return ActionManager.actionMap[A::class.java] as ActionProvider<A, IN, OUT>
+   }
+
+   inline fun <reified A : Action<*, *>> of(): A {
+      val a = ActionManager.actionMap[A::class.java]
+      if (a == null) {
+         throw RuntimeException()
+      }
+
+      return (a as ActionProvider<A, *, *>).create()
+   }
+
+   inline fun <reified A : Action<*, *>> instanceOf(): A {
+      val a = ActionManager.actionMap[A::class.java]
+      if (a == null) {
+         throw RuntimeException()
+      }
+
+      return (a as ActionProvider<A, *, *>).create()
    }
 }

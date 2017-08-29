@@ -2261,10 +2261,10 @@ public class SqlDatabase extends AbstractIdleService {
 //    public class DeleteOrUpdateWithoutWhereListener extends DefaultExecuteListener {
 //
 //        
-//        public void renderEnd(ExecuteContext ctx) {
+//        public void renderEnd(ExecuteContext eventLoop) {
 //            try {
-//                if (ctx.batchQueries() != null) {
-//                    for (Query query : ctx.batchQueries()) {
+//                if (eventLoop.batchQueries() != null) {
+//                    for (Query query : eventLoop.batchQueries()) {
 //                        if (query.getSQL().matches("^(?i:(UPDATE|DELETE)(?!.* WHERE ).*)$")) {
 //                            throw new DeleteOrUpdateWithoutWhereException();
 //                        }
@@ -2506,7 +2506,7 @@ public class SqlDatabase extends AbstractIdleService {
         try {
           request._1.cancel();
         } catch (Throwable e) {
-          LOG.warn("StatementCleaner service caught an exception while calling request.cancel()",
+          LOG.warn("StatementCleaner service caught an exception while calling _request.cancel()",
               e);
           Try.run(
               () -> rogueStatementExceptionsCounter.inc()

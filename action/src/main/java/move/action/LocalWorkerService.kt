@@ -5,7 +5,6 @@ import com.codahale.metrics.Gauge
 import com.google.common.base.Throwables
 import com.google.common.util.concurrent.AbstractIdleService
 import com.google.common.util.concurrent.Service
-import com.netflix.hystrix.exception.HystrixTimeoutException
 import io.vertx.rxjava.core.Vertx
 import move.common.Metrics
 import move.common.UID
@@ -39,7 +38,7 @@ internal constructor(val vertx: Vertx) : AbstractIdleService(), WorkerService, W
             1
          } else {
             entry.value.map {
-               it.parallelism()
+               it.concurrency()
             }.max()?.toInt() ?: DEFAULT_PARALELLISM
          }
          // If there are more than 1 action mapped to this queue then find largest "timeoutMillis"
@@ -190,7 +189,7 @@ internal constructor(val vertx: Vertx) : AbstractIdleService(), WorkerService, W
                   LOG.error("Action " + actionProvider.actionClass.canonicalName + " threw an exception", it)
 
                   val rootCause = Throwables.getRootCause(it)
-                  if (rootCause is HystrixTimeoutException || rootCause is TimeoutException) {
+                  if (rootCause is ActionTimeoutException || rootCause is TimeoutException) {
                      timeoutsCounter.inc()
                   } else {
                      exceptionsCounter.inc()

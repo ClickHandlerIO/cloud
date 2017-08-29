@@ -189,7 +189,7 @@ public class PresenceService extends AbstractIdleService {
 
     PresenceOccupant occupant = (PresenceOccupant) map
         .submitToKey("1", new JoinProcessor().request(addRequest)).get();
-//        occupant = (PresenceOccupant) map.submitToKey("1", new JoinProcessor().request(addRequest)).get();
+//        occupant = (PresenceOccupant) map.submitToKey("1", new JoinProcessor()._request(addRequest)).get();
     occupant = (PresenceOccupant) map.submitToKey("1", new JoinProcessor().request(addRequest2))
         .get();
     occupant = (PresenceOccupant) map.submitToKey("1", new JoinProcessor().request(addRequest3))
@@ -410,50 +410,50 @@ public class PresenceService extends AbstractIdleService {
     });
   }
 
-//    public Observable<PresenceOccupant> join(String key, RequestContext context) {
-//        if (context == null
-//            || context.getSessionId() == null
-//            || context.getSessionId().isEmpty()
-//            || context.getUser() == null) {
+//    public Observable<PresenceOccupant> join(String key, RequestContext eventLoop) {
+//        if (eventLoop == null
+//            || eventLoop.getSessionId() == null
+//            || eventLoop.getSessionId().isEmpty()
+//            || eventLoop.getUser() == null) {
 //            return Observable.just(null);
 //        }
 //
-//        final UserDeviceSessionEntity deviceSession = context.getDevice();
+//        final UserDeviceSessionEntity deviceSession = eventLoop.getDevice();
 //
 //        final PresenceJoin join = new PresenceJoin()
 //            .name(
-//                context.getUser().getContactEntity() != null ?
-//                    context.getUser().getContactEntity().getFormattedName() :
+//                eventLoop.getUser().getContactEntity() != null ?
+//                    eventLoop.getUser().getContactEntity().getFormattedName() :
 //                    ""
 //            )
 //            .nodeId(hazelcastProvider.get().getCluster().getLocalMember().getUuid())
-//            .sessionId(context.getSessionId())
+//            .sessionId(eventLoop.getSessionId())
 //            .device(
 //                deviceSession != null && deviceSession.getDeviceType() != null ?
 //                    deviceSession.getDeviceType().name() :
 //                    ""
 //            )
-//            .userId(context.getUser().getEntity().getId());
+//            .userId(eventLoop.getUser().getEntity().getId());
 //
 //        return join(key, join);
 //    }
 
 //    /**
 //     * @param key
-//     * @param context
+//     * @param eventLoop
 //     * @return
 //     */
-//    public Observable<Boolean> leave(String key, RequestContext context) {
-//        if (context == null
-//            || context.getSessionId() == null
-//            || context.getSessionId().isEmpty()
-//            || context.getUser() == null) {
+//    public Observable<Boolean> leave(String key, RequestContext eventLoop) {
+//        if (eventLoop == null
+//            || eventLoop.getSessionId() == null
+//            || eventLoop.getSessionId().isEmpty()
+//            || eventLoop.getUser() == null) {
 //            return Observable.just(false);
 //        }
 //
 //        enqueueLeave();
 //
-//        return leave(key, context.getSessionId());
+//        return leave(key, eventLoop.getSessionId());
 //    }
 
   /**
@@ -598,13 +598,13 @@ public class PresenceService extends AbstractIdleService {
 //    }
 //
 //    /**
-//     * @param context
+//     * @param eventLoop
 //     * @param key
 //     * @param message
 //     * @return
 //     */
-//    public Observable<Boolean> push(RequestContext context, String key, PushMessage message) {
-//        return push(context.getSessionId(), key, new PushEnvelope()
+//    public Observable<Boolean> push(RequestContext eventLoop, String key, PushMessage message) {
+//        return push(eventLoop.getSessionId(), key, new PushEnvelope()
 //            .address(message.name())
 //            .payload(WireFormat.stringify(message)));
 //    }

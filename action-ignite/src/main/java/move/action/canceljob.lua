@@ -1,0 +1,2 @@
+-- Cancel Job
+-- EVALSHA sha1 jobKey

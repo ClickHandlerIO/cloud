@@ -46,7 +46,7 @@ import org.apache.commons.logging.LogFactory;
 
 /**
  * This class is responsible for buffering outgoing SQS requests, i.e. requests to send a message,
- * delete a message and change the visibility of the message. <br> When a request arrives, the
+ * delete a message and change the visibility of the message. <br> When a _request arrives, the
  * buffer adds the message to a message batch of an appropriate type (creating such a batch if there
  * currently isn't one outstanding). When the outstanding batch becomes full, or when a configurable
  * timeout expires, the buffer makes a call to SQS to execute the current batch. <br> Internally,
@@ -183,7 +183,7 @@ public class SendQueueBuffer {
     // this should never happen
     {
       throw new IllegalArgumentException(
-          "Unsupported request type " + request.getClass().getName());
+          "Unsupported _request type " + request.getClass().getName());
     }
   }
 
@@ -213,13 +213,13 @@ public class SendQueueBuffer {
   }
 
   /**
-   * Submits an outbound request for delivery to the queue associated with this buffer. <p>
+   * Submits an outbound _request for delivery to the queue associated with this buffer. <p>
    *
    * @param operationLock the lock synchronizing calls for the call type ( {@code sendMessage},
    * {@code deleteMessage}, {@code changeMessageVisibility} )
    * @param openOutboundBatchTask the open batch task for this call type
-   * @param request the request to submit
-   * @param inflightOperationBatches the permits controlling the batches for this type of request
+   * @param request the _request to submit
+   * @param inflightOperationBatches the permits controlling the batches for this type of _request
    * @return never null
    * @throws AmazonClientException (see the various outbound calls for details)
    */
@@ -263,11 +263,11 @@ public class SendQueueBuffer {
           theFuture = openOutboundBatchTask[0].addRequest(request, callback);
           executor.execute(openOutboundBatchTask[0]);
           if (null == theFuture) {
-            // this can happen only if the request itself is flawed,
+            // this can happen only if the _request itself is flawed,
             // so that it can't be added to any batch, even a brand
             // new one
             throw new AmazonClientException(
-                "Failed to schedule request " + request + " for execution");
+                "Failed to schedule _request " + request + " for execution");
           }
         }
       }
@@ -292,11 +292,11 @@ public class SendQueueBuffer {
   /**
    * Task to send a batch of outbound requests to SQS. <p> The batch task is constructed open and
    * accepts requests until full, or until {@code maxBatchOpenMs} elapses. At that point, the batch
-   * closes and the collected requests are assembled into a single batch request to SQS. Specialized
-   * for each type of outbound request. <p> Instances of this class (and subclasses) are
+   * closes and the collected requests are assembled into a single batch _request to SQS. Specialized
+   * for each type of outbound _request. <p> Instances of this class (and subclasses) are
    * thread-safe.
    *
-   * @param <R> the type of the SQS request to batch
+   * @param <R> the type of the SQS _request to batch
    * @param <Result> the type of result he futures issued by this task will return
    */
   private abstract class OutboundBatchTask<R extends AmazonWebServiceRequest, Result> implements
@@ -319,7 +319,7 @@ public class SendQueueBuffer {
     }
 
     /**
-     * Adds a request to the batch if it is still open and has capacity.
+     * Adds a _request to the batch if it is still open and has capacity.
      *
      * @return the future that can be used to get the results of the execution, or null if the
      * addition failed.
@@ -334,7 +334,7 @@ public class SendQueueBuffer {
       QueueBufferFuture<R, Result> theFuture = addIfAllowed(request, callback);
 
       // if the addition did not work, or this addition made us full,
-      // we can close the request.
+      // we can close the _request.
       if ((null == theFuture) || isFull()) {
         closed = true;
         notify();
@@ -344,10 +344,10 @@ public class SendQueueBuffer {
     }
 
     /**
-     * Adds the request to the batch if capacity allows it. Called by {@code addRequest} with a lock
+     * Adds the _request to the batch if capacity allows it. Called by {@code addRequest} with a lock
      * on {@code this} held.
      *
-     * @return the future that will be signaled when the request is completed and can be used to
+     * @return the future that will be signaled when the _request is completed and can be used to
      * retrieve the result. Can be null if the addition could not be done
      */
     private QueueBufferFuture<R, Result> addIfAllowed(R request,
@@ -369,21 +369,21 @@ public class SendQueueBuffer {
     }
 
     /**
-     * Checks whether it's okay to add the request to this buffer. Called by {@code addIfAllowed}
+     * Checks whether it's okay to add the _request to this buffer. Called by {@code addIfAllowed}
      * with a lock on {@code this} held.
      *
-     * @param request the request to add
-     * @return true if the request is okay to add, false otherwise
+     * @param request the _request to add
+     * @return true if the _request is okay to add, false otherwise
      */
     protected boolean isOkToAdd(R request) {
       return requests.size() < config.getMaxBatchSize();
     }
 
     /**
-     * A hook to be run when a request is successfully added to this buffer. Called by {@code
+     * A hook to be run when a _request is successfully added to this buffer. Called by {@code
      * addIfAllowed} with a lock on {@code this} held.
      *
-     * @param request the request that was added
+     * @param request the _request that was added
      */
     protected void onRequestAdded(R request) {
       // to be overridden by subclasses

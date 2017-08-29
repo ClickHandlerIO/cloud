@@ -5,10 +5,15 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.util.ByteBufferBackedInputStream;
 import com.fasterxml.jackson.datatype.guava.GuavaModule;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.fasterxml.jackson.module.kotlin.KotlinModule;
+import io.netty.buffer.ByteBuf;
+import io.vertx.core.buffer.Buffer;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -18,6 +23,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import javaslang.collection.List;
+import org.msgpack.jackson.dataformat.MessagePackFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,22 +34,40 @@ public class WireFormat {
 
   public static final Logger LOG = LoggerFactory.getLogger(WireFormat.class);
   public static final ObjectMapper MAPPER = new ObjectMapper();
+  public static final ObjectMapper MSGPACK_MAPPER = new ObjectMapper(new MessagePackFactory());
 
   static {
     MAPPER.registerModule(new JavaTimeModule());
     MAPPER.registerModule(new Jdk8Module());
     MAPPER.registerModule(new GuavaModule());
+    MAPPER.registerModule(new KotlinModule());
+
+    MSGPACK_MAPPER.registerModule(new JavaTimeModule());
+    MSGPACK_MAPPER.registerModule(new Jdk8Module());
+    MSGPACK_MAPPER.registerModule(new GuavaModule());
+    MSGPACK_MAPPER.registerModule(new KotlinModule());
 
     MAPPER.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     MAPPER.configure(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES, false);
     MAPPER.configure(DeserializationFeature.FAIL_ON_IGNORED_PROPERTIES, false);
     MAPPER.configure(DeserializationFeature.FAIL_ON_NUMBERS_FOR_ENUMS, true);
 
+    MSGPACK_MAPPER.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+    MSGPACK_MAPPER.configure(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES, false);
+    MSGPACK_MAPPER.configure(DeserializationFeature.FAIL_ON_IGNORED_PROPERTIES, false);
+    MSGPACK_MAPPER.configure(DeserializationFeature.FAIL_ON_NUMBERS_FOR_ENUMS, true);
+
     MAPPER.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
     MAPPER.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
     MAPPER.configure(SerializationFeature.FAIL_ON_SELF_REFERENCES, true);
     MAPPER.configure(SerializationFeature.FAIL_ON_UNWRAPPED_TYPE_IDENTIFIERS, true);
     MAPPER.setSerializationInclusion(JsonInclude.Include.NON_NULL);
+
+    MSGPACK_MAPPER.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
+    MSGPACK_MAPPER.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
+    MSGPACK_MAPPER.configure(SerializationFeature.FAIL_ON_SELF_REFERENCES, true);
+    MSGPACK_MAPPER.configure(SerializationFeature.FAIL_ON_UNWRAPPED_TYPE_IDENTIFIERS, true);
+    MSGPACK_MAPPER.setSerializationInclusion(JsonInclude.Include.NON_NULL);
   }
 
   public static void main(String[] args) {
@@ -58,6 +82,51 @@ public class WireFormat {
 
     return parse((Class<T>) value.getClass(), byteify(value));
   }
+
+  public static <T> T unpack(Class<T> cls, byte[] data) {
+    if (data == null) {
+      return null;
+    }
+
+    try {
+      return MSGPACK_MAPPER.readValue(data, cls);
+    } catch (Throwable e) {
+      LOG.info("Failed to unpack MsgPack data", e);
+      throw new RuntimeException(e);
+    }
+  }
+
+  public static <T> T unpack(Class<T> cls, Buffer buffer) {
+    return unpack(cls, buffer.getByteBuf().nioBuffer());
+  }
+
+  public static <T> T unpack(Class<T> cls, ByteBuf buffer) {
+    return unpack(cls, buffer.nioBuffer());
+  }
+
+  public static <T> T unpack(Class<T> cls, ByteBuffer buffer) {
+    if (buffer == null) {
+      return null;
+    }
+
+    try {
+      return MSGPACK_MAPPER.readValue(new ByteBufferBackedInputStream(buffer), cls);
+    } catch (Throwable e) {
+      LOG.info("Failed to unpack MsgPack data", e);
+      throw new RuntimeException(e);
+    }
+  }
+
+  public static byte[] pack(Object obj) {
+    try {
+      return MSGPACK_MAPPER.writeValueAsBytes(obj);
+    } catch (Throwable e) {
+      LOG.info("Failed to byteify Object", e);
+//            throw new RuntimeException(e);
+      return null;
+    }
+  }
+
 
   public static <T> T parse(Class<T> cls, String json) {
     if (json == null || json.isEmpty()) {

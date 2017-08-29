@@ -1,0 +1,2 @@
+-- NACKACTOR - Actor Rejected
+-- EVALSHA sha1 actorKey reason

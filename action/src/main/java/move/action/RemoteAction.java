@@ -1,7 +1,7 @@
 package move.action;
 
 
-import static move.action.ActionConfig.DEFAULT_PARALLELISM;
+import static move.action.ActionConfig.DEFAULT_CONCURRENCY;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
@@ -31,7 +31,7 @@ public @interface RemoteAction {
    *
    * @return
    */
-  int parallelism() default DEFAULT_PARALLELISM;
+  int parallelism() default DEFAULT_CONCURRENCY;
 
   /**
    *

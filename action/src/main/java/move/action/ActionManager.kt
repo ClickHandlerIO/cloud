@@ -19,8 +19,6 @@ internal constructor(val vertx: Vertx,
                      val hazelcastProvider: HazelcastProvider,
                      val workerService: WorkerService,
                      val scheduledActionManager: ScheduledActionManager) : AbstractIdleService() {
-
-   @Throws(Exception::class)
    override fun startUp() {
       // Startup worker service.
       workerService.startAsync().awaitRunning()
@@ -28,7 +26,6 @@ internal constructor(val vertx: Vertx,
       scheduledActionManager.startAsync().awaitRunning()
    }
 
-   @Throws(Exception::class)
    override fun shutDown() {
       // Shutdown scheduled actions.
       Try.run { scheduledActionManager.stopAsync().awaitTerminated() }
@@ -46,5 +43,9 @@ internal constructor(val vertx: Vertx,
 
    companion object : ActionLocator() {
       private val LOG = LoggerFactory.getLogger(ActionManager::class.java)
+
+      fun register(component: ActionComponent) {
+         put(component.byClass())
+      }
    }
 }

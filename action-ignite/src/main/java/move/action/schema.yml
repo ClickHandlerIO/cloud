@@ -1,0 +1,184 @@
+# Move Job Engine
+# Designed for Redis Cluster
+# Can effectively manage Billions of Jobs / Actors
+# Only provides low level functionality
+#
+# Types
+#   - Job : Unit of Work with Timeouts
+#   - Actor : Unit of Work without Timeouts
+#
+# Protects against Out-of-Memory errors on worker
+#
+# Redis is used as controller that act on behalf of info
+# provided by Workers
+#
+# Graceful shutdown of Workers
+# Rolling updates
+
+
+# Queue Counter
+q{0}: Counter
+q{0}:i: Set<$queueId>
+q{0}:n: Set<$queueName>
+q{0}:n:$queueName: ID:Number
+
+# Worker Counter
+w{0}: Int
+
+w{0}:n: Set<$workerNumber>
+  $workerNumber:
+    # Created Unix Timestamp
+    -a: Timestamp
+    # Version
+    -b: String
+    # Main memory
+    -c: Int
+    # CPUs
+    -d: Int
+# Worker UID to ID map
+w{0}:n:$workerUID: Int
+
+# Partition by QueueID
+# Each logical queue is on a single shard
+{queueId}
+    # Job Counter
+    -a: Int
+    # Master ID - Used for auto-scaling a queue
+    -b: Int
+    # ID
+    -c: Int
+    # Name
+    -d: String
+    # Target execution time
+    -e: Int
+    # Max execution time
+    -f: Int
+    # Bound (Max Backlog Length)
+    -g: Int
+    # Message max size  Default - 52428800
+    -h: Int
+    # Dead letter expiration - default 86400 * 3 (3 Days)
+    -i: Int
+    # Max deliveries - default = 10
+    -j: Int
+    # Total Parallelism - Sum of all Workers 'MaxJobs'
+    -k: Int
+    # Is Actor job?
+    # Actor jobs don't expire and must be explicitly stopped.
+    -l: Boolean
+    # Heartbeat worker
+    # A worker will be randomly selected to be Heartbeat worker
+    # This worker will ensure things work to overcome the fact
+    # that redis does not have a way to call cleanup code.
+    # In an active queue this heartbeat isn't ignored since
+    # cleanup will happen by proxy of normal operations.
+    -m: Int
+
+    # Memory Percentage adjustment
+    -n: Double
+
+    # Scaling queue by forking
+    # Clients are notified of this topology change
+    -o:
+    -p:
+
+    #
+    -y:
+    # Allow Delay
+    -z:
+
+    f: List<QueueID: Int>
+
+    # Workers registered to accept jobs
+    # Work is balanced across all workers according to % utilization
+    w:
+      # Status - 1 = Up, 2 = Stopping
+      -a:
+      # Active Jobs
+      -b:
+      # Max Jobs
+      -c:
+      # Active memory - Memory currently consumed
+      -d:
+      # Available Memory
+      # Amount of Memory that can be used for the payload
+      -e:
+      # Allocated Memory
+      # Amount of Memory the Worker allocated for jobs from this Queue
+      -f:
+
+      $workerId:
+        # Active Jobs
+        -a:
+        # Max Jobs
+        -m:
+        # Active memory - Memory currently consumed
+        -d:
+        # Available Memory
+        # Amount of Memory that can be used for the payload
+        -e:
+        # Allocated Memory
+        # Amount of Memory the Worker allocated for jobs from this Queue
+        -f:
+
+        # Current Jobs
+        a: Set<JobID>
+
+        # Topic is used for communication with Worker
+        t: Topic
+
+        # {102}:w:108 -> 0 = Job, 1 = Task, msgpack : { a:
+
+    # Live Jobs
+    a: Int
+      $jobId:
+
+    # With TTL is only for Jobs with Expiration
+    # Service Jobs will not have this set
+    # Uses Redis TTL
+    t:$jobId: # with TTL
+
+    # UID ->
+    $jobID:
+      # Job's Topic
+      # Used to communicate with the Job
+      t: Topic
+      # Status - 1 = Backlog, 2 = Dispatched, 3 = Running, 4 = Success, 5 = Failed
+      -a:
+      # ID - {QueueID}$JobID
+      -b:
+      # Created Unix Timestamp
+      -c:
+      # StartAt Unix Timestamp - Default Created
+      -d:
+      # Dispatched Unix Timestamp
+      -e:
+      # Expires Unix Timestamp
+      -f:
+      # ACK Timestamp
+      -g:
+      # Try count
+      -h:
+      # De-duplication ID
+      -l:
+      # Meta-Data
+      -m:
+      # Body
+      -n:
+
+    # Backlog
+    b: List<JobUID: String>
+
+    # Delay Backlog
+    d: SortedSet<Long, JobUID: String>
+
+    # Failed / Max Tries reached
+    f:
+      $jobID:
+
+    # Stats
+    # q:{queueName}:s-2017-8-1-60:
+    s:
+      -$yearMonth:
+        -$day:
+          -$minute:

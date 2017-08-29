@@ -1,6 +1,6 @@
 package move.action;
 
-import static move.action.ActionConfig.DEFAULT_PARALLELISM;
+import static move.action.ActionConfig.DEFAULT_CONCURRENCY;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
@@ -25,5 +25,5 @@ public @interface InternalAction {
    *
    * @return
    */
-  int parallelism() default DEFAULT_PARALLELISM;
+  int parallelism() default DEFAULT_CONCURRENCY;
 }

@@ -1,8 +1,7 @@
 package move.action;
 
 
-import static move.action.ActionConfig.DEFAULT_PARALLELISM;
-import static move.action.ActionConfig.DEFAULT_TIMEOUT_MILLIS;
+import static move.action.ActionConfig.DEFAULT_CONCURRENCY;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
@@ -34,19 +33,7 @@ public @interface WorkerAction {
    *
    * @return
    */
-  boolean buffered() default false;
-
-  /**
-   *
-   * @return
-   */
-  int timeoutMillis() default DEFAULT_TIMEOUT_MILLIS;
-
-  /**
-   *
-   * @return
-   */
-  int parallelism() default DEFAULT_PARALLELISM;
+  int concurrency() default DEFAULT_CONCURRENCY;
 
   /**
    *

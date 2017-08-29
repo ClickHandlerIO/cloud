@@ -1,22 +1,41 @@
 package move.action;
 
-import io.vertx.core.Context;
+import io.vertx.core.impl.ActionEventLoopContext;
 
 /**
  *
  */
 public class ActionContext {
 
-  public final long started = System.currentTimeMillis();
+  public final long started;
   public final long timesOutAt;
   public final ActionProvider entry;
-  public final Context context;
+  public final ActionEventLoopContext eventLoop;
   public Object data;
+  volatile long currentTimeout;
 
-  public ActionContext(long timeoutMillis, ActionProvider entry, Context context) {
-    this.timesOutAt = started + timeoutMillis;
+  public ActionContext(
+      long timesOutAt,
+      ActionProvider entry,
+      ActionEventLoopContext eventLoop,
+      Object data) {
+    this(System.currentTimeMillis(), timesOutAt, entry, eventLoop);
+    this.data = data;
+  }
+
+  public ActionContext(
+      long started,
+      long timeoutMillis,
+      ActionProvider entry,
+      ActionEventLoopContext eventLoop) {
+    this.started = started;
+    if (timeoutMillis > 0L) {
+      this.currentTimeout = this.timesOutAt = started + timeoutMillis;
+    } else {
+      this.currentTimeout = this.timesOutAt = 0L;
+    }
     this.entry = entry;
-    this.context = context;
+    this.eventLoop = eventLoop;
   }
 
   public <T> T data() {
@@ -29,7 +48,7 @@ public class ActionContext {
         "started=" + started +
         ", timesOutAt=" + timesOutAt +
         ", entry=" + entry + "[" + entry.getActionClass().getCanonicalName() + "]" +
-        ", context=" + context +
+        ", eventLoop=" + eventLoop +
         ", data=" + data +
         '}';
   }

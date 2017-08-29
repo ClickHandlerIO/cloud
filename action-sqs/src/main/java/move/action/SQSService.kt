@@ -350,7 +350,7 @@ internal constructor(val vertx: Vertx,
 
          // If there are more than 1 action mapped to this queue then find the max "parallelism"
          val maxParallelism = entry.value.map {
-            it.parallelism()
+            it.concurrency()
          }.max()?.toInt() ?: DEFAULT_PARALLELISM
          // If there are more than 1 action mapped to this queue then find largest "timeoutMillis"
          val maxExecutionMillis = entry.value.map {
@@ -802,7 +802,7 @@ internal constructor(val vertx: Vertx,
                   activeMessages.addAndGet(result.messages.size - request.maxNumberOfMessages)
 
                   result.messages.forEach { message ->
-                     // Parse request.
+                     // Parse _request.
                      val envelope = WorkerPacker.parse(Strings.nullToEmpty(message.body))
 
                      if (envelope.option == 1) {
