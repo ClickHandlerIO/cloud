@@ -12,9 +12,9 @@ abstract class BlockingWorkerAction<T : Any> : Action<T, Boolean>() {
       val executor = executor()
 
       if (executor != null) {
-         return worker(executor) { executeBlocking() }.await()
+         return rxBlocking(executor) { executeBlocking() }.await()
       } else {
-         return worker { executeBlocking() }.await()
+         return rxBlocking { executeBlocking() }.await()
       }
    }
 

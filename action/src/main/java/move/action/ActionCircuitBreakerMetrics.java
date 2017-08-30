@@ -27,11 +27,13 @@ public class ActionCircuitBreakerMetrics {
   // Global statistics
   private final AtomicInteger metricsCount = new AtomicInteger(0);
   private LongAdder durationMs = new LongAdder();
+  private LongAdder cpuTime = new LongAdder();
+  private LongAdder blocking = new LongAdder();
   private LongAdder failures = new LongAdder();
   private LongAdder success = new LongAdder();
   private LongAdder timeout = new LongAdder();
   private LongAdder exceptions = new LongAdder();
-//  private Histogram statistics = new ConcurrentHistogram(3);
+  //  private Histogram statistics = new ConcurrentHistogram(3);
   private Histogram statistics = new ActionHistogram(60000, 3);
   private Histogram cachedRolling1 = new ActionHistogram(60000, 3);
   private Histogram cachedRolling2 = new ActionHistogram(60000, 3);
@@ -65,30 +67,35 @@ public class ActionCircuitBreakerMetrics {
     // Compute global statistics
     statistics.recordValue(operation.durationInMs());
 
-    window.rollingOperationsDurationMs.add(durationInMs);
-    window.rollingStatistic.recordValue(durationInMs);
+    cpuTime.add(operation.cpu);
+    blocking.add(operation.blocking);
+    window.cpuTime.add(operation.cpu);
+    window.blocking.add(operation.blocking);
+
+    window.operationDurationMs.add(durationInMs);
+    window.stats.recordValue(durationInMs);
     if (operation.exception) {
       exceptions.increment();
-      window.rollingException.increment();
+      window.exception.increment();
     } else if (operation.complete) {
       success.increment();
-      window.rollingSuccess.increment();
+      window.success.increment();
     } else if (operation.timeout) {
       timeout.increment();
-      window.rollingTimeout.increment();
+      window.timeout.increment();
     } else if (operation.failed) {
       failures.increment();
-      window.rollingFailure.increment();
+      window.failure.increment();
     }
 
     if (operation.fallbackSucceed) {
-      window.rollingFallbackSuccess.increment();
+      window.fallbackSuccess.increment();
     } else if (operation.fallbackFailed) {
-      window.rollingFallbackFailure.increment();
+      window.fallbackFailure.increment();
     }
 
     if (operation.shortCircuited) {
-      window.rollingShortCircuited.increment();
+      window.shortCircuited.increment();
     }
   }
 
@@ -97,7 +104,7 @@ public class ActionCircuitBreakerMetrics {
 
     metricsCount.incrementAndGet();
     final RollingWindow window = this.currentWindow;
-    final Histogram rollingStatistics = window.rollingStatistic.copy();
+    final Histogram rollingStatistics = window.stats.copy();
     this.currentWindow = new RollingWindow();
     final Histogram statistics = this.statistics.copy();
     final long end = System.currentTimeMillis();
@@ -107,10 +114,12 @@ public class ActionCircuitBreakerMetrics {
     final long failures = this.failures.sum();
     final long exceptions = this.exceptions.sum();
     final long timeout = this.timeout.sum();
+    final long cpu = this.cpuTime.sum();
+    final long blocking = this.blocking.sum();
 
     // Configuration
     json.put("begin", rollingStatistics.getStartTimeStamp());
-    json.put("duration", (end - window.rollingStatistic.getEndTimeStamp()));
+    json.put("duration", (end - rollingStatistics.getEndTimeStamp()));
     json.put("resetTimeout", circuitBreakerResetTimeout);
     json.put("timeout", circuitBreakerTimeout);
     json.put("metricRollingWindow", rollingWindow);
@@ -128,6 +137,8 @@ public class ActionCircuitBreakerMetrics {
     json.put("totalExceptionCount", exceptions);
     json.put("totalFailureCount", failures);
     json.put("totalOperationCount", calls);
+    json.put("totalCpu", cpu);
+    json.put("totalBlocking", blocking);
     if (calls == 0) {
       json.put("totalSuccessPercentage", 0);
       json.put("totalErrorPercentage", 0);
@@ -139,13 +150,15 @@ public class ActionCircuitBreakerMetrics {
     addLatency(json, statistics, "total");
 
     final long rollingOperations = rollingStatistics.getTotalCount();
-    final long rollingException = window.rollingException.sum();
-    final long rollingFailure = window.rollingFailure.sum();
-    final long rollingSuccess = window.rollingSuccess.sum();
-    final long rollingTimeout = window.rollingTimeout.sum();
-    final long rollingFallbackSuccess = window.rollingFallbackSuccess.sum();
-    final long rollingFallbackFailure = window.rollingFallbackFailure.sum();
-    final long rollingShortCircuited = window.rollingShortCircuited.sum();
+    final long rollingException = window.exception.sum();
+    final long rollingFailure = window.failure.sum();
+    final long rollingSuccess = window.success.sum();
+    final long rollingTimeout = window.timeout.sum();
+    final long rollingCPU = window.cpuTime.sum();
+    final long rollingFallbackSuccess = window.fallbackSuccess.sum();
+    final long rollingFallbackFailure = window.fallbackFailure.sum();
+    final long rollingShortCircuited = window.shortCircuited.sum();
+    final long rollingBlocking = window.blocking.sum();
 
     json.put("rollingOperationCount", rollingOperations - rollingShortCircuited);
     json.put("rollingErrorCount", rollingException + rollingFailure + rollingTimeout);
@@ -153,6 +166,8 @@ public class ActionCircuitBreakerMetrics {
     json.put("rollingTimeoutCount", rollingTimeout);
     json.put("rollingExceptionCount", rollingException);
     json.put("rollingFailureCount", rollingFailure);
+    json.put("rollingCpu", rollingCPU);
+    json.put("rollingBlocking", rollingBlocking);
     if (rollingOperations == 0) {
       json.put("rollingSuccessPercentage", 0);
       json.put("rollingErrorPercentage", 0);
@@ -196,22 +211,29 @@ public class ActionCircuitBreakerMetrics {
 
   private class RollingWindow {
 
-    Histogram rollingStatistic = nextRollingHistogram();
-    LongAdder rollingOperationsDurationMs = new LongAdder();
-    LongAdder rollingException = new LongAdder();
-    LongAdder rollingFailure = new LongAdder();
-    LongAdder rollingSuccess = new LongAdder();
-    LongAdder rollingTimeout = new LongAdder();
-    LongAdder rollingFallbackSuccess = new LongAdder();
-    LongAdder rollingFallbackFailure = new LongAdder();
-    LongAdder rollingShortCircuited = new LongAdder();
+    Histogram stats = nextRollingHistogram();
+    LongAdder operationDurationMs = new LongAdder();
+    LongAdder cpuTime = new LongAdder();
+    LongAdder blocking = new LongAdder();
+    LongAdder exception = new LongAdder();
+    LongAdder failure = new LongAdder();
+    LongAdder success = new LongAdder();
+    LongAdder timeout = new LongAdder();
+    LongAdder fallbackSuccess = new LongAdder();
+    LongAdder fallbackFailure = new LongAdder();
+    LongAdder shortCircuited = new LongAdder();
   }
 
   class Operation {
 
     final long constructed;
     private long begin;
-    private volatile long end;
+    private long end;
+    private long cpu;
+    private long cpuBegin;
+    private long blocking;
+    private long blockingBegin;
+    private long suspended;
     private boolean complete;
     private boolean failed;
     private boolean timeout;
@@ -228,9 +250,33 @@ public class ActionCircuitBreakerMetrics {
       begin = System.nanoTime();
     }
 
+    void cpuStart() {
+      cpuBegin = System.nanoTime();
+    }
+
+    void cpuEnd() {
+      if (!complete)
+        cpu += System.nanoTime() - cpuBegin;
+    }
+
+    synchronized void blockingBegin() {
+      blockingBegin = System.nanoTime();
+    }
+
+    synchronized void blockingEnd() {
+      if (!complete)
+        blocking += System.nanoTime() - blockingBegin;
+    }
+
     void complete() {
       end = System.nanoTime();
       complete = true;
+      if (cpuBegin > 0L) {
+        cpu = end - cpuBegin;
+      }
+      if (blockingBegin > 0L) {
+        blocking = end - blockingBegin;
+      }
       ActionCircuitBreakerMetrics.this.complete(this);
     }
 

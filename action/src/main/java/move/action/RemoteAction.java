@@ -1,8 +1,6 @@
 package move.action;
 
 
-import static move.action.ActionConfig.DEFAULT_CONCURRENCY;
-
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -19,19 +17,17 @@ import java.lang.annotation.Target;
 @Target(ElementType.TYPE)
 public @interface RemoteAction {
 
+  /**
+   * HTTP Method
+   *
+   * @return
+   */
   String method() default "POST";
 
   /**
-   *
-   * @return
+   * Default Time in Milliseconds the Action is allowed to be in "ACTIVE" state.
    */
-  int timeoutMillis() default 15_000;
-
-  /**
-   *
-   * @return
-   */
-  int parallelism() default DEFAULT_CONCURRENCY;
+  int timeout() default 15_000;
 
   /**
    *

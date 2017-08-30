@@ -1,6 +1,7 @@
 package move.action;
 
 import io.vertx.core.impl.ActionEventLoopContext;
+import io.vertx.rxjava.ext.web.RoutingContext;
 
 /**
  *
@@ -13,6 +14,7 @@ public class ActionContext {
   public final ActionEventLoopContext eventLoop;
   public Object data;
   volatile long currentTimeout;
+  RoutingContext webRequest;
 
   public ActionContext(
       long timesOutAt,

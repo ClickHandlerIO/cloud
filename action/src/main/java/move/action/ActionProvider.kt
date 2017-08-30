@@ -1,13 +1,9 @@
 package move.action
 
-import com.google.common.base.Throwables
 import io.vertx.core.impl.ActionEventLoopContext
 import io.vertx.kotlin.circuitbreaker.CircuitBreakerOptions
 import io.vertx.rxjava.core.Vertx
-import javaslang.control.Try
-import rx.Observable
 import rx.Single
-import java.util.function.Consumer
 import javax.inject.Inject
 import javax.inject.Provider
 
@@ -16,22 +12,21 @@ import javax.inject.Provider
 
  * @author Clay Molocznik
  */
-open class ActionProvider<A : Action<IN, OUT>, IN : Any, OUT : Any> @Inject
-constructor(
-   val vertx: Vertx,
-   val actionProvider: Provider<A>,
-   val inProvider: Provider<IN>,
-   val outProvider: Provider<OUT>) {
+abstract class ActionProvider<A : Action<IN, OUT>, IN : Any, OUT : Any>
+constructor(val vertx: Vertx, val actionProvider: Provider<A>) {
+
+   val actionClass = javaClass.typeParameters[0] as Class<A>
+   val requestClass = javaClass.typeParameters[1] as Class<IN>
+   val replyClass = javaClass.typeParameters[2] as Class<OUT>
+
+   abstract val annotationTimeout: Int
+
    val vertxCore: io.vertx.core.Vertx = vertx.delegate
-   val inClass = inProvider.get().javaClass
-   val outClass = outProvider.get().javaClass
-   val actionClass = actionProvider.get().javaClass
-   val actionConfig: ActionConfig? = actionClass.getAnnotation(ActionConfig::class.java)
 
    val eventLoopGroup = ActionEventLoopGroup.get(vertx)
 
    private var executionTimeoutEnabled: Boolean = false
-   private var timeoutMillis: Int = 0
+   private var timeoutMillis: Int = annotationTimeout
    var maxConcurrentRequests: Int = 0
       internal set
 
@@ -41,7 +36,7 @@ constructor(
       }
 
    var breaker: ActionCircuitBreaker = ActionCircuitBreaker(
-      actionClass.canonicalName,
+      actionClass.name,
       vertx.delegate,
       CircuitBreakerOptions()
          .setMetricsRollingWindow(5000L)
@@ -64,51 +59,11 @@ constructor(
    open val isWorker = false
    open val isScheduled = false
 
-   open fun concurrency(): Int {
-      if (isScheduled) {
-         return DEFAULT_CONCURRENCY_SCHEDULED
-      }
-
-      return if (actionConfig == null) {
-         if (isInternal) {
-            return DEFAULT_CONCURRENCY_INTERNAL
-         }
-         if (isRemote) {
-            return DEFAULT_CONCURRENCY_REMOTE
-         }
-         if (isWorker) {
-            return DEFAULT_CONCURRENCY_WORKER
-         }
-         if (isScheduled) {
-            return DEFAULT_CONCURRENCY_SCHEDULED
-         }
-
-         return DEFAULT_CONCURRENCY_INTERNAL
-      } else {
-         val p = actionConfig.concurrency
-         if (p == ActionConfig.DEFAULT_CONCURRENCY) {
-            if (isInternal) {
-               return DEFAULT_CONCURRENCY_INTERNAL
-            }
-            if (isRemote) {
-               return DEFAULT_CONCURRENCY_REMOTE
-            }
-            if (isWorker) {
-               return DEFAULT_CONCURRENCY_WORKER
-            }
-
-            return DEFAULT_CONCURRENCY_INTERNAL
-         } else {
-            return p
-         }
-      }
-   }
-
    protected open fun init() {
       // Timeout milliseconds.
-      var timeoutMillis = ActionConfig.DEFAULT_TIMEOUT_MILLIS
-      if (actionConfig != null) {
-         timeoutMillis = actionConfig.timeoutMillis
+      var timeoutMillis = 0
+      if (this.timeoutMillis > 0L) {
+         timeoutMillis = this.timeoutMillis
       }
 
       this.timeoutMillis = timeoutMillis
@@ -119,7 +74,7 @@ constructor(
             // Looks like somebody decided to put seconds instead of milliseconds.
             timeoutMillis = timeoutMillis * 1000
          } else if (timeoutMillis < 1000) {
-            timeoutMillis = ActionConfig.DEFAULT_TIMEOUT_MILLIS
+            timeoutMillis = 1000
          }
 
          this.timeoutMillis = timeoutMillis
@@ -192,97 +147,8 @@ constructor(
       return action
    }
 
-   /**
-    * @return
-    */
-   open internal fun execute0(callable: Try.CheckedConsumer<IN>): OUT {
-      val request = inProvider.get()
-      Try.run { callable.accept(request) }
-      return single0(request).toBlocking().value()
-   }
-
-   /**
-    * @param request
-    * *
-    * @return
-    */
-   @Deprecated("")
-   open internal fun execute0(request: IN): OUT {
-      try {
-         return single0(request).toBlocking().value()
-      } catch (e: Throwable) {
-         Throwables.throwIfUnchecked(e)
-         throw RuntimeException(e)
-      }
-   }
-
-   open internal fun blockingBuilder(request: IN): OUT = single0(request).toBlocking().value()
-
-   open internal fun blockingBuilder(data: Any?, request: IN): OUT = single0(data, request).toBlocking().value()
-
-   /**
-    * @return
-    */
-   open internal fun blockingBuilder(callable: Try.CheckedConsumer<IN>): OUT {
-      val request = inProvider.get()
-      Try.run { callable.accept(request) }
-      return single0(request).toBlocking().value()
-   }
-
-   /**
-    * @param callback
-    * *
-    * @return
-    */
-   open internal fun single0(callback: Consumer<IN>?): Single<OUT> {
-      val request = this.inProvider.get()
-      callback?.accept(request)
-      return single0(request)
-   }
-
-   /**
-    * @param request
-    * *
-    * @return
-    */
-   open fun local(request: IN): Single<OUT> {
+   open fun rx(request: IN): Single<OUT> {
       return create().rx(request)
-   }
-
-   /**
-    * @param request
-    * *
-    * @return
-    */
-   open fun single0(request: IN): Single<OUT> {
-      return create().rx(request)
-   }
-
-   /**
-    * @param request
-    * *
-    * @return
-    */
-   open internal fun single0(data: Any?, request: IN): Single<OUT> {
-      return create(data, request).rx(request)
-   }
-
-   /**
-    * @param request
-    * *
-    * @return
-    */
-   open internal fun eagerSingle0(request: IN): Single<OUT> {
-      return create().rx(request)
-   }
-
-   /**
-    * @param request
-    * *
-    * @return
-    */
-   open internal fun eagerSingle0(data: Any?, request: IN): Single<OUT> {
-      return create(data, request).rx(request)
    }
 
    companion object {

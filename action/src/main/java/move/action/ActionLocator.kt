@@ -225,26 +225,4 @@ abstract class ActionLocator {
    protected open fun initChildren() {
 
    }
-
-   inline fun <reified A : Action<IN, OUT>, IN : Any, OUT : Any> providerOf(): ActionProvider<A, IN, OUT>? {
-      return ActionManager.actionMap[A::class.java] as ActionProvider<A, IN, OUT>
-   }
-
-   inline fun <reified A : Action<*, *>> of(): A {
-      val a = ActionManager.actionMap[A::class.java]
-      if (a == null) {
-         throw RuntimeException()
-      }
-
-      return (a as ActionProvider<A, *, *>).create()
-   }
-
-   inline fun <reified A : Action<*, *>> instanceOf(): A {
-      val a = ActionManager.actionMap[A::class.java]
-      if (a == null) {
-         throw RuntimeException()
-      }
-
-      return (a as ActionProvider<A, *, *>).create()
-   }
 }

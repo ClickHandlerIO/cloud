@@ -7,11 +7,10 @@ import dagger.Module;
  */
 @Module(
     includes = {
-        _ActionModelModule_1.class,
-        _ActionModelModule_2.class
+        _Move_Module.class
     },
     subcomponents = {
-        _ActionComponent_1.class
+        _Move_Component.class
     }
 )
 public class ActionsModule {

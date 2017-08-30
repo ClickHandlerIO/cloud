@@ -244,8 +244,12 @@ public class Puller implements Closeable {
      * @param ackId The ack id.
      * @return A future that should be completed with the ack id when the message has been consumed.
      */
-    CompletionStage<String> handleMessage(Puller puller, String subscription, Message message,
-        String ackId);
+    CompletionStage<String> handleMessage(
+        Puller puller,
+        String subscription,
+        Message message,
+        String ackId
+    );
   }
 
   /**

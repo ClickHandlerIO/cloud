@@ -12,27 +12,11 @@ constructor(vertx: Vertx,
             actionProvider: Provider<A>)
    : ActionProvider<A, Unit, Unit>(
    vertx,
-   actionProvider,
-   Provider<Unit> { },
-   Provider<Unit> { }
+   actionProvider
 ) {
    override val isScheduled = true
+   val annotation: ScheduledAction = actionClass.getAnnotation(ScheduledAction::class.java)
 
-   val scheduledAction: ScheduledAction = actionClass.getAnnotation(ScheduledAction::class.java)
-
-   fun blocking(): Unit {
-      super.single0(Unit).toBlocking().value()
-   }
-
-   fun blocking(request: Unit) {
-      super.single0(Unit).toBlocking().value()
-   }
-
-   fun blockingLocal(): Unit {
-      super.single0(Unit).toBlocking().value()
-   }
-
-   fun blockingLocal(request: Unit) {
-      super.single0(Unit).toBlocking().value()
-   }
+   override val annotationTimeout: Int
+      get() = 0
 }

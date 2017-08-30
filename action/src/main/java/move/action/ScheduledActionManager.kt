@@ -29,7 +29,7 @@ internal constructor(val vertx: Vertx,
    @Throws(Exception::class)
    override fun startUp() {
       ActionManager.scheduledActionMap.values.forEach { scheduledActionProvider ->
-         when (scheduledActionProvider.scheduledAction.type) {
+         when (scheduledActionProvider.annotation.type) {
             ScheduledActionType.CLUSTER_SINGLETON -> clusterSingletons.add(ClusterSingleton(scheduledActionProvider))
             ScheduledActionType.NODE_SINGLETON -> nodeSingletons.add(NodeSingleton(scheduledActionProvider))
          }
@@ -54,7 +54,7 @@ internal constructor(val vertx: Vertx,
       private var startup = true
 
       init {
-         this.intervalSeconds = provider.scheduledAction.intervalSeconds
+         this.intervalSeconds = provider.annotation.intervalSeconds
 
          Preconditions.checkNotNull(intervalSeconds, "ScheduledAction: " +
             provider.actionClass.canonicalName +
@@ -134,7 +134,7 @@ internal constructor(val vertx: Vertx,
          if (startup) {
             startup = false
          } else {
-            provider.blockingBuilder(Unit)
+            provider.rx(Unit).toBlocking().value()
          }
 
          val elapsed = System.currentTimeMillis() - start
@@ -179,14 +179,14 @@ internal constructor(val vertx: Vertx,
          if (startup) {
             startup = false
          } else {
-            provider.blockingBuilder(Unit)
+            provider.rx(Unit).toBlocking().value()
          }
       }
 
       override fun scheduler(): AbstractScheduledService.Scheduler {
          return AbstractScheduledService.Scheduler.newFixedRateSchedule(
             0,
-            provider.scheduledAction.intervalSeconds.toLong(),
+            provider.annotation.intervalSeconds.toLong(),
             TimeUnit.SECONDS
          )
       }

@@ -8,17 +8,15 @@ import move.Action_LocatorRoot;
  *
  */
 @Subcomponent(modules = {_ActionMap.class})
-public interface _ActionComponent_1 extends ActionComponent {
+public interface _Move_Component extends ActionComponent {
 
   Map<Class<?>, ActionProvider<?, ?, ?>> byClass();
 
-  Action_LocatorRoot actions();
+  Action_LocatorRoot locator();
 
   @Subcomponent.Builder
   interface Builder {
 
-//    Builder generatedActionModule(_ActionMap module);
-
-    _ActionComponent_1 build();
+    _Move_Component build();
   }
 }

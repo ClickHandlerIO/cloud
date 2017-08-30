@@ -33,16 +33,16 @@ internal constructor(val vertx: Vertx) : AbstractIdleService(), WorkerService, W
          // Is Fifo?
          val fifo = entry.value.map { it.isFifo }.first()
 
-         // If there are more than 1 action mapped to this queue then find the max "parallelism"
+         // If there are more than 1 action mapped to this queue then find the max "concurrency"
          val maxParalellism = if (fifo) {
             1
          } else {
             entry.value.map {
-               it.concurrency()
-            }.max()?.toInt() ?: DEFAULT_PARALELLISM
+               it.concurrency
+            }.max()?.toInt() ?: DEFAULT_CONCURRENCY
          }
          // If there are more than 1 action mapped to this queue then find largest "timeoutMillis"
-         val maxExecutionMillis = entry.value.map {
+         val maxTimeout = entry.value.map {
             it.timeoutMillis()
          }.max()?.toInt() ?: DEFAULT_WORKER_TIMEOUT_MILLIS
 
@@ -96,7 +96,7 @@ internal constructor(val vertx: Vertx) : AbstractIdleService(), WorkerService, W
       }
    }
 
-   open inner class QueueContext(val queueName: String, var parallelism: Int = 1) : AbstractIdleService() {
+   open inner class QueueContext(val queueName: String, var concurrency: Int = 1) : AbstractIdleService() {
       val registry = Metrics.registry()
 
       val jobs = ConcurrentLinkedDeque<WorkerRequest>()
@@ -110,13 +110,13 @@ internal constructor(val vertx: Vertx) : AbstractIdleService(), WorkerService, W
       } catch (e: Throwable) {
          registry.metrics[queueName + "-ACTIVE_MESSAGES"] as Gauge<Int>
       }
-      private val parallelismGauge: Gauge<Int> = try {
+      private val concurrencyGauge: Gauge<Int> = try {
          registry.register<Gauge<Int>>(
-            queueName + "-PARALLELISM",
-            Gauge<Int> { parallelism }
+            queueName + "-CONCURRENCY",
+            Gauge<Int> { concurrency }
          )
       } catch (e: Throwable) {
-         registry.metrics[queueName + "-PARALLELISM"] as Gauge<Int>
+         registry.metrics[queueName + "-CONCURRENCY"] as Gauge<Int>
       }
       private val jobsCounter: Counter = registry.counter(queueName + "-JOBS")
       private val timeoutsCounter: Counter = registry.counter(queueName + "-TIMEOUTS")
@@ -151,7 +151,7 @@ internal constructor(val vertx: Vertx) : AbstractIdleService(), WorkerService, W
             return
          }
 
-         if (activeMessages.get() >= parallelism) {
+         if (activeMessages.get() >= concurrency) {
             return
          }
 
@@ -159,16 +159,12 @@ internal constructor(val vertx: Vertx) : AbstractIdleService(), WorkerService, W
 
          jobsCounter.inc()
 
-         val r = (if (job.request == null) {
-            job.actionProvider?.inProvider?.get()
-         } else {
-            job.request!!
-         }) ?: return
+         val r = job.request
 
          activeMessages.incrementAndGet()
          val actionProvider = job.actionProvider
 
-         actionProvider?.single0(r)?.subscribe(
+         actionProvider?.rx(r)?.subscribe(
             {
                try {
                   activeMessages.decrementAndGet()
@@ -204,7 +200,7 @@ internal constructor(val vertx: Vertx) : AbstractIdleService(), WorkerService, W
 
    companion object {
       internal val LOG = LoggerFactory.getLogger(LocalWorkerService::class.java)
-      private val DEFAULT_PARALELLISM = Runtime.getRuntime().availableProcessors() * 2
-      private val DEFAULT_WORKER_TIMEOUT_MILLIS = 10000
+      private val DEFAULT_CONCURRENCY = Runtime.getRuntime().availableProcessors() * 2
+      private val DEFAULT_WORKER_TIMEOUT_MILLIS = 30_000
    }
 }

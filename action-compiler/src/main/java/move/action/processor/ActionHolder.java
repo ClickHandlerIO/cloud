@@ -2,7 +2,6 @@ package move.action.processor;
 
 import com.squareup.javapoet.ClassName;
 import javax.lang.model.element.TypeElement;
-import move.action.ActionConfig;
 import move.action.ActionProvider;
 import move.action.FifoWorkerActionProvider;
 import move.action.InternalAction;

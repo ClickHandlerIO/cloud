@@ -5,10 +5,10 @@ import kotlinx.coroutines.experimental.async
 import kotlinx.coroutines.experimental.delay
 import kotlinx.coroutines.experimental.rx1.await
 import move.common.WireFormat
-import move.rx.KTuple2
 import move.rx.ordered
 import move.rx.parallel
 import rx.Single
+import javax.inject.Inject
 
 
 /**
@@ -26,7 +26,7 @@ object KotlinAction {
       val app = AppComponent.instance
       val actions = app.actions()
 
-      Actions.actionMap.forEach { t, u -> println(t) }
+      Action.all.forEach { t, u -> println(t) }
 
       val provider = Action.providerOf<Allocate, String, String>()
 
@@ -150,46 +150,53 @@ object KotlinAction {
 //}
 //
 
-@InternalAction(timeoutMillis = 1000)
+@InternalAction(timeout = 1000)
 class Allocate : Action<String, String>() {
    suspend override fun execute(): String {
-      val reply = of(AllocateInventory::class).invoke {
+      val reply = of(AllocateInventory::class)
+         .await(AllocateInventory.Request(id = ""))
 
-      }
+      val reply2 = of<AllocateInventory>() await AllocateInventory.Request(id = "")
 
-      val reply2 = (new<AllocateInventory>()) {
-         id = ""
-      }
 
-      val reply3 = new<AllocateInventory>().invoke {
-         id = ""
-      }
-
-      val reply4 = new<AllocateInventory>().invoke {
-
-      }
+      val r = of(AllocateInventory::class)..AllocateInventory.Request(id = "")
 
       return ""
    }
 }
 
-@InternalAction(timeoutMillis = 1000)
+@InternalAction(timeout = 1000)
 class Allocate2 : Action<String, String>() {
    suspend override fun execute(): String {
       return ""
    }
 }
 
-@ActionConfig(timeoutMillis = 1000)
+@InternalAction(timeout = 1000)
+class AllocateStock : Action<AllocateStock.Request, AllocateStock.Reply>() {
+   suspend override fun execute(): AllocateStock.Reply {
+      of<AllocateStock>()
+         .rx(
+            AllocateStock.Request(stockId = "STOCK_UID")
+         )
+
+      return Reply(code = "FAILED")
+   }
+
+   data class Request(val stockId: String = "")
+
+   data class Reply(val code: String = "")
+}
+
 @InternalAction
-class AllocateInventory : Action<AllocateInventory.Request, AllocateInventory.Reply>() {
+class AllocateInventory @Inject constructor() : Action<AllocateInventory.Request, AllocateInventory.Reply>() {
    override val isFallbackEnabled = true
 
    suspend override fun recover(caught: Throwable, cause: Throwable, isFallback: Boolean): Reply {
       if (isFallback)
          throw cause
 
-      return reply { code = cause.javaClass.simpleName }
+      return Reply(code = cause.javaClass.simpleName)
    }
 
    suspend override fun execute(): Reply {
@@ -203,17 +210,17 @@ class AllocateInventory : Action<AllocateInventory.Request, AllocateInventory.Re
 //        println(ar)
 
       val blockingParallel = parallel(
-         worker {
+         rxBlocking {
             delay(1000)
             println("Worker 1")
             Thread.currentThread().name
          },
-         worker {
+         rxBlocking {
             delay(1000)
             println("Worker 2")
             Thread.currentThread().name
          },
-         worker {
+         rxBlocking {
             delay(1000)
             println("Worker 3")
             Thread.currentThread().name
@@ -223,17 +230,17 @@ class AllocateInventory : Action<AllocateInventory.Request, AllocateInventory.Re
       println(blockingParallel)
 
       val blockingOrdered = ordered(
-         blockingSingle {
+         rxBlocking {
             delay(1000)
             println("Worker 1")
             Thread.currentThread().name
          },
-         blockingSingle {
+         rxBlocking {
             delay(1000)
             println("Worker 2")
             Thread.currentThread().name
          },
-         blockingSingle {
+         rxBlocking {
             delay(1000)
             println("Worker 3")
             Thread.currentThread().name
@@ -242,17 +249,17 @@ class AllocateInventory : Action<AllocateInventory.Request, AllocateInventory.Re
 
       run {
          val (v1, v2, v3) = ordered(
-            blockingSingle {
+            rxBlocking {
                delay(1000)
                println("Worker 1")
                Thread.currentThread().name
             },
-            blockingSingle {
+            rxBlocking {
                delay(1000)
                println("Worker 2")
                Thread.currentThread().name
             },
-            blockingSingle {
+            rxBlocking {
                delay(1000)
                println("Worker 3")
                Thread.currentThread().name
@@ -264,17 +271,17 @@ class AllocateInventory : Action<AllocateInventory.Request, AllocateInventory.Re
 
       val asyncParallel =
          parallel(
-            single {
+            rx {
                delay(1000)
                println("Async 1")
                Thread.currentThread().name
             },
-            single {
+            rx {
                delay(1000)
                println("Async 2")
                Thread.currentThread().name
             },
-            single {
+            rx {
                delay(1000)
                println("Async 3")
                Thread.currentThread().name
@@ -284,17 +291,17 @@ class AllocateInventory : Action<AllocateInventory.Request, AllocateInventory.Re
       println(asyncParallel)
 
       val asyncOrdered = ordered(
-         single {
+         rx {
             delay(1000)
             println("Async 1")
             Thread.currentThread().name
          },
-         single {
+         rx {
             delay(1000)
             println("Async 2")
             Thread.currentThread().name
          },
-         single {
+         rx {
             delay(1000)
             println("Async 3")
             Thread.currentThread().name
@@ -306,12 +313,12 @@ class AllocateInventory : Action<AllocateInventory.Request, AllocateInventory.Re
       val x = WireFormat.parse(Reply::class.java, "{\"code\":\"TEST\"}")
       println(x)
 
-      return reply {
+      return Reply(
          code = "Back At Cha!"
-      }
+      )
    }
 
-   data class Request(var id: String = "")
+   data class Request(var id: String)
 
    data class Reply(var code: String = "")
 }

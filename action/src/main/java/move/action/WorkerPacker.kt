@@ -17,6 +17,34 @@ data class WorkerEnvelope(val option: Int = 0,
                           val size: Int = 0,
                           val body: ByteArray)
 
+private val EMPTY_BYTE_ARRAY = ByteArray(0)
+
+data class WorkerEnvelope2(
+   // UID of message.
+   val id: String,
+   // Group or Partition ID.
+   val groupId: String? = null,
+   // De-Duplication ID. Note that it only De-Duplicates within
+   // the scope of the Group ID.
+   val deduplicationId: String? = null,
+   // Topic to send reply to.
+   val replyTopic: String? = null,
+   val option: Int = 0,
+   // Unix Millisecond Epoch
+   val created: Long = 0,
+   // Delay in seconds. Default to no delay.
+   val delay: Int = 0,
+   // Name or Type of message
+   val name: String? = null,
+   // Number of times this message was delivered
+   // and failed process
+   val deliveries: Int = 0,
+   // Milliseconds before visibility timesout
+   val timeout: Int = 0,
+   // Raw payload bytes
+   val body: ByteArray = EMPTY_BYTE_ARRAY
+)
+
 /**
  *
  */
@@ -121,8 +149,8 @@ object WorkerPacker {
 //            "\n" +
 //            "Process finished with exit code 0"
       val uncompressed = byteify(WorkerEnvelope(0, System.currentTimeMillis(), 0, "MyAction", payload.size, payload), false)
-      val compressed = byteify(WorkerEnvelope(0, System.currentTimeMillis(), 0,"MyAction", payload.size, payload), true)
-      val compressedString = stringify(WorkerEnvelope(0, System.currentTimeMillis(), 0,"MyAction", payload.size, payload))
+      val compressed = byteify(WorkerEnvelope(0, System.currentTimeMillis(), 0, "MyAction", payload.size, payload), true)
+      val compressedString = stringify(WorkerEnvelope(0, System.currentTimeMillis(), 0, "MyAction", payload.size, payload))
 
       println("Uncompressed: " + uncompressed.size + "   Compressed: " + compressed.size + "   Compressed Base64: " + compressedString.length)
 

@@ -1,8 +1,6 @@
 package move.action;
 
 
-import static move.action.ActionConfig.DEFAULT_CONCURRENCY;
-
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -30,10 +28,18 @@ public @interface WorkerAction {
   boolean fifo() default false;
 
   /**
+   * Default Time in Milliseconds the Action is allowed to
+   * be in "ACTIVE" state.
    *
    * @return
    */
-  int concurrency() default DEFAULT_CONCURRENCY;
+  int timeout() default 30_000;
+
+  /**
+   *
+   * @return
+   */
+  int concurrency() default 32;
 
   /**
    *

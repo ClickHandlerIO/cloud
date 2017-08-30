@@ -32,7 +32,6 @@ import com.google.common.util.concurrent.Service
 import com.netflix.hystrix.exception.HystrixTimeoutException
 import io.vertx.rxjava.core.Vertx
 import javaslang.control.Try
-import move.cluster.HazelcastProvider
 import move.common.Metrics
 import move.common.UID
 import move.common.WireFormat
@@ -55,8 +54,7 @@ import javax.inject.Singleton
 @Singleton
 class SQSService @Inject
 internal constructor(val vertx: Vertx,
-                     val config: SQSConfig,
-                     val hazelcastProvider: HazelcastProvider) : AbstractIdleService(), WorkerService {
+                     val config: SQSConfig) : AbstractIdleService(), WorkerService {
 
    private val queueMap = HashMap<String, QueueContext>()
 
@@ -348,11 +346,11 @@ internal constructor(val vertx: Vertx,
                result.queueUrl
             }
 
-         // If there are more than 1 action mapped to this queue then find the max "parallelism"
-         val maxParallelism = entry.value.map {
-            it.concurrency()
-         }.max()?.toInt() ?: DEFAULT_PARALLELISM
-         // If there are more than 1 action mapped to this queue then find largest "timeoutMillis"
+         // If there are more than 1 action mapped to this queue then find the max "concurrency"
+         val maxConcurrency = entry.value.map {
+            it.concurrency
+         }.max()?.toInt() ?: DEFAULT_CONCURRENCY
+         // If there are more than 1 action mapped to this queue then find largest "timeout"
          val maxExecutionMillis = entry.value.map {
             it.timeoutMillis()
          }.max()?.toInt() ?: DEFAULT_WORKER_TIMEOUT_MILLIS
@@ -513,8 +511,8 @@ internal constructor(val vertx: Vertx,
             } else {
                return@create
             }
-            val workerAction: WorkerAction = if (actionProvider?.workerAction != null) {
-               actionProvider.workerAction!!
+            val workerAction: WorkerAction = if (actionProvider?.annotation != null) {
+               actionProvider.annotation!!
             } else {
                return@create
             }
@@ -665,7 +663,7 @@ internal constructor(val vertx: Vertx,
                                         val queueMetricName: String,
                                         val queueUrl: String,
                                         val sqsBuffer: QueueBuffer,
-                                        parallelism: Int) : AbstractIdleService() {
+                                        concurrency: Int) : AbstractIdleService() {
       val registry = Metrics.registry()
 
        private val secondsSinceLastPollGauge: Gauge<Long> = try {
@@ -685,9 +683,9 @@ internal constructor(val vertx: Vertx,
        } catch (e: Throwable) {
            registry.metrics[queueMetricName + "-ACTIVE_MESSAGES"] as Gauge<Int>
        }
-       private val parallelismGauge: Gauge<Int> = try {
+       private val concurrencyGauge: Gauge<Int> = try {
            registry.register<Gauge<Int>>(
-                   queueMetricName + "-PARALLELISM",
+                   queueMetricName + "-CONCURRENCY",
                    Gauge<Int> { concurrentRequests }
            )
        } catch (e: Throwable) {
@@ -710,12 +708,12 @@ internal constructor(val vertx: Vertx,
 
       private val activeMessages = AtomicInteger(0)
 
-      var concurrentRequests = if (parallelism < MIN_PARALLELISM) {
-         MIN_PARALLELISM
-      } else if (parallelism > MAX_PARALLELISM) {
-         MAX_PARALLELISM
+      var concurrentRequests = if (concurrency < MIN_CONCURRENCY) {
+         MIN_CONCURRENCY
+      } else if (concurrency > MAX_CONCURRENCY) {
+         MAX_CONCURRENCY
       } else {
-         parallelism
+         concurrency
       }
 
       @Throws(Exception::class)
@@ -928,16 +926,16 @@ internal constructor(val vertx: Vertx,
 
          try {
             val request: Any = if (body.isEmpty() || (body.size == 2 && body[0] == '{'.toByte() && body[1] == '}'.toByte()))
-               actionProvider.inProvider.get()
+               WireFormat.parse(actionProvider.requestClass, "{}")
             else
                WireFormat.parse(
-                  actionProvider.inClass,
+                  actionProvider.requestClass,
                   body
-               ) ?: actionProvider.inProvider.get()
+               ) ?: WireFormat.parse(actionProvider.requestClass, "{}")
 
             jobsCounter.inc()
 
-            actionProvider.local(request).subscribe(
+            actionProvider.rx(request).subscribe(
                {
                   activeMessages.decrementAndGet()
                   Try.run { receiveMore() }
@@ -1013,9 +1011,9 @@ internal constructor(val vertx: Vertx,
       private val SQS_POLL_WAIT_SECONDS = 20 // Can be a value between 1 and 20
       private val KEEP_ALIVE_SECONDS = 60L
       private val MAX_PAYLOAD_SIZE = 255000
-      private val MIN_PARALLELISM = 1
-      private val MAX_PARALLELISM = 1024 * 10
-      private val DEFAULT_PARALLELISM = Runtime.getRuntime().availableProcessors() * 2
-      private val DEFAULT_WORKER_TIMEOUT_MILLIS = 10000
+      private val MIN_CONCURRENCY = 1
+      private val MAX_CONCURRENCY = 1024 * 10
+      private val DEFAULT_CONCURRENCY = Runtime.getRuntime().availableProcessors() * 2
+      private val DEFAULT_WORKER_TIMEOUT_MILLIS = 30000
    }
 }

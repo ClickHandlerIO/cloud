@@ -28,7 +28,7 @@ import java.util.concurrent.atomic.LongAdder
 import java.util.function.Function
 
 /**
- * Circuit Breaker pattern intended for mass parallelism.
+ * Circuit Breaker pattern intended for mass concurrency.
  */
 class ActionCircuitBreaker(private val name: String,
                            private val vertx: Vertx,

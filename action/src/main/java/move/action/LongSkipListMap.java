@@ -60,20 +60,30 @@ import java.util.NoSuchElementException;
 import java.util.Random;
 
 /**
- * Not Thread Safe
+ * Modified version of ConcurrentSkipListMap. The "Concurrent" part was removed
+ * and the Key is a primitive long which should reduce memory and increase performance.
  *
- * @param <V>
+ * This Map is intended to be used within a single thread and can efficiently keep keys
+ * in ascending sorted order. Descending or "tail" operations are much more expensive
+ * and not advised. If descending order is desired perhaps create another instance
+ * and invert the keys.
+ *
+ * This map is extremely efficient at removing the first key based on a simple compare.
+ * This collection does not natively support serialization. For In-Memory uses only.
+ *
+ * @param <V> Value Type
+ *
+ * @author Clay Molocznik
  */
 public class LongSkipListMap<V> {
 
-  private static final long serialVersionUID = -8627078645895051608L;
   private static final Random seedGenerator = new Random();
   private static final Object BASE_HEADER = new Object();
   private static final int EQ = 1;
   private static final int LT = 2;
   private static final int GT = 0; // Actually checked as !LT
   static NullCallback nullCallback = new NullCallback();
-  private transient volatile HeadIndex<V> head;
+  private volatile HeadIndex<V> head;
   /**
    * Seed for simple random number generator.  Not volatile since it doesn't matter too much if
    * different threads don't see updates.
@@ -99,6 +109,7 @@ public class LongSkipListMap<V> {
     /* ---------------- Indexing -------------- */
 
   private boolean casHead(HeadIndex<V> cmp, HeadIndex<V> val) {
+    // Single threaded so this always succeeds.
     head = val;
     return true;
   }
@@ -626,51 +637,6 @@ public class LongSkipListMap<V> {
       }
 //    }
     return null;
-  }
-
-  final V doRemove2(long okey, Object value) {
-    long key = okey;
-    Node<V> b = findPredecessor(key);
-    Node<V> n = b.next;
-    if (n == null) {
-      return null;
-    }
-
-//    for (; ; ) {
-    Node<V> f = n.next;
-    Object v = n.value;
-    if (v == null) {                    // n is deleted
-      n.helpDelete(b, f);
-      return null;
-    }
-//      if (v == n || b.value == null)      // b is deleted
-//      {
-//        break;
-//      }
-    if (key < n.key) {
-      return null;
-    }
-//      if (key > n.key) {
-//        b = n;
-//        n = f;
-//        continue;
-//      }
-//      if (value != null && !value.equals(v)) {
-//        return null;
-//      }
-    n.casValue(v, null);
-    n.appendMarker(f);
-    b.casNext(n, f);
-
-    findPredecessor(key);           // Clean index
-    if (head.right == null) {
-      tryReduceLevel();
-    }
-
-    return (V) v;
-//    }
-//
-//    return null;
   }
 
   private void tryReduceLevel() {
@@ -1210,7 +1176,7 @@ public class LongSkipListMap<V> {
       if (v == null) {
         return null;
       }
-      return new MapEntry.LongKeyEntry<V>(key, v);
+      return new MapEntry.LongKeyEntry<>(key, v);
     }
   }
 
