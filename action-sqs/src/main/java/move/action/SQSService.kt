@@ -694,7 +694,7 @@ internal constructor(val vertx: Vertx,
        private val jobsCounter: Counter = registry.counter(queueMetricName + "-JOBS")
        private val timeoutsCounter: Counter = registry.counter(queueMetricName + "-TIMEOUTS")
        private val completesCounter: Counter = registry.counter(queueMetricName + "-COMPLETES")
-       private val inCompletesCounter: Counter = registry.counter(queueMetricName + "-IN_COMPLETES")
+       private val inCompletesCounter: Counter = registry.counter(queueMetricName + "-INCOMPLETES")
        private val exceptionsCounter: Counter = registry.counter(queueMetricName + "-EXCEPTIONS")
        private val deletesCounter: Counter = registry.counter(queueMetricName + "-DELETES")
        private val deleteFailuresCounter: Counter = registry.counter(queueMetricName + "-DELETE_FAILURES")
