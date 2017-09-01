@@ -2,7 +2,6 @@ package move.action
 
 import com.google.common.base.Preconditions
 import io.vertx.rxjava.core.Vertx
-import kotlinx.coroutines.experimental.rx1.await
 import rx.Single
 import javax.inject.Inject
 import javax.inject.Provider
@@ -17,7 +16,7 @@ constructor(vertx: Vertx,
 ) {
    override val isWorker = true
 
-   val annotation: WorkerAction? = actionClass.getAnnotation(WorkerAction::class.java)
+   val annotation: Worker? = actionClass.getAnnotation(Worker::class.java)
 
    override val annotationTimeout: Int
       get() = annotation?.timeout ?: 0

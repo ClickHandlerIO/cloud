@@ -42,7 +42,7 @@ abstract class ActionLocator {
             if (key is String) {
                if (remoteActionMap.containsKey(key)) {
                   val actionProvider = remoteActionMap[key]
-                  throw RuntimeException("Duplicate RemoteAction Entry for key [" + key + "]. " +
+                  throw RuntimeException("Duplicate Remote Entry for key [" + key + "]. " +
                      value.actionClass.canonicalName + " and " +
                      actionProvider!!.actionClass.canonicalName)
                }
@@ -194,7 +194,7 @@ abstract class ActionLocator {
       get() {
          ensureActionMap()
          val map = HashMap<String, RemoteActionProvider<*, *, *>>()
-         remoteActionMap.forEach { key, value -> map.put(value.remoteAction!!.path, value) }
+         remoteActionMap.forEach { key, value -> map.put(value.remote!!.path, value) }
          return map
       }
 

@@ -16,9 +16,9 @@ import javax.inject.Singleton
 @Singleton
 class ActionManager @Inject
 internal constructor(val vertx: Vertx,
-                     val hazelcastProvider: HazelcastProvider,
                      val workerService: WorkerService,
                      val scheduledActionManager: ScheduledActionManager) : AbstractIdleService() {
+
    override fun startUp() {
       // Startup worker service.
       workerService.startAsync().awaitRunning()
@@ -43,9 +43,5 @@ internal constructor(val vertx: Vertx,
 
    companion object : ActionLocator() {
       private val LOG = LoggerFactory.getLogger(ActionManager::class.java)
-
-      fun register(component: ActionComponent) {
-         put(component.byClass())
-      }
    }
 }

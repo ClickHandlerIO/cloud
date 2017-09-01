@@ -8,42 +8,49 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * A RemoteAction may be invoked by a system through a network connection.
+ * A Remote may be invoked by a system through a network connection.
  * <p/>
  * The Request/Response types must be serializable.
  */
 @Documented
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
-public @interface WorkerAction {
+public @interface Remote {
 
   /**
-   * @return
+   * Default Time in Milliseconds the Action is allowed to be in "ACTIVE" state.
    */
-  boolean encrypted() default false;
-
-  /**
-   * @return
-   */
-  boolean fifo() default false;
-
-  /**
-   * Default Time in Milliseconds the Action is allowed to
-   * be in "ACTIVE" state.
-   *
-   * @return
-   */
-  int timeout() default 30_000;
+  int timeout() default 15_000;
 
   /**
    *
    * @return
    */
-  int concurrency() default 32;
+  boolean guarded() default true;
+
+  /**
+   * HTTP Method
+   */
+  String method() default "POST";
 
   /**
    *
    * @return
    */
-  String queueName() default "";
+  String path() default "";
+
+  /**
+   *
+   * @return
+   */
+  Visibility visibility() default Visibility.PUBLIC;
+
+  /**
+   *
+   */
+  enum Visibility {
+    PUBLIC,
+    INTERNAL,
+    PRIVATE,
+  }
 }

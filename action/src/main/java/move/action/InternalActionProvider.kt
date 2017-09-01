@@ -14,7 +14,7 @@ constructor(vertx: Vertx,
 ) {
    override val isInternal = true
 
-   val annotation: InternalAction? = actionClass.getAnnotation(InternalAction::class.java)
+   val annotation: Internal? = actionClass.getAnnotation(Internal::class.java)
 
    override val annotationTimeout: Int
       get() = annotation?.timeout ?: 0

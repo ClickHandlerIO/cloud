@@ -134,8 +134,8 @@ public class RemotingRegistry {
       if (value != null) {
         actionSpecs.put(value.getActionClass(), new ActionSpec()
             .provider(value)
-            .inSpec(buildType(value.getInClass()))
-            .outSpec(buildType(value.getOutClass())));
+            .inSpec(buildType(value.getRequestClass()))
+            .outSpec(buildType(value.getReplyClass())));
       }
     });
 

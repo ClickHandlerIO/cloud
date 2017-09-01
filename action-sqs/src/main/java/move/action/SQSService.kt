@@ -511,7 +511,7 @@ internal constructor(val vertx: Vertx,
             } else {
                return@create
             }
-            val workerAction: WorkerAction = if (actionProvider?.annotation != null) {
+            val worker: Worker = if (actionProvider?.annotation != null) {
                actionProvider.annotation!!
             } else {
                return@create
@@ -519,7 +519,7 @@ internal constructor(val vertx: Vertx,
 
             val payload = WireFormat.byteify(request.request)
 
-            if (payload.size > MAX_PAYLOAD_SIZE || workerAction.encrypted) {
+            if (payload.size > MAX_PAYLOAD_SIZE || worker.encrypted) {
                if (payload.size > config.maxPayloadSize) {
                   if (!subscriber.isUnsubscribed) {
                      subscriber.onError(RuntimeException("Payload of size '" + payload.size + "' exceeded max allowable '" + config.maxPayloadSize + "'"))

@@ -56,7 +56,7 @@ internal constructor(val vertx: Vertx,
       init {
          this.intervalSeconds = provider.annotation.intervalSeconds
 
-         Preconditions.checkNotNull(intervalSeconds, "ScheduledAction: " +
+         Preconditions.checkNotNull(intervalSeconds, "Scheduled: " +
             provider.actionClass.canonicalName +
             " has an invalid value for intervalSeconds() = " +
             intervalSeconds)

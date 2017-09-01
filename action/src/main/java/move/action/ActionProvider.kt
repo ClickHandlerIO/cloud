@@ -4,7 +4,6 @@ import io.vertx.core.impl.ActionEventLoopContext
 import io.vertx.kotlin.circuitbreaker.CircuitBreakerOptions
 import io.vertx.rxjava.core.Vertx
 import rx.Single
-import javax.inject.Inject
 import javax.inject.Provider
 
 /**
@@ -14,10 +13,34 @@ import javax.inject.Provider
  */
 abstract class ActionProvider<A : Action<IN, OUT>, IN : Any, OUT : Any>
 constructor(val vertx: Vertx, val actionProvider: Provider<A>) {
+   val actionProviderClass = TypeResolver
+      .resolveRawClass(
+         ActionProvider::class.java,
+         javaClass
+      )
 
-   val actionClass = javaClass.typeParameters[0] as Class<A>
-   val requestClass = javaClass.typeParameters[1] as Class<IN>
-   val replyClass = javaClass.typeParameters[2] as Class<OUT>
+   @Suppress("UNCHECKED_CAST")
+   val actionClass = TypeResolver
+      .resolveRawArgument(
+         actionProviderClass.typeParameters[0],
+         javaClass
+      ) as Class<A>
+
+   @Suppress("UNCHECKED_CAST")
+   val requestClass = TypeResolver
+      .resolveRawArgument(
+         actionProviderClass.typeParameters[1],
+         javaClass
+      ) as Class<IN>
+
+   @Suppress("UNCHECKED_CAST")
+   val replyClass = TypeResolver.resolveRawArgument(
+      actionProviderClass.typeParameters[2],
+      javaClass
+   ) as Class<OUT>
+
+   @Suppress("UNCHECKED_CAST")
+   val self = this as ActionProvider<Action<IN, OUT>, IN, OUT>
 
    abstract val annotationTimeout: Int
 
@@ -119,7 +142,7 @@ constructor(val vertx: Vertx, val actionProvider: Provider<A>) {
       }
 
       action.init(
-         this as ActionProvider<Action<IN, OUT>, IN, OUT>,
+         self,
          context,
          timesOutAt
       )

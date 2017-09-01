@@ -1,6 +1,7 @@
 package move.action.processor;
 
 import com.google.auto.service.AutoService;
+import com.squareup.javapoet.AnnotationSpec;
 import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.CodeBlock;
 import com.squareup.javapoet.FieldSpec;
@@ -10,8 +11,11 @@ import com.squareup.javapoet.ParameterSpec;
 import com.squareup.javapoet.ParameterizedTypeName;
 import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
+import dagger.Module;
+import dagger.Provides;
+import dagger.multibindings.ClassKey;
+import dagger.multibindings.IntoMap;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -23,6 +27,7 @@ import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.Processor;
 import javax.annotation.processing.RoundEnvironment;
 import javax.inject.Inject;
+import javax.inject.Provider;
 import javax.inject.Singleton;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.Element;
@@ -33,14 +38,19 @@ import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
 import javax.tools.FileObject;
 import javax.tools.StandardLocation;
-import javax.validation.constraints.NotNull;
 import move.action.ActionLocator;
 import move.action.ActionPackage;
+import move.action.ActionProvider;
+import move.action.FifoWorkerActionProvider;
 import move.action.IAction;
-import move.action.InternalAction;
-import move.action.RemoteAction;
-import move.action.ScheduledAction;
-import move.action.WorkerAction;
+import move.action.Internal;
+import move.action.InternalActionProvider;
+import move.action.Remote;
+import move.action.RemoteActionProvider;
+import move.action.Scheduled;
+import move.action.ScheduledActionProvider;
+import move.action.Worker;
+import move.action.WorkerActionProvider;
 
 /**
  * Action annotation processor.
@@ -52,11 +62,10 @@ public class ActionProcessor extends AbstractProcessor {
 
   public static final String LOCATOR = "_Locator";
   public static final String LOCATOR_ROOT = "_LocatorRoot";
+  private static ClassName VERTX_CLASSNAME = ClassName.bestGuess("io.vertx.rxjava.core.Vertx");
   private final TreeMap<String, ActionHolder> actionMap = new TreeMap<>();
   private final Pkg rootPackage = new Pkg("Action", "");
-  private final HashMap<String, ActionHolder> remoteActionMap = new HashMap<>();
   private final ArrayList<ActionPackage> actionPackages = new ArrayList<>();
-
   private Types typeUtils;
   private Elements elementUtils;
   private Filer filer;
@@ -85,11 +94,11 @@ public class ActionProcessor extends AbstractProcessor {
   @Override
   public Set<String> getSupportedAnnotationTypes() {
     final Set<String> annotataions = new LinkedHashSet<>();
-    annotataions.add(ActionPackage.class.getCanonicalName());
-    annotataions.add(RemoteAction.class.getCanonicalName());
-    annotataions.add(InternalAction.class.getCanonicalName());
-    annotataions.add(WorkerAction.class.getCanonicalName());
-    annotataions.add(ScheduledAction.class.getCanonicalName());
+//    annotataions.add(ActionPackage.class.getCanonicalName());
+    annotataions.add(Remote.class.getCanonicalName());
+    annotataions.add(Internal.class.getCanonicalName());
+    annotataions.add(Worker.class.getCanonicalName());
+    annotataions.add(Scheduled.class.getCanonicalName());
     return annotataions;
   }
 
@@ -102,13 +111,13 @@ public class ActionProcessor extends AbstractProcessor {
   public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
     try {
       final Set<? extends Element> remoteElements = roundEnv
-          .getElementsAnnotatedWith(RemoteAction.class);
+          .getElementsAnnotatedWith(Remote.class);
       final Set<? extends Element> internalElements = roundEnv
-          .getElementsAnnotatedWith(InternalAction.class);
+          .getElementsAnnotatedWith(Internal.class);
       final Set<? extends Element> workerElements = roundEnv
-          .getElementsAnnotatedWith(WorkerAction.class);
+          .getElementsAnnotatedWith(Worker.class);
       final Set<? extends Element> scheduledElements = roundEnv
-          .getElementsAnnotatedWith(ScheduledAction.class);
+          .getElementsAnnotatedWith(Scheduled.class);
 
       final HashSet<Element> elements = new HashSet<>();
 
@@ -141,62 +150,53 @@ public class ActionProcessor extends AbstractProcessor {
 //                packageElements.forEach(p -> messager.printMessage(Diagnostic.Kind.WARNING, "@ActionPackage(" + p.getAnnotation(ActionPackage.class).value() + ")"));
 //            }
 
-      boolean allGood = true;
       for (Element annotatedElement : elements) {
-        final RemoteAction remoteAction = annotatedElement.getAnnotation(RemoteAction.class);
-        final InternalAction internalAction = annotatedElement.getAnnotation(InternalAction.class);
-        final WorkerAction workerAction = annotatedElement.getAnnotation(WorkerAction.class);
-        final ScheduledAction scheduledAction = annotatedElement
-            .getAnnotation(ScheduledAction.class);
+        final Remote remote = annotatedElement
+            .getAnnotation(Remote.class);
+        final Internal internal = annotatedElement
+            .getAnnotation(Internal.class);
+        final Worker worker = annotatedElement
+            .getAnnotation(Worker.class);
+        final Scheduled scheduled = annotatedElement
+            .getAnnotation(Scheduled.class);
 
         final TypeElement element = elementUtils.getTypeElement(annotatedElement.toString());
-
-//                ActionConfig actionConfig;
-//                try {
-//                    actionConfig = annotatedElement.getAnnotation(ActionConfig.class);
-//                } catch (Throwable e) {
-//                    actionConfig = null;
-//                }
 
         ActionHolder holder = actionMap.get(element.getQualifiedName().toString());
 
         if (holder == null) {
-          holder = new ActionHolder();
-          holder.type = element;
-        }
+          final TypeParameterResolver typeParamResolver = new TypeParameterResolver(element);
 
-//                holder.config = actionConfig;
+          DeclaredTypeVar requestType = null;
+          try {
+            requestType = typeParamResolver.resolve(IAction.class, 0);
+          } catch (Throwable e) {
+            messager.printMessage(Diagnostic.Kind.ERROR, e.getMessage());
+          }
 
-        if (holder.remoteAction == null) {
-          holder.remoteAction = remoteAction;
-//                    if (remoteActionMap.containsKey(remoteAction.path())) {
-//                        final ActionHolder actionProvider = remoteActionMap.get(remoteAction.path());
-//                        messager.printMessage(Diagnostic.Kind.ERROR, "Duplicate RemoteAction Entry for key [" + remoteAction.path() + "]. " + actionProvider.type.getQualifiedName() + " and " + holder.type.getQualifiedName());
-//                    }
-//                    remoteActionMap.put(remoteAction.path(), holder);
-        }
-        if (holder.internalAction == null) {
-          holder.internalAction = internalAction;
-        }
-        if (holder.workerAction == null) {
-          holder.workerAction = workerAction;
-        }
-        if (holder.scheduledAction == null) {
-          holder.scheduledAction = scheduledAction;
+          DeclaredTypeVar responseType = null;
+          try {
+            responseType = typeParamResolver.resolve(IAction.class, 1);
+          } catch (Throwable e) {
+            messager.printMessage(Diagnostic.Kind.ERROR, e.getMessage());
+          }
+
+          holder = new ActionHolder(element, requestType, responseType, remote, internal, worker,
+              scheduled);
         }
 
         // Ensure only 1 action annotation was used.
         int actionAnnotationCount = 0;
-        if (holder.remoteAction != null) {
+        if (holder.remote != null) {
           actionAnnotationCount++;
         }
-        if (holder.internalAction != null) {
+        if (holder.internal != null) {
           actionAnnotationCount++;
         }
-        if (holder.workerAction != null) {
+        if (holder.worker != null) {
           actionAnnotationCount++;
         }
-        if (holder.scheduledAction != null) {
+        if (holder.scheduled != null) {
           actionAnnotationCount++;
         }
         if (actionAnnotationCount > 1) {
@@ -204,7 +204,7 @@ public class ActionProcessor extends AbstractProcessor {
               Diagnostic.Kind.ERROR,
               element.getQualifiedName() +
                   "  has multiple Action annotations. Only one of the following may be used... " +
-                  "@RemoteAction or @QueueAction or @InternalAction or @ActorAction"
+                  "@Remote or @QueueAction or @Internal or @ActorAction"
           );
           continue;
         }
@@ -214,43 +214,43 @@ public class ActionProcessor extends AbstractProcessor {
             || (element.getTypeParameters() != null && !element.getTypeParameters().isEmpty())) {
           messager.printMessage(
               Diagnostic.Kind.ERROR,
-              "@RemoteAction was placed on a non-concrete class " +
+              "@Remote was placed on a non-concrete class " +
                   element.getQualifiedName() +
                   " It cannot be abstract or have TypeParameters."
           );
         }
 
-        if (holder.inType == null || holder.outType == null) {
-          final TypeParameterResolver typeParamResolver = new TypeParameterResolver(element);
-
-          try {
-            holder.inType = typeParamResolver.resolve(IAction.class, 0);
-          } catch (Throwable e) {
-            messager.printMessage(Diagnostic.Kind.ERROR, e.getMessage());
-          }
-
-          try {
-            holder.outType = typeParamResolver.resolve(IAction.class, 1);
-          } catch (Throwable e) {
-            messager.printMessage(Diagnostic.Kind.ERROR, e.getMessage());
-          }
-
-          messager.printMessage(Diagnostic.Kind.WARNING, element.getQualifiedName().toString());
-
-          if (holder.inType != null) {
-//                        messager.printMessage(Diagnostic.Kind.WARNING, "IN = " + holder.inType.getResolvedElement().getQualifiedName().toString());
-          }
-          if (holder.outType != null) {
-//                        messager.printMessage(Diagnostic.Kind.WARNING, "OUT = " + holder.outType.getResolvedElement().getQualifiedName().toString());
-          }
-        }
+//        if (holder.requestType == null || holder.replyType == null) {
+//          final TypeParameterResolver typeParamResolver = new TypeParameterResolver(element);
+//
+//          try {
+//            holder.requestType = typeParamResolver.resolve(IAction.class, 0);
+//          } catch (Throwable e) {
+//            messager.printMessage(Diagnostic.Kind.ERROR, e.getMessage());
+//          }
+//
+//          try {
+//            holder.replyType = typeParamResolver.resolve(IAction.class, 1);
+//          } catch (Throwable e) {
+//            messager.printMessage(Diagnostic.Kind.ERROR, e.getMessage());
+//          }
+//
+//          messager.printMessage(Diagnostic.Kind.WARNING, element.getQualifiedName().toString());
+//
+//          if (holder.requestType != null) {
+////                        messager.printMessage(Diagnostic.Kind.WARNING, "IN = " + holder.requestType.getResolvedElement().getQualifiedName().toString());
+//          }
+//          if (holder.replyType != null) {
+////                        messager.printMessage(Diagnostic.Kind.WARNING, "OUT = " + holder.replyType.getResolvedElement().getQualifiedName().toString());
+//          }
+//        }
 
         actionMap.put(element.getQualifiedName().toString(), holder);
       }
 
       // Build Packages.
       for (ActionHolder actionHolder : actionMap.values()) {
-        String jpkgName = actionHolder.getPackage();
+        String jpkgName = actionHolder.pkgName;
 
         // Split package parts down.
         final String[] parts = jpkgName.split("[.]");
@@ -260,7 +260,7 @@ public class ActionProcessor extends AbstractProcessor {
 
         // Is it a Root Action?
         if (parts.length == 1 && firstName.isEmpty()) {
-          rootPackage.actions.put(actionHolder.getName(), actionHolder);
+          rootPackage.actions.put(actionHolder.name, actionHolder);
         } else {
           // Let's find it's Package and construct the tree as needed during the process.
           Pkg parent = rootPackage;
@@ -277,7 +277,7 @@ public class ActionProcessor extends AbstractProcessor {
           }
 
           // Add Descriptor.
-          parent.actions.put(actionHolder.getName(), actionHolder);
+          parent.actions.put(actionHolder.name, actionHolder);
         }
       }
 
@@ -298,6 +298,128 @@ public class ActionProcessor extends AbstractProcessor {
    */
   public void error(Element e, String msg) {
     messager.printMessage(Diagnostic.Kind.ERROR, msg, e);
+  }
+
+  /**
+   *
+   */
+  public static class ActionHolder {
+
+    // Configure Remote options
+    final Remote remote;
+    final Internal internal;
+    final Worker worker;
+    // Deprecated
+    final Scheduled scheduled;
+    final ClassName className;
+    final TypeElement type;
+    final TypeName typeName;
+    final ClassName providerClassName;
+    final ParameterizedTypeName providerTypeName;
+    final String name;
+    final String simpleName;
+    final String fieldName;
+    final String pkgName;
+    final String moduleName;
+    final String generatedProviderName;
+    final ClassName generatedProviderClassName;
+    final DeclaredTypeVar requestType;
+    final DeclaredTypeVar replyType;
+
+    boolean generated;
+
+    public ActionHolder(TypeElement type,
+        DeclaredTypeVar requestType,
+        DeclaredTypeVar replyType,
+        Remote remote,
+        Internal internal,
+        Worker worker,
+        Scheduled scheduled) {
+      this.type = type;
+      this.requestType = requestType;
+      this.replyType = replyType;
+      this.remote = remote;
+      this.internal = internal;
+      this.worker = worker;
+      this.scheduled = scheduled;
+      this.className = ClassName.get(type);
+      this.name = type.getQualifiedName().toString();
+      this.simpleName = type.getSimpleName().toString();
+      final String f = type.getSimpleName().toString();
+      this.fieldName = Character.toLowerCase(f.charAt(0)) + f.substring(1);
+      this.moduleName = simpleName + "_Module";
+      this.generatedProviderName = simpleName + "_Provider";
+
+      typeName = ClassName.get(type);
+
+      final String[] parts = name.split("[.]");
+      if (parts.length == 1) {
+        pkgName = "";
+      } else {
+        final String lastPart = parts[parts.length - 1];
+        pkgName = name.substring(0, name.length() - lastPart.length() - 1);
+      }
+
+      generatedProviderClassName = ClassName.bestGuess(pkgName + "." + generatedProviderName);
+
+      if (isRemote()) {
+        providerClassName = ClassName.get(RemoteActionProvider.class);
+      } else if (isInternal()) {
+        providerClassName = ClassName.get(InternalActionProvider.class);
+      } else if (isWorker()) {
+        providerClassName = worker.fifo() ?
+            ClassName.get(FifoWorkerActionProvider.class) :
+            ClassName.get(WorkerActionProvider.class);
+      } else if (isScheduled()) {
+        providerClassName = ClassName.get(ScheduledActionProvider.class);
+      } else {
+        providerClassName = ClassName.get(ActionProvider.class);
+      }
+
+      if (isWorker()) {
+        // Get Action IN resolved name.
+        ClassName inName = ClassName.get(requestType.getResolvedElement());
+
+        providerTypeName = ParameterizedTypeName.get(
+            providerClassName,
+            className,
+            inName
+        );
+      } else if (isScheduled()) {
+        providerTypeName = ParameterizedTypeName.get(
+            providerClassName,
+            className
+        );
+      } else {
+        // Get Action IN resolved name.
+        ClassName inName = ClassName.get(requestType.getResolvedElement());
+        // Get Action OUT resolved name.
+        ClassName outName = ClassName.get(replyType.getResolvedElement());
+
+        providerTypeName = ParameterizedTypeName.get(
+            providerClassName,
+            className,
+            inName,
+            outName
+        );
+      }
+    }
+
+    public boolean isRemote() {
+      return remote != null;
+    }
+
+    public boolean isInternal() {
+      return internal != null;
+    }
+
+    public boolean isWorker() {
+      return worker != null;
+    }
+
+    public boolean isScheduled() {
+      return scheduled != null;
+    }
   }
 
   /**
@@ -341,6 +463,87 @@ public class ActionProcessor extends AbstractProcessor {
               : LOCATOR);
     }
 
+    void generateModules() {
+      // Package module.
+//      final TypeSpec packageModule = TypeSpec.Builder
+
+      // Generate action modules.
+      actions.forEach((key, action) -> {
+        action.generated = true;
+
+        {
+          final MethodSpec.Builder providerCtor = MethodSpec.constructorBuilder()
+              .addAnnotation(Inject.class)
+              .addParameter(ParameterSpec
+                  .builder(VERTX_CLASSNAME, "vertx").build())
+              .addParameter(ParameterSpec
+                  .builder(
+                      ParameterizedTypeName.get(ClassName.get(Provider.class), action.className),
+                      "actionProvider").build())
+              .addStatement("super(vertx, actionProvider)");
+
+          final TypeSpec.Builder providerType = TypeSpec
+              .classBuilder(action.generatedProviderName)
+              .addModifiers(Modifier.PUBLIC)
+              .superclass(action.providerTypeName)
+              .addAnnotation(Singleton.class);
+
+          providerType.addMethod(providerCtor.build());
+
+          // Build java file.
+          final JavaFile providerJavaFile = JavaFile.builder(path, providerType.build()).build();
+
+          try {
+            // Write .java source code file.
+            providerJavaFile.writeTo(filer);
+          } catch (Throwable e) {
+            // Ignore.
+            messager.printMessage(Diagnostic.Kind.ERROR,
+                "Failed to generate Source File: " + e.getMessage());
+          }
+        }
+
+        {
+          final TypeSpec.Builder actionModuleType = TypeSpec
+              .classBuilder(action.moduleName)
+              .addModifiers(Modifier.PUBLIC)
+              .addAnnotation(Module.class);
+
+          final MethodSpec.Builder mapMethod = MethodSpec.methodBuilder("_2")
+              .addAnnotation(Provides.class)
+              .addAnnotation(IntoMap.class)
+              .addAnnotation(AnnotationSpec
+                  .builder(ClassKey.class)
+                  .addMember("value", CodeBlock
+                      .builder()
+                      .add("$T.class", action.type)
+                      .build())
+                  .build())
+              .returns(ActionProvider.class)
+              .addParameter(ParameterSpec
+                  .builder(action.generatedProviderClassName, "provider")
+                  .build()
+              )
+              .addStatement("return provider");
+
+          actionModuleType.addMethod(mapMethod.build());
+
+          // Build java file.
+          final JavaFile moduleFile = JavaFile.builder(path, actionModuleType.build())
+              .build();
+
+          try {
+            // Write .java source code file.
+            moduleFile.writeTo(filer);
+          } catch (Throwable e) {
+            // Ignore.
+            messager.printMessage(Diagnostic.Kind.ERROR,
+                "Failed to generate Source File: " + e.getMessage());
+          }
+        }
+      });
+    }
+
     public void generateJava() {
       if (processed) {
         return;
@@ -355,6 +558,8 @@ public class ActionProcessor extends AbstractProcessor {
       }
 
       processed = true;
+
+      generateModules();
 
       // Build empty @Inject constructor.
       final MethodSpec.Builder ctor = MethodSpec.constructorBuilder()
@@ -408,40 +613,11 @@ public class ActionProcessor extends AbstractProcessor {
         // Get Action classname.
         ClassName actionName = ClassName.get(action.type);
 
-        TypeName actionProviderBuilder;
-
-        if (action.isWorker()) {
-          // Get Action IN resolved name.
-          ClassName inName = ClassName.get(action.inType.getResolvedElement());
-
-          actionProviderBuilder = ParameterizedTypeName.get(
-              action.getProviderTypeName(),
-              actionName,
-              inName
-          );
-        } else if (action.isScheduled()) {
-          actionProviderBuilder = ParameterizedTypeName.get(
-              action.getProviderTypeName(),
-              actionName
-          );
-        } else {
-          // Get Action IN resolved name.
-          ClassName inName = ClassName.get(action.inType.getResolvedElement());
-          // Get Action OUT resolved name.
-          ClassName outName = ClassName.get(action.outType.getResolvedElement());
-
-          actionProviderBuilder = ParameterizedTypeName.get(
-              action.getProviderTypeName(),
-              actionName,
-              inName,
-              outName
-          );
-        }
+        TypeName actionProviderBuilder = action.providerTypeName;
 
         type.addField(
-            FieldSpec.builder(actionProviderBuilder, action.getFieldName())
+            FieldSpec.builder(actionProviderBuilder, action.fieldName)
 //                        .addAnnotation(Inject.class)
-                .addAnnotation(NotNull.class)
                 .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                 .build()
         );
@@ -468,20 +644,19 @@ public class ActionProcessor extends AbstractProcessor {
 //                }
 
         ctor.addParameter(
-            ParameterSpec.builder(actionProviderBuilder, action.getFieldName(), Modifier.FINAL)
+            ParameterSpec.builder(actionProviderBuilder, action.fieldName, Modifier.FINAL)
                 .build()
         );
 
-        ctor.addStatement("this.$L = $L", action.getFieldName(), action.getFieldName());
+        ctor.addStatement("this.$L = $L", action.fieldName, action.fieldName);
 
-        initActionsCode.addStatement("put($T.class, $L)", action.type, action.getFieldName());
+        initActionsCode.addStatement("put($T.class, $L)", action.type, action.fieldName);
 
         type.addMethod(
-            MethodSpec.methodBuilder(action.getFieldName())
-                .addAnnotation(NotNull.class)
+            MethodSpec.methodBuilder(action.fieldName)
                 .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                 .returns(actionProviderBuilder)
-                .addStatement("return " + action.getFieldName())
+                .addStatement("return " + action.fieldName)
                 .build()
         );
       });
@@ -521,7 +696,7 @@ public class ActionProcessor extends AbstractProcessor {
                   messager.printMessage(
                       Diagnostic.Kind.ERROR,
                       "Action: " +
-                          action.getName() +
+                          action.name +
                           " was created. Full Regeneration needed. \"clean\" and \"compile\""
                   );
                   return;
@@ -531,7 +706,7 @@ public class ActionProcessor extends AbstractProcessor {
                   messager.printMessage(
                       Diagnostic.Kind.ERROR,
                       "Action: " +
-                          action.getName() +
+                          action.name +
                           " was created. Full Regeneration needed. \"clean\" and \"compile\""
                   );
                   return;
@@ -541,7 +716,7 @@ public class ActionProcessor extends AbstractProcessor {
                   messager.printMessage(
                       Diagnostic.Kind.ERROR,
                       "Action: " +
-                          action.getName() +
+                          action.name +
                           " was created. Full Regeneration needed. \"clean\" and \"compile\""
                   );
                   return;
@@ -551,7 +726,7 @@ public class ActionProcessor extends AbstractProcessor {
                   messager.printMessage(
                       Diagnostic.Kind.ERROR,
                       "Action: " +
-                          action.getName() +
+                          action.name +
                           " was created. Full Regeneration needed. \"clean\" and \"compile\""
                   );
                   return;

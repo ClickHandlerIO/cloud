@@ -83,9 +83,11 @@ http://www.w3.org/2001/XMLSchema-instance ">
     <javax-validation-api.version>1.1.0.Final</javax-validation-api.version>
     <selenium.version>3.4.0</selenium.version>
 
+    <nats.version>1.0</nats.version>
+
     <pdfbox.version>2.0.7</pdfbox.version>
 
-    <kotlin.version>1.1.4-2</kotlin.version>
+    <kotlin.version>1.1.4-3</kotlin.version>
     <kotlinx-coroutines.version>0.18</kotlinx-coroutines.version>
     <msgpack.version>0.8.13</msgpack.version>
   </properties>
@@ -433,6 +435,12 @@ http://www.w3.org/2001/XMLSchema-instance ">
         <version>${vertx.version}</version>
       </dependency>
 
+      <dependency>
+        <groupId>io.nats</groupId>
+        <artifactId>jnats</artifactId>
+        <version>${nats.version}</version>
+      </dependency>
+
       <!--<dependency>-->
       <!--<groupId>io.netty</groupId>-->
       <!--<artifactId>netty-codec-haproxy</artifactId>-->
@@ -514,6 +522,11 @@ http://www.w3.org/2001/XMLSchema-instance ">
         <groupId>org.jetbrains.kotlinx</groupId>
         <artifactId>kotlinx-coroutines-rx1</artifactId>
         <version>${kotlinx-coroutines.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.jetbrains.kotlinx</groupId>
+        <artifactId>kotlin-maven-plugin</artifactId>
+        <version>${kotlin.version}</version>
       </dependency>
 
       <dependency>

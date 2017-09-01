@@ -1,10 +1,6 @@
 package move.action
 
 import io.vertx.rxjava.core.Vertx
-import javaslang.control.Try
-import kotlinx.coroutines.experimental.rx1.await
-import rx.Single
-import java.util.function.Consumer
 import javax.inject.Inject
 import javax.inject.Provider
 
@@ -19,10 +15,10 @@ constructor(vertx: Vertx,
    /**
     *
     */
-   val remoteAction: RemoteAction? = actionClass.getAnnotation(RemoteAction::class.java)
+   val remote: Remote? = actionClass.getAnnotation(Remote::class.java)
 
    override val annotationTimeout: Int
-      get() = remoteAction?.timeout ?: 0
+      get() = remote?.timeout ?: 0
 
    override val isRemote = true
 
@@ -30,12 +26,12 @@ constructor(vertx: Vertx,
     *
     */
    val isGuarded: Boolean
-      get() = remoteAction?.guarded ?: false
+      get() = remote?.guarded ?: false
 
    lateinit var path: String
 
    init {
-      path = remoteAction?.path!!
+      path = remote?.path!!
 
       if (path.isNullOrBlank()) {
          var begin = false

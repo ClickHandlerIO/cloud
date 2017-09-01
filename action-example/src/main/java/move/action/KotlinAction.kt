@@ -23,18 +23,21 @@ object KotlinAction {
       System.setProperty("java.net.preferIPv6Addresses", "false")
       System.setProperty("java.net.preferIPv4Stack", "true")
 
+      val type = TypeResolver.resolveGenericType(ActionProvider::class.java, _Allocate2_Module.Allocate2_Provider::class.java)
+      val type2 = TypeResolver.resolveRawClass(ActionProvider::class.java, _Allocate2_Module.Allocate2_Provider::class.java)
+      val actionClass = TypeResolver.resolveRawArgument(type2.typeParameters[0], _Allocate2_Module.Allocate2_Provider::class.java)
+      val requestClass = TypeResolver.resolveRawArgument(type2.typeParameters[1], _Allocate2_Module.Allocate2_Provider::class.java)
+      val responseClass = TypeResolver.resolveRawArgument(type2.typeParameters[2], _Allocate2_Module.Allocate2_Provider::class.java)
+
       val app = AppComponent.instance
-      val actions = app.actions()
+//      ActionManager.put(app.actions())
+      val actions = app.actions().actions
 
       Action.all.forEach { t, u -> println(t) }
 
       val provider = Action.providerOf<Allocate, String, String>()
 
       Action.of<Allocate>()
-
-//      val Actions: Action_Locator = generatedComponent.actions().move.action
-//      Actions.ensureActionMap()
-//      actions.manager.awaitRunning()
 
       val eventLoopGroup = ActionEventLoopGroup.get(AppComponent.instance.vertx())
 
@@ -130,7 +133,7 @@ object KotlinAction {
  *
  */
 //@ActionConfig(maxExecutionMillis = 2000)
-//@ScheduledAction(intervalSeconds = 1, type = ScheduledActionType.CLUSTER_SINGLETON)
+//@Scheduled(intervalSeconds = 1, type = ScheduledActionType.CLUSTER_SINGLETON)
 //class MyScheduledAction @Inject
 //constructor() : BaseScheduledAction() {
 //   suspend override fun recover(caught: Throwable, cause: Throwable, isFallback: Boolean) {
@@ -150,7 +153,7 @@ object KotlinAction {
 //}
 //
 
-@InternalAction(timeout = 1000)
+@Internal(timeout = 1000)
 class Allocate : Action<String, String>() {
    suspend override fun execute(): String {
       val reply = of(AllocateInventory::class)
@@ -165,14 +168,14 @@ class Allocate : Action<String, String>() {
    }
 }
 
-@InternalAction(timeout = 1000)
+@Internal(timeout = 1000)
 class Allocate2 : Action<String, String>() {
    suspend override fun execute(): String {
       return ""
    }
 }
 
-@InternalAction(timeout = 1000)
+@Internal(timeout = 1000)
 class AllocateStock : Action<AllocateStock.Request, AllocateStock.Reply>() {
    suspend override fun execute(): AllocateStock.Reply {
       of<AllocateStock>()
@@ -188,7 +191,7 @@ class AllocateStock : Action<AllocateStock.Request, AllocateStock.Reply>() {
    data class Reply(val code: String = "")
 }
 
-@InternalAction
+@Internal
 class AllocateInventory @Inject constructor() : Action<AllocateInventory.Request, AllocateInventory.Reply>() {
    override val isFallbackEnabled = true
 
@@ -324,7 +327,7 @@ class AllocateInventory @Inject constructor() : Action<AllocateInventory.Request
 }
 //
 //
-//@WorkerAction(fifo = false)
+//@Worker(fifo = false)
 //class MyWorker @Inject constructor() : BaseWorkerAction<MyWorker.Request>() {
 //   suspend override fun recover(caught: Throwable, cause: Throwable, isFallback: Boolean): Boolean {
 //      return false
@@ -344,7 +347,7 @@ class AllocateInventory @Inject constructor() : Action<AllocateInventory.Request
 //
 //
 //@ActionConfig(maxExecutionMillis = 10000)
-//@ScheduledAction(intervalSeconds = 1, type = ScheduledActionType.NODE_SINGLETON)
+//@Scheduled(intervalSeconds = 1, type = ScheduledActionType.NODE_SINGLETON)
 //class MyScheduledAction2 @Inject
 //constructor() : BaseScheduledAction() {
 //   suspend override fun execute() {

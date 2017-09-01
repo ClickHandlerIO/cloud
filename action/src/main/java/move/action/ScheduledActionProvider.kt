@@ -15,7 +15,7 @@ constructor(vertx: Vertx,
    actionProvider
 ) {
    override val isScheduled = true
-   val annotation: ScheduledAction = actionClass.getAnnotation(ScheduledAction::class.java)
+   val annotation: Scheduled = actionClass.getAnnotation(Scheduled::class.java)
 
    override val annotationTimeout: Int
       get() = 0

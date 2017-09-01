@@ -12,7 +12,7 @@ class StreamConnector(val vertx: Vertx) {
 
 /**
  * Reactive Stream Action core. Streams are bi-directional multiplexed virtual raw TCP
- * Sockets. Stream Actions are a special type of WorkerAction that doesn't have an explicit
+ * Sockets. Stream Actions are a special type of Worker that doesn't have an explicit
  * timeout. Being built on top of WorkerActions which utilize the Move Cloud Job Engine, complex
  * scenarios and synchronization is possible.
  *

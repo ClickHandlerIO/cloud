@@ -344,9 +344,9 @@ abstract class Action<IN : Any, OUT : Any> : IAction<IN, OUT>() {
    /**
     *
     */
-   suspend fun noWait(request: IN) {
+   suspend fun defer(request: IN) {
       if (_request != null) {
-         provider.create().noWait(request)
+         provider.create().defer(request)
          return
       }
 
