@@ -5,7 +5,6 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Random;
-import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * A highly performant unique identifier generator.
@@ -21,6 +20,9 @@ public final class NUID {
      */
 
 
+  // Global NUID
+  public static final NUID GLOBAL = new NUID();
+  public static final NUID GLOBAL2 = new NUID();
   // Constants
   static final char[] digits = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C',
       'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T',
@@ -32,15 +34,9 @@ public final class NUID {
   static final long maxSeq = 839299365868340224L; // base^seqLen == 62^10
   static final long minInc = 33L;
   static final long maxInc = 333L;
+  public static final ThreadLocal<NUID> THREAD_LOCAL = ThreadLocal.withInitial(NUID::new);
   static final int totalLen = preLen + seqLen;
   private final Random prand;
-
-  // Global NUID
-  public static final NUID GLOBAL = new NUID();
-  public static final NUID GLOBAL2 = new NUID();
-
-  public static final ThreadLocal<NUID> THREAD_LOCAL = ThreadLocal.withInitial(NUID::new);
-
   // Instance fields
   char[] pre;
   private SecureRandom srand;
@@ -84,7 +80,7 @@ public final class NUID {
    *
    * @return the next NUID string from the global locked NUID instance.
    */
-  public static synchronized String nextGlobal() {
+  public static String nextGlobal() {
     return get().next();
   }
 

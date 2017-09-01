@@ -11,15 +11,22 @@ import com.squareup.javapoet.ParameterSpec;
 import com.squareup.javapoet.ParameterizedTypeName;
 import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
+import com.squareup.javapoet.WildcardTypeName;
 import dagger.Module;
 import dagger.Provides;
 import dagger.multibindings.ClassKey;
 import dagger.multibindings.IntoMap;
+import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.Filer;
 import javax.annotation.processing.Messager;
@@ -31,11 +38,19 @@ import javax.inject.Provider;
 import javax.inject.Singleton;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.Element;
+import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
+import javax.lang.model.element.TypeParameterElement;
+import javax.lang.model.element.VariableElement;
+import javax.lang.model.type.DeclaredType;
+import javax.lang.model.type.TypeKind;
+import javax.lang.model.type.TypeMirror;
+import javax.lang.model.util.ElementFilter;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
+import javax.tools.Diagnostic.Kind;
 import javax.tools.FileObject;
 import javax.tools.StandardLocation;
 import move.action.ActionLocator;
@@ -60,16 +75,25 @@ import move.action.WorkerActionProvider;
 @AutoService(Processor.class)
 public class ActionProcessor extends AbstractProcessor {
 
-  public static final String LOCATOR = "_Locator";
-  public static final String LOCATOR_ROOT = "_LocatorRoot";
-  private static ClassName VERTX_CLASSNAME = ClassName.bestGuess("io.vertx.rxjava.core.Vertx");
-  private final TreeMap<String, ActionHolder> actionMap = new TreeMap<>();
-  private final Pkg rootPackage = new Pkg("Action", "");
-  private final ArrayList<ActionPackage> actionPackages = new ArrayList<>();
-  private Types typeUtils;
-  private Elements elementUtils;
-  private Filer filer;
-  private Messager messager;
+  static final String LOCATOR = "_Locator";
+  static final String LOCATOR_ROOT = "_LocatorRoot";
+  static final ParameterizedTypeName ACTION_PROVIDER_NAME = ParameterizedTypeName.get(
+      ClassName.bestGuess("move.action.ActionProvider"),
+      WildcardTypeName.subtypeOf(TypeName.OBJECT),
+      WildcardTypeName.subtypeOf(TypeName.OBJECT),
+      WildcardTypeName.subtypeOf(TypeName.OBJECT)
+  );
+  static ClassName VERTX_CLASSNAME = ClassName.bestGuess(
+      "io.vertx.rxjava.core.Vertx"
+  );
+
+  final TreeMap<String, ActionHolder> actionMap = new TreeMap<>();
+  final Pkg rootPackage = new Pkg("Action", "");
+  final ArrayList<ActionPackage> actionPackages = new ArrayList<>();
+  Types typeUtils;
+  Elements elementUtils;
+  Filer filer;
+  Messager messager;
 
   @Override
   public synchronized void init(ProcessingEnvironment processingEnv) {
@@ -165,7 +189,7 @@ public class ActionProcessor extends AbstractProcessor {
         ActionHolder holder = actionMap.get(element.getQualifiedName().toString());
 
         if (holder == null) {
-          final TypeParameterResolver typeParamResolver = new TypeParameterResolver(element);
+          final TypeParameterResolver typeParamResolver = TypeParameterResolver.resolve(element);
 
           DeclaredTypeVar requestType = null;
           try {
@@ -325,6 +349,9 @@ public class ActionProcessor extends AbstractProcessor {
     final ClassName generatedProviderClassName;
     final DeclaredTypeVar requestType;
     final DeclaredTypeVar replyType;
+    final boolean hasParameterlessCtor;
+    final boolean hasInjectCtor;
+    final boolean hasFieldsInject;
 
     boolean generated;
 
@@ -351,6 +378,32 @@ public class ActionProcessor extends AbstractProcessor {
       this.generatedProviderName = simpleName + "_Provider";
 
       typeName = ClassName.get(type);
+
+      boolean parameterlessCtor = false;
+      boolean hasInjectCtor = false;
+      boolean hasFieldsInject = false;
+
+      for (VariableElement field : ElementFilter.fieldsIn(type.getEnclosedElements())) {
+        if (field.getAnnotation(Inject.class) != null) {
+          hasFieldsInject = true;
+          break;
+        }
+      }
+      this.hasFieldsInject = hasFieldsInject;
+
+      for (ExecutableElement cons :
+          ElementFilter.constructorsIn(type.getEnclosedElements())) {
+        if (cons.getParameters().isEmpty()) {
+          parameterlessCtor = true;
+        }
+
+        if (cons.getAnnotation(Inject.class) != null) {
+          hasInjectCtor = true;
+        }
+      }
+
+      this.hasParameterlessCtor = parameterlessCtor;
+      this.hasInjectCtor = hasInjectCtor;
 
       final String[] parts = name.split("[.]");
       if (parts.length == 1) {
@@ -405,20 +458,264 @@ public class ActionProcessor extends AbstractProcessor {
       }
     }
 
-    public boolean isRemote() {
+    boolean isRemote() {
       return remote != null;
     }
 
-    public boolean isInternal() {
+    boolean isInternal() {
       return internal != null;
     }
 
-    public boolean isWorker() {
+    boolean isWorker() {
       return worker != null;
     }
 
-    public boolean isScheduled() {
+    boolean isScheduled() {
       return scheduled != null;
+    }
+  }
+
+  /**
+   * Resolves a single DECLARED Type Variable.
+   * <p/>
+   * Searches down the superclass, interface, and superinterface paths.
+   *
+   * @author Clay Molocznik
+   */
+  public static class DeclaredTypeVar {
+
+    private final Map<String, ResolvedTypeVar> resolvedMap = new HashMap<>();
+    private DeclaredType type;
+    private TypeElement element;
+    private int index;
+    private String varName;
+    private TypeMirror varType;
+    private TypeElement varTypeElement;
+
+    public DeclaredTypeVar(DeclaredType type, TypeElement element, int index, String varName,
+        TypeMirror varType) {
+      this.type = type;
+      this.element = element;
+      this.index = index;
+      this.varName = varName;
+      this.varType = varType;
+
+      if (varType instanceof DeclaredType) {
+        this.varTypeElement = (TypeElement) ((DeclaredType) varType).asElement();
+      }
+    }
+
+    public DeclaredType getType() {
+      return type;
+    }
+
+    public TypeElement getElement() {
+      return element;
+    }
+
+    public int getIndex() {
+      return index;
+    }
+
+    public String getVarName() {
+      return varName;
+    }
+
+    public TypeMirror getResolvedType() {
+      return varType;
+    }
+
+    public TypeElement getResolvedElement() {
+      return varTypeElement;
+    }
+
+    public ResolvedTypeVar getResolved(String name) {
+      return resolvedMap.get(name);
+    }
+
+    public void resolve() {
+      // Find 'varName' on the SuperClass or any Interfaces.
+      final TypeMirror superClass = element.getSuperclass();
+
+      if (superClass != null) {
+        search(varName, superClass);
+      }
+    }
+
+    private void search(String varName, TypeMirror mirror) {
+      if (mirror == null || !(mirror instanceof DeclaredType)) {
+        return;
+      }
+
+      final DeclaredType type = (DeclaredType) mirror;
+      final TypeElement element = (TypeElement) type.asElement();
+      final List<? extends TypeMirror> typeArgs = type.getTypeArguments();
+      if (typeArgs == null || typeArgs.isEmpty()) {
+        return;
+      }
+
+      for (int i = 0; i < typeArgs.size(); i++) {
+        final TypeMirror typeArg = typeArgs.get(i);
+
+        if (typeArg.getKind() == TypeKind.TYPEVAR
+            && typeArg.toString().equals(varName)) {
+          // Found it.
+          // Get TypeVariable name.
+          varName = element.getTypeParameters().get(i).getSimpleName().toString();
+
+          // Add to resolved map.
+          resolvedMap.put(element.toString(), new ResolvedTypeVar(type, element, i, varName));
+
+          // Go up to the SuperClass.
+          search(varName, element.getSuperclass());
+
+          final List<? extends TypeMirror> interfaces = element.getInterfaces();
+          if (interfaces != null && !interfaces.isEmpty()) {
+            for (TypeMirror iface : interfaces) {
+              search(varName, iface);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * @author Clay Molocznik
+   */
+  public static class ResolvedTypeVar {
+
+    private DeclaredType type;
+    private TypeElement element;
+    private int index;
+    private String varName;
+
+    public ResolvedTypeVar(DeclaredType type, TypeElement element, int index, String varName) {
+      this.type = type;
+      this.element = element;
+      this.index = index;
+      this.varName = varName;
+    }
+
+    public DeclaredType getType() {
+      return type;
+    }
+
+    public TypeElement getElement() {
+      return element;
+    }
+
+    public int getIndex() {
+      return index;
+    }
+
+    public String getVarName() {
+      return varName;
+    }
+  }
+
+  /**
+   * @author Clay Molocznik
+   */
+  public static class TypeParameterResolver {
+
+    private final TypeElement element;
+    private final List<DeclaredTypeVar> vars = new ArrayList<>();
+    private boolean resolved;
+
+    public TypeParameterResolver(TypeElement element) {
+      this.element = element;
+    }
+
+    public static TypeParameterResolver resolve(TypeElement element) {
+      final TypeParameterResolver resolver = new TypeParameterResolver(element);
+      resolver.resolve();
+      return resolver;
+    }
+
+    void resolve() {
+      if (resolved) {
+        return;
+      }
+
+      resolveDeclaredTypeVars(element.getSuperclass());
+
+      final List<? extends TypeMirror> interfaces = element.getInterfaces();
+      if (interfaces != null && !interfaces.isEmpty()) {
+        for (TypeMirror iface : interfaces) {
+          resolveDeclaredTypeVars(iface);
+        }
+      }
+
+      resolved = true;
+    }
+
+    public DeclaredTypeVar resolve(Class cls, int typeVarIndex) {
+      if (!resolved) {
+        resolve();
+      }
+
+      for (DeclaredTypeVar var : vars) {
+        final ResolvedTypeVar actionTypeVar = var.getResolved(cls.getName());
+        if (actionTypeVar != null) {
+          if (actionTypeVar.getIndex() == typeVarIndex) {
+            return var;
+          }
+        }
+      }
+      return null;
+    }
+
+    private void resolveDeclaredTypeVars(TypeMirror type) {
+      if (type == null) {
+        return;
+      }
+
+      if (type.getKind() != TypeKind.DECLARED) {
+        return;
+      }
+
+      if (type.toString().equals(Object.class.getName())) {
+        return;
+      }
+
+      if (!(type instanceof DeclaredType)) {
+        return;
+      }
+
+      final DeclaredType declaredType = (DeclaredType) type;
+      final TypeElement element = ((TypeElement) ((DeclaredType) type).asElement());
+
+      if (element.getQualifiedName().toString().equals(Object.class.getName())) {
+        return;
+      }
+
+      final List<? extends TypeMirror> typeArgs = declaredType.getTypeArguments();
+      if (typeArgs != null && !typeArgs.isEmpty()) {
+        for (int i = 0; i < typeArgs.size(); i++) {
+          final TypeMirror typeArg = typeArgs.get(i);
+
+          if (typeArg.getKind() == TypeKind.DECLARED) {
+            final List<? extends TypeParameterElement> typeParams =
+                ((TypeElement) ((DeclaredType) type).asElement()).getTypeParameters();
+            final String typeVarName = typeParams.get(i).getSimpleName().toString();
+
+            final DeclaredTypeVar declaredTypeVar =
+                new DeclaredTypeVar(declaredType, element, i, typeVarName, typeArg);
+            declaredTypeVar.resolve();
+            vars.add(declaredTypeVar);
+          }
+        }
+      }
+
+      resolveDeclaredTypeVars(element.getSuperclass());
+
+      final List<? extends TypeMirror> interfaces = element.getInterfaces();
+      if (interfaces != null && !interfaces.isEmpty()) {
+        for (TypeMirror iface : interfaces) {
+          resolveDeclaredTypeVars(iface);
+        }
+      }
     }
   }
 
@@ -427,11 +724,14 @@ public class ActionProcessor extends AbstractProcessor {
    */
   public class Pkg {
 
-    public final String name;
-    public final Pkg parent;
-    public final TreeMap<String, Pkg> children = new TreeMap<>();
-    public final TreeMap<String, ActionHolder> actions = new TreeMap<>();
-    private final boolean root;
+    final String name;
+    final String simpleName;
+    final String moduleSimpleName;
+    final Pkg parent;
+    final TreeMap<String, Pkg> children = new TreeMap<>();
+    final TreeMap<String, ActionHolder> actions = new TreeMap<>();
+    final boolean root;
+    final ClassName moduleName;
     public String path;
     private boolean processed = false;
 
@@ -444,6 +744,16 @@ public class ActionProcessor extends AbstractProcessor {
       this.name = name;
       this.path = path;
       this.parent = parent;
+
+      this.simpleName = capitalize(name);
+
+      if (path == null || path.isEmpty()) {
+        this.moduleSimpleName = "Move_Root_Module";
+        this.moduleName = ClassName.bestGuess("Move_Root_Module");
+      } else {
+        this.moduleSimpleName = simpleName + "_Module";
+        this.moduleName = ClassName.bestGuess(path + "." + moduleSimpleName);
+      }
     }
 
     public String getFullPath() {
@@ -463,85 +773,219 @@ public class ActionProcessor extends AbstractProcessor {
               : LOCATOR);
     }
 
-    void generateModules() {
-      // Package module.
-//      final TypeSpec packageModule = TypeSpec.Builder
+    String capitalize(String value) {
+      if (value == null || value.isEmpty()) {
+        return "";
+      }
+
+      if (value.length() == 1) {
+        return value.toUpperCase();
+      }
+
+      return Character.toUpperCase(value.charAt(0)) + value.substring(1);
+    }
+
+    String existingPackageModuleSource() {
+      try {
+        final FileObject fileObject = filer.getResource(
+            StandardLocation.SOURCE_OUTPUT,
+            path,
+            moduleSimpleName + ".java"
+        );
+        final CharSequence content = fileObject.getCharContent(true);
+        return content.toString();
+      } catch (Throwable e) {
+        return "";
+      }
+    }
+
+    FileObject getModuleFile() {
+      try {
+        final FileObject fileObject = filer.getResource(
+            StandardLocation.SOURCE_OUTPUT,
+            path,
+            moduleSimpleName + ".java"
+        );
+        return fileObject;
+      } catch (Throwable e) {
+        return null;
+      }
+    }
+
+    void generateSource() {
+      if (processed) {
+        return;
+      }
+
+      processed = true;
 
       // Generate action modules.
-      actions.forEach((key, action) -> {
+      actions.values().stream().filter(a -> !a.generated).forEach(action -> {
         action.generated = true;
-
-        {
-          final MethodSpec.Builder providerCtor = MethodSpec.constructorBuilder()
-              .addAnnotation(Inject.class)
-              .addParameter(ParameterSpec
-                  .builder(VERTX_CLASSNAME, "vertx").build())
-              .addParameter(ParameterSpec
-                  .builder(
-                      ParameterizedTypeName.get(ClassName.get(Provider.class), action.className),
-                      "actionProvider").build())
-              .addStatement("super(vertx, actionProvider)");
-
-          final TypeSpec.Builder providerType = TypeSpec
-              .classBuilder(action.generatedProviderName)
-              .addModifiers(Modifier.PUBLIC)
-              .superclass(action.providerTypeName)
-              .addAnnotation(Singleton.class);
-
-          providerType.addMethod(providerCtor.build());
-
-          // Build java file.
-          final JavaFile providerJavaFile = JavaFile.builder(path, providerType.build()).build();
-
-          try {
-            // Write .java source code file.
-            providerJavaFile.writeTo(filer);
-          } catch (Throwable e) {
-            // Ignore.
-            messager.printMessage(Diagnostic.Kind.ERROR,
-                "Failed to generate Source File: " + e.getMessage());
-          }
-        }
-
-        {
-          final TypeSpec.Builder actionModuleType = TypeSpec
-              .classBuilder(action.moduleName)
-              .addModifiers(Modifier.PUBLIC)
-              .addAnnotation(Module.class);
-
-          final MethodSpec.Builder mapMethod = MethodSpec.methodBuilder("_2")
-              .addAnnotation(Provides.class)
-              .addAnnotation(IntoMap.class)
-              .addAnnotation(AnnotationSpec
-                  .builder(ClassKey.class)
-                  .addMember("value", CodeBlock
-                      .builder()
-                      .add("$T.class", action.type)
-                      .build())
-                  .build())
-              .returns(ActionProvider.class)
-              .addParameter(ParameterSpec
-                  .builder(action.generatedProviderClassName, "provider")
-                  .build()
-              )
-              .addStatement("return provider");
-
-          actionModuleType.addMethod(mapMethod.build());
-
-          // Build java file.
-          final JavaFile moduleFile = JavaFile.builder(path, actionModuleType.build())
-              .build();
-
-          try {
-            // Write .java source code file.
-            moduleFile.writeTo(filer);
-          } catch (Throwable e) {
-            // Ignore.
-            messager.printMessage(Diagnostic.Kind.ERROR,
-                "Failed to generate Source File: " + e.getMessage());
-          }
-        }
+        generateProvider(action);
+        generateModule(action);
       });
+
+      // Package module.
+      final FileObject packageModuleSource = getModuleFile();
+      final List<ClassName> classNames = new ArrayList<>();
+
+      if (packageModuleSource != null) {
+        try {
+          final String contents = packageModuleSource.getCharContent(true).toString();
+
+          messager.printMessage(Kind.WARNING, contents);
+
+          if (!packageModuleSource.delete()) {
+            messager.printMessage(Kind.WARNING,
+                "Failed to delete Package Module File: " +
+                    moduleName.toString()
+            );
+          }
+        } catch (IOException e) {
+          if (e instanceof FileNotFoundException) {
+
+          } else {
+            messager.printMessage(
+                Kind.ERROR,
+                "Failed to get contents of Package Module File: " +
+                    moduleName.toString() +
+                    ": " +
+                    e.getMessage()
+            );
+          }
+        }
+      } else {
+
+      }
+
+//      if (!packageModuleSource.isEmpty()) {
+//
+//        messager.printMessage(Kind.WARNING, "Package Module already exists");
+//      } else {
+      // Generate a new package module.
+      final AnnotationSpec.Builder builder = AnnotationSpec.builder(Module.class);
+
+      final CodeBlock.Builder codeBlock = CodeBlock.builder();
+      codeBlock.beginControlFlow("");
+
+      final List<ClassName> subModuleClasses = children.values().stream()
+          .map(p -> p.moduleName)
+          .collect(Collectors.toList());
+
+      final List<ClassName> actionClasses = actions
+          .values()
+          .stream()
+          .map(a -> ClassName.bestGuess(path + "." + a.moduleName)).collect(
+              Collectors.toList());
+
+      classNames.addAll(subModuleClasses);
+      classNames.addAll(actionClasses);
+
+      for (int i = 0; i < classNames.size(); i++) {
+        codeBlock.add(i < classNames.size() - 1 ? "$T.class," : "$T.class", classNames.get(i));
+        codeBlock.add("\n");
+      }
+
+      codeBlock.add("");
+      codeBlock.endControlFlow();
+      builder.addMember("includes", codeBlock.build());
+
+      final TypeSpec.Builder typeBuilder = TypeSpec
+          .classBuilder(moduleSimpleName)
+          .addModifiers(Modifier.PUBLIC)
+          .addAnnotation(builder.build());
+
+      final JavaFile providerJavaFile = JavaFile.builder(path, typeBuilder.build()).build();
+
+      try {
+        // Write .java source code file.
+        providerJavaFile.writeTo(filer);
+      } catch (Throwable e) {
+        // Ignore.
+        messager.printMessage(Diagnostic.Kind.ERROR,
+            "Failed to generate Source File: " + e.getMessage());
+      }
+//      }
+    }
+
+    private void generateProvider(ActionHolder action) {
+      final MethodSpec.Builder providerCtor = MethodSpec.constructorBuilder()
+          .addAnnotation(Inject.class)
+          .addParameter(ParameterSpec
+              .builder(VERTX_CLASSNAME, "vertx").build())
+          .addParameter(ParameterSpec
+              .builder(
+                  ParameterizedTypeName.get(ClassName.get(Provider.class), action.className),
+                  "actionProvider").build())
+          .addStatement("super(vertx, actionProvider)");
+
+      final TypeSpec.Builder providerType = TypeSpec
+          .classBuilder(action.generatedProviderName)
+          .addModifiers(Modifier.PUBLIC)
+          .superclass(action.providerTypeName)
+          .addAnnotation(Singleton.class);
+
+      providerType.addMethod(providerCtor.build());
+
+      // Build java file.
+      final JavaFile providerJavaFile = JavaFile.builder(path, providerType.build()).build();
+
+      try {
+        // Write .java source code file.
+        providerJavaFile.writeTo(filer);
+      } catch (Throwable e) {
+        // Ignore.
+        messager.printMessage(Diagnostic.Kind.ERROR,
+            "Failed to generate Source File: " + e.getMessage());
+      }
+    }
+
+    private void generateModule(ActionHolder action) {
+      final TypeSpec.Builder actionModuleType = TypeSpec
+          .classBuilder(action.moduleName)
+          .addModifiers(Modifier.PUBLIC)
+          .addAnnotation(Module.class);
+
+      if (action.hasParameterlessCtor && !action.hasInjectCtor) {
+        final MethodSpec.Builder provideActionMethod = MethodSpec.methodBuilder("_1")
+            .addAnnotation(Provides.class)
+            .returns(action.className)
+            .addStatement("return new $T()", action.className);
+        actionModuleType.addMethod(provideActionMethod.build());
+      }
+
+      final MethodSpec.Builder mapMethod = MethodSpec.methodBuilder("_2")
+          .addAnnotation(Provides.class)
+          .addAnnotation(IntoMap.class)
+          .addAnnotation(AnnotationSpec
+              .builder(ClassKey.class)
+              .addMember("value", CodeBlock
+                  .builder()
+                  .add("$T.class", action.type)
+                  .build())
+              .build())
+          .returns(ACTION_PROVIDER_NAME)
+          .addParameter(ParameterSpec
+              .builder(action.generatedProviderClassName, "provider")
+              .build()
+          )
+          .addStatement("return provider");
+
+      actionModuleType.addMethod(mapMethod.build());
+
+      // Build java file.
+      final JavaFile moduleFile = JavaFile.builder(path, actionModuleType.build())
+          .build();
+
+      try {
+        // Write .java source code file.
+        moduleFile.writeTo(filer);
+      } catch (Throwable e) {
+        // Ignore.
+        messager.printMessage(Diagnostic.Kind.ERROR,
+            "Failed to generate Source File: " + e.getMessage());
+      }
     }
 
     public void generateJava() {
@@ -557,9 +1001,8 @@ public class ActionProcessor extends AbstractProcessor {
         path = children.values().iterator().next().path;
       }
 
+      generateSource();
       processed = true;
-
-      generateModules();
 
       // Build empty @Inject constructor.
       final MethodSpec.Builder ctor = MethodSpec.constructorBuilder()
@@ -610,41 +1053,15 @@ public class ActionProcessor extends AbstractProcessor {
 
       // Go through all actions.
       actions.forEach((classPath, action) -> {
-        // Get Action classname.
-        ClassName actionName = ClassName.get(action.type);
-
-        TypeName actionProviderBuilder = action.providerTypeName;
-
         type.addField(
-            FieldSpec.builder(actionProviderBuilder, action.fieldName)
-//                        .addAnnotation(Inject.class)
+            FieldSpec.builder(action.generatedProviderClassName, action.fieldName)
                 .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                 .build()
         );
 
-        // Init Class.
-        final TypeSpec.Builder providerType = TypeSpec
-            .classBuilder(action.type.getSimpleName() + "Action")
-            .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-            .superclass(actionProviderBuilder)
-            .addAnnotation(Singleton.class);
-
-        providerType.addMethod(MethodSpec.constructorBuilder()
-            .addAnnotation(Inject.class).build());
-
-//                final JavaFile javaFile = JavaFile.builder(path, providerType.build()).build();
-//
-//                try {
-//                    // Write .java source code file.
-//                    javaFile.writeTo(filer);
-//                }
-//                catch (Throwable e) {
-//                    // Ignore.
-//                    messager.printMessage(Diagnostic.Kind.ERROR, "Failed to generate Source File: " + e.getMessage());
-//                }
-
         ctor.addParameter(
-            ParameterSpec.builder(actionProviderBuilder, action.fieldName, Modifier.FINAL)
+            ParameterSpec
+                .builder(action.generatedProviderClassName, action.fieldName, Modifier.FINAL)
                 .build()
         );
 
@@ -655,7 +1072,7 @@ public class ActionProcessor extends AbstractProcessor {
         type.addMethod(
             MethodSpec.methodBuilder(action.fieldName)
                 .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-                .returns(actionProviderBuilder)
+                .returns(action.generatedProviderClassName)
                 .addStatement("return " + action.fieldName)
                 .build()
         );

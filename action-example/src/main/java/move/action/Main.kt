@@ -1,82 +1,24 @@
 package move.action
 
-import com.hazelcast.core.HazelcastInstance
 import dagger.Module
 import dagger.Provides
 import io.vertx.rxjava.core.Vertx
-import move.cluster.HazelcastProvider
+import io.vertx.rxjava.core.cli.CLI
 import javax.inject.Singleton
 
-//
-///**
-//
-// */
-//object Main {
-//   internal val vertx = Vertx.vertx()
-//
-//   @JvmStatic fun main(args: Array<String>) {
-//      //        PDDocument pdf = PDDocument.load(new File("/Users/clay/Desktop/StatementPdf.pdf"), MemoryUsageSetting.setupMainMemoryOnly());
-////        val pdf = PDDocument.load(File("/Users/clay/Desktop/invoicesample.pdf"), MemoryUsageSetting.setupMainMemoryOnly())
-////
-////        println("Page Count: " + pdf.numberOfPages)
-////
-////        Arrays.stream<PrintService>(PrinterJob.lookupPrintServices()).forEach { `$` -> println(`$`) }
-////
-////
-////
-////        try {
-////            val job = PrinterJob.getPrinterJob()
-////            job.setPageable(PDFPageable(pdf))
-////            val attr = HashPrintRequestAttributeSet()
-////            attr.add(PageRanges(1, 1)) // pages 1 to 1
-////            job.print(attr)
-////        } catch (e: Exception) {
-////            println(e)
-////        }
-//
-//      //        Observable<String> observable = actions().myAsyncAction().execute("HI");
-//      //        observable.subscribe(result -> {
-//      //            System.err.println("Another Subscriber: " + result);
-//      //        });
-//
-////        actions().register()
-//
-//
-//
-////      AppComponent.instance.manager().startAsync().awaitRunning()
-////
-////      AppComponent.instance.vertx().createHttpServer(HttpServerOptions().setCompressionSupported(true)
-////         .setMaxWebsocketMessageSize(1024 * 1024 * 2)
-//////                .setMaxWebsocketMessageSize(1024 * 64)
-////      )
-////         .websocketHandler { ws ->
-////            ws.textMessageHandler {
-////               ws.writeFinalTextFrame(it)
-////            }
-////            ws.exceptionHandler {
-////               it.printStackTrace()
-////               ws.writeFinalTextFrame("MESSAGE SIZE IS TOO BIG: " + (it as WebSocketMessageTooBigException).size)
-//////                        it.printStackTrace()
-////            }
-////         }.listen(9001)
-//
-////        AppComponent.instance.actions().move().action().allocateInventory2.observe("Hi").subscribe({ r -> println(Thread.currentThread().name) }) { e -> e.printStackTrace() }
-//
-//
-//      Thread.sleep(5000000)
-//
-//
-//      //        actions().myAsyncAction()
-//      //            .execute("Bye")
-//      //            .subscribe(System.err::println);
-//   }
-//
-////    fun actions(): Action_Locator {
-////        return AppComponent.instance.actions().move().action()
-////    }
-//
-//
-//}
+object App {
+   val vertx: Vertx by lazy { Vertx.vertx() }
+   val graph = DaggerAppComponent.create()
+
+   init {
+      graph.actions()
+   }
+
+   @JvmStatic
+   fun main(args: Array<String>) {
+      KotlinAction.main(args)
+   }
+}
 
 @Module
 class AppModule {
@@ -88,24 +30,6 @@ class AppModule {
    @Provides
    @Singleton
    fun vertx(): Vertx {
-      return Vertx.vertx()
-   }
-
-   @Provides
-   @Singleton
-   fun hazelcastProvider(): HazelcastProvider {
-      return HazelcastProvider(null)
-   }
-
-   @Provides
-   @Singleton
-   fun hazelcast(): HazelcastInstance {
-      return hazelcastProvider().get()
-   }
-
-   @Provides
-   @Singleton
-   fun workerService(workerService: LocalWorkerService): WorkerService {
-      return workerService
+      return App.vertx
    }
 }

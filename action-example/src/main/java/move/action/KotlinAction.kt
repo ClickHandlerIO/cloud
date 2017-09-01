@@ -23,34 +23,23 @@ object KotlinAction {
       System.setProperty("java.net.preferIPv6Addresses", "false")
       System.setProperty("java.net.preferIPv4Stack", "true")
 
-      val type = TypeResolver.resolveGenericType(ActionProvider::class.java, _Allocate2_Module.Allocate2_Provider::class.java)
-      val type2 = TypeResolver.resolveRawClass(ActionProvider::class.java, _Allocate2_Module.Allocate2_Provider::class.java)
-      val actionClass = TypeResolver.resolveRawArgument(type2.typeParameters[0], _Allocate2_Module.Allocate2_Provider::class.java)
-      val requestClass = TypeResolver.resolveRawArgument(type2.typeParameters[1], _Allocate2_Module.Allocate2_Provider::class.java)
-      val responseClass = TypeResolver.resolveRawArgument(type2.typeParameters[2], _Allocate2_Module.Allocate2_Provider::class.java)
-
-      val app = AppComponent.instance
-//      ActionManager.put(app.actions())
-      val actions = app.actions().actions
+      val actions = App.graph
 
       Action.all.forEach { t, u -> println(t) }
 
+      Action.of<AllocateInventory>().rx(AllocateInventory.Request(id = "")).subscribe()
+
       val provider = Action.providerOf<Allocate, String, String>()
+      val eventLoopGroup = ActionEventLoopGroup.get(App.vertx)
 
-      Action.of<Allocate>()
+      App.vertx.setPeriodic(1000L) {
+         if (provider != null) {
+            App.vertx.rxExecuteBlocking<Unit> {
 
-      val eventLoopGroup = ActionEventLoopGroup.get(AppComponent.instance.vertx())
-
-//      async(Unconfined) {
-//         Actions.allocateInventory {}
-//      }
-
-      AppComponent.instance.vertx().setPeriodic(1000L) {
-         //         AppComponent.instance.vertx().rxExecuteBlocking<Unit> {
-//         actions.root.move.action.allocate
-         if (provider != null)
-            println(provider.breaker.metrics.toJson().getLong("rollingOperationCount"))
-//         }.subscribe()
+            }.subscribe()
+            provider.breaker.metrics.toJson().getLong("rollingOperationCount")
+            println()
+         }
       }
 
       async(Unconfined) {
@@ -58,22 +47,11 @@ object KotlinAction {
             var list = mutableListOf<Single<Unit>>()
             for (t in 1..6) {
                val single = Single.create<Unit> { subscriber ->
-                  //                  async(Unconfined) {
-//                     val start = System.currentTimeMillis()
-//                     for (i in 1..1000000) {
-//                        Actions.allocate.await("")
-//                     }
-//                     println("${Thread.currentThread().name} ${System.currentTimeMillis() - start} ms")
-//                     println(Actions.allocate.breaker?.metrics?.toJson())
-//                     subscriber.onSuccess(Unit)
-//                  }
                   eventLoopGroup.executors[t].runOnContext {
                      async(Unconfined) {
                         for (i in 1..1_000_000) {
-                           Action.of<Allocate>().await("")
-//                           Action.of<Allocate>().await("")
+                           val a = Action.of<Allocate>() await ""
                         }
-//                        println("${Thread.currentThread().name} ${System.currentTimeMillis() - start} ms")
                         subscriber.onSuccess(Unit)
                      }
                   }
@@ -85,98 +63,37 @@ object KotlinAction {
             Single.zip(list) {}.await()
          }
       }
-//        actions().register()
-
-      eventLoopGroup.executors.forEach {
-         //         AppComponent.instance.vertx().rxExecuteBlocking<Unit> {
-//         it.runOnContext {
-//            async(Unconfined) {
-//               val start = System.currentTimeMillis()
-//               for (i in 1..1000000) {
-//                  Actions.allocate {}
-//               }
-//               println("${Thread.currentThread().name} ${System.currentTimeMillis() - start} ms")
-//               println(Actions.allocate.breaker?.metrics?.toJson())
-//            }
-//         }
-
-//         }.subscribe()
-
-//         it.runOnContext {
-//            async(Unconfined) {
-////               for (x in 1..100) {
-//
-////               }
-////         try {
-////            val result = Actions.allocateInventory { id = "" }
-////
-////            println(result.code)
-////         } catch (e: Throwable) {
-////            e.printStackTrace()
-////         }
-//            }
-//         }
-      }
    }
 }
-//
-//
-//object Another {
-//   @JvmStatic
-//   fun main(args: Array<String>) {
-//      println("")
-//   }
-//}
-//
+
 
 /**
  *
  */
-//@ActionConfig(maxExecutionMillis = 2000)
-//@Scheduled(intervalSeconds = 1, type = ScheduledActionType.CLUSTER_SINGLETON)
-//class MyScheduledAction @Inject
-//constructor() : BaseScheduledAction() {
-//   suspend override fun recover(caught: Throwable, cause: Throwable, isFallback: Boolean) {
-//      cause.printStackTrace()
-//   }
-//
-//   suspend override fun execute() {
-//      println(javaClass.simpleName + " " + Thread.currentThread().name)
-////      val r = MyWorker.Request().apply { id = UID.next() }
-////      println(r.id)
-////      val provider = AppComponent.instance.actions().move.action.myWorker
-////      provider(r)
-////      AppComponent.instance.actions().move.action.myWorker.single(r)
-////      val receipt = AppComponent.instance.actions().move.action.myWorker.send {}.await()
-////      println(receipt.messageId)
-//   }
-//}
-//
 
 @Internal(timeout = 1000)
-class Allocate : Action<String, String>() {
+class Allocate : InternalAction<String, String>() {
    suspend override fun execute(): String {
-      val reply = of(AllocateInventory::class)
-         .await(AllocateInventory.Request(id = ""))
-
-      val reply2 = of<AllocateInventory>() await AllocateInventory.Request(id = "")
-
-
-      val r = of(AllocateInventory::class)..AllocateInventory.Request(id = "")
+//      val reply = of(AllocateInventory::class)
+//         .await(AllocateInventory.Request(id = ""))
+//
+//      val reply2 = of<AllocateInventory>() await AllocateInventory.Request(id = "")
+//
+//      val r = of(AllocateInventory::class)..AllocateInventory.Request(id = "")
 
       return ""
    }
 }
 
 @Internal(timeout = 1000)
-class Allocate2 : Action<String, String>() {
+class Allocate2 : InternalAction<String, String>() {
    suspend override fun execute(): String {
       return ""
    }
 }
 
 @Internal(timeout = 1000)
-class AllocateStock : Action<AllocateStock.Request, AllocateStock.Reply>() {
+class AllocateStock : InternalAction<AllocateStock.Request, AllocateStock.Reply>() {
    suspend override fun execute(): AllocateStock.Reply {
       of<AllocateStock>()
          .rx(
@@ -192,15 +109,12 @@ class AllocateStock : Action<AllocateStock.Request, AllocateStock.Reply>() {
 }
 
 @Internal
-class AllocateInventory @Inject constructor() : Action<AllocateInventory.Request, AllocateInventory.Reply>() {
+class AllocateInventory @Inject constructor() : InternalAction<AllocateInventory.Request, AllocateInventory.Reply>() {
+   data class Request(var id: String)
+
+   data class Reply(var code: String = "")
+
    override val isFallbackEnabled = true
-
-   suspend override fun recover(caught: Throwable, cause: Throwable, isFallback: Boolean): Reply {
-      if (isFallback)
-         throw cause
-
-      return Reply(code = cause.javaClass.simpleName)
-   }
 
    suspend override fun execute(): Reply {
       // Inline blocking coroutineBlock being run asynchronously
@@ -321,37 +235,10 @@ class AllocateInventory @Inject constructor() : Action<AllocateInventory.Request
       )
    }
 
-   data class Request(var id: String)
+   suspend override fun recover(caught: Throwable, cause: Throwable, isFallback: Boolean): Reply {
+      if (isFallback)
+         throw cause
 
-   data class Reply(var code: String = "")
+      return Reply(code = cause.javaClass.simpleName)
+   }
 }
-//
-//
-//@Worker(fifo = false)
-//class MyWorker @Inject constructor() : BaseWorkerAction<MyWorker.Request>() {
-//   suspend override fun recover(caught: Throwable, cause: Throwable, isFallback: Boolean): Boolean {
-//      return false
-//   }
-//
-//   suspend override fun execute(): Boolean {
-//      println("Started worker")
-////      delay(1000)
-//      println("Finishing worker")
-//      return true
-//   }
-//
-//   class Request @Inject constructor() {
-//      var id: String? = null
-//   }
-//}
-//
-//
-//@ActionConfig(maxExecutionMillis = 10000)
-//@Scheduled(intervalSeconds = 1, type = ScheduledActionType.NODE_SINGLETON)
-//class MyScheduledAction2 @Inject
-//constructor() : BaseScheduledAction() {
-//   suspend override fun execute() {
-////      println(javaClass.simpleName + " " + Thread.currentThread().name)
-////      AppComponent.instance.actions().move.action.myWorker.send {}.await()
-//   }
-//}

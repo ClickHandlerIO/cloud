@@ -1,6 +1,7 @@
 package move.action
 
 import com.google.common.io.BaseEncoding
+import move.NUID
 import org.msgpack.core.MessagePack
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -19,31 +20,72 @@ data class WorkerEnvelope(val option: Int = 0,
 
 private val EMPTY_BYTE_ARRAY = ByteArray(0)
 
-data class WorkerEnvelope2(
+/**
+ * Internal Worker Envelope.
+ *
+ * ACK-ACK
+ * ACK
+ */
+data class RequestEnvelope(
    // UID of message.
-   val id: String,
+   val id: String = NUID.nextGlobal(),
+   // Broker type
+   val broker: Int = BROKER_UNRELIABLE,
    // Group or Partition ID.
    val groupId: String? = null,
    // De-Duplication ID. Note that it only De-Duplicates within
-   // the scope of the Group ID.
+   // the scope of the Group ID. Only valid when using a Job Pattern.
    val deduplicationId: String? = null,
    // Topic to send reply to.
    val replyTopic: String? = null,
-   val option: Int = 0,
-   // Unix Millisecond Epoch
+   /// Number of reply messages expected.
+   val replyMessageCount: Int = 0,
+   // Unix Nanosecond Epoch
    val created: Long = 0,
-   // Delay in seconds. Default to no delay.
-   val delay: Int = 0,
-   // Name or Type of message
-   val name: String? = null,
+   // Earliest Unix Nanosecond Epoch to start Action.
+   val delay: Long = 0,
+   // Action name.
+   val name: String = "",
+   // Model type. null defaults to the Action's "Request" type
+   val type: String? = null,
    // Number of times this message was delivered
-   // and failed process
+   // and failed process. Not all systems support this.
    val deliveries: Int = 0,
-   // Milliseconds before visibility timesout
+   // Milliseconds before visibility times out
    val timeout: Int = 0,
    // Raw payload bytes
    val body: ByteArray = EMPTY_BYTE_ARRAY
 )
+
+/**
+ *
+ */
+data class RemoteAck(
+   // Move Internal ID
+   val id: String,
+   // If broker has it's own ID then it's set here.
+   val brokerID: String? = null,
+   // Node that is processing request.
+   val nodeID: String,
+   // Unix Nanosecond epoch of when remote
+   // node will cancel request if not complete.
+   val until: Long = 0
+)
+
+/**
+ *
+ */
+data class RemoteNack(
+   val reason: Int,
+   val nodeID: String,
+   val alternateChannel: String = ""
+)
+
+/**
+ * Unreliable means the caller is in charge of retrying
+ */
+const val BROKER_UNRELIABLE = 1
+const val BROKER_RELIABLE = 2
 
 /**
  *

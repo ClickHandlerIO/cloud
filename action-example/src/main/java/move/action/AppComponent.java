@@ -1,23 +1,17 @@
 package move.action;
 
 import dagger.Component;
-import io.vertx.rxjava.core.Vertx;
-import java.util.Map;
 import javax.inject.Singleton;
+import move.Move_Root_Module;
 
+/**
+ *
+ */
 @Singleton
 @Component(modules = {
-    ActionsModule.class,
-
+    Move_Root_Module.class,
     AppModule.class
 })
-interface AppComponent {
-
-  AppComponent instance = DaggerAppComponent.create();
-
-  Vertx vertx();
-
-//  Map<Class<?>, ActionProvider<?, ?, ?>> actions();
-
-  ActionStore actions();
+public interface AppComponent {
+  ActionManager actions();
 }

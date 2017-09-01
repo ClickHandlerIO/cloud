@@ -6,7 +6,7 @@ import rx.Single
 /**
  *
  */
-abstract class InternalAction<IN : Any, OUT : Any> : Action<IN, OUT>() {
+abstract class ActorAction<IN : Any, OUT : Any> : Action<IN, OUT>() {
    /**
     *
     */

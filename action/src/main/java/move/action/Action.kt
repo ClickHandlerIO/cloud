@@ -22,7 +22,7 @@ import kotlin.reflect.KClass
 /**
  * @author Clay Molocznik
  */
-abstract class Action<IN : Any, OUT : Any> : IAction<IN, OUT>() {
+abstract class Action<IN : Any, OUT : Any> internal constructor() : IAction<IN, OUT>() {
    // Request
    var _request: IN? = null
    val request: IN
@@ -46,7 +46,7 @@ abstract class Action<IN : Any, OUT : Any> : IAction<IN, OUT>() {
       get() = dispatcher.actionContext
 
    // Rx
-   private lateinit var single: Single<OUT>
+   internal lateinit var single: Single<OUT>
    private lateinit var subscriber: SingleSubscriber<in OUT>
 
    // Local fields
@@ -198,7 +198,7 @@ abstract class Action<IN : Any, OUT : Any> : IAction<IN, OUT>() {
    /**
     *
     */
-   open fun afterInit() {
+   internal open fun afterInit() {
    }
 
    /**
@@ -208,7 +208,7 @@ abstract class Action<IN : Any, OUT : Any> : IAction<IN, OUT>() {
       coroutineBlock.startCoroutine(coroutine, coroutine)
    }
 
-   open suspend fun onStart() {
+   internal open suspend fun onStart() {
    }
 
    fun timedOut() {
@@ -222,7 +222,7 @@ abstract class Action<IN : Any, OUT : Any> : IAction<IN, OUT>() {
     * Helper function for other languages such as Java to suspend
     * the action and resume later.
     */
-   suspend fun suspend(block: (Continuation<OUT>) -> Unit): OUT {
+   protected suspend fun suspend(block: (Continuation<OUT>) -> Unit): OUT {
       return suspendCoroutine {
          block(it)
       }
@@ -276,16 +276,16 @@ abstract class Action<IN : Any, OUT : Any> : IAction<IN, OUT>() {
    /**
     *
     */
-   val rx: Single<OUT>
-      get() {
-         return single
-      }
+   internal open fun defer(block: suspend () -> Unit) {
+
+   }
 
    /**
     *
     */
-   fun rx(request: IN): Single<OUT> {
+   internal open fun rx(request: IN): Single<OUT> {
       if (_request != null) {
+         // Create a new instance.
          return provider.create().rx(request)
       }
 
@@ -296,7 +296,7 @@ abstract class Action<IN : Any, OUT : Any> : IAction<IN, OUT>() {
    /**
     *
     */
-   suspend operator fun invoke(request: IN): OUT {
+   internal open suspend operator fun invoke(request: IN): OUT {
       if (_request != null) {
          return provider.create().invoke(request)
       }
@@ -308,70 +308,24 @@ abstract class Action<IN : Any, OUT : Any> : IAction<IN, OUT>() {
    /**
     *
     */
-   suspend infix fun await(request: IN): OUT {
-      if (_request == null) {
-         return provider.create().await(request)
-      }
-
-      _request = request
-      return single.await()
-   }
-
-   /**
-    *
-    */
-   suspend infix operator fun rangeTo(request: IN): OUT {
-      if (_request == null) {
-         return provider.create().await(request)
-      }
-
-      _request = request
-      return single.await()
-   }
-
-   /**
-    *
-    */
-   suspend infix fun send(request: IN): OUT {
-      if (_request == null) {
-         return provider.create().await(request)
-      }
-
-      _request = request
-      return single.await()
-   }
-
-   /**
-    *
-    */
-   suspend fun defer(request: IN) {
+   internal open suspend infix fun await(request: IN): OUT {
       if (_request != null) {
-         provider.create().defer(request)
-         return
+         return provider.create().await(request)
       }
 
       _request = request
-      single.subscribe()
-   }
-
-   inline operator fun <A : Action<*, *>> plus(cls: KClass<A>): A {
-      val a = ActionManager.actionMap[cls.java]
-      if (a == null) {
-         throw RuntimeException()
-      }
-
-      return (a as ActionProvider<A, *, *>).create()
+      return single.await()
    }
 
    /**
     * Runs a coroutineBlock on the default vertx WorkerExecutor in a coroutine.
     */
-   suspend fun <T> blocking(block: suspend () -> T): T = blocking(false, block)
+   protected suspend fun <T> blocking(block: suspend () -> T): T = blocking(false, block)
 
    /**
     * Runs a coroutineBlock on the default vertx WorkerExecutor in a coroutine.
     */
-   suspend fun <T> blocking(ordered: Boolean, block: suspend () -> T): T =
+   protected suspend fun <T> blocking(ordered: Boolean, block: suspend () -> T): T =
       provider.vertx.rxExecuteBlocking<T>({
          contextLocal.set(context)
          try {
@@ -386,7 +340,7 @@ abstract class Action<IN : Any, OUT : Any> : IAction<IN, OUT>() {
    /**
     * Runs a coroutineBlock on a specified vertx WorkerExecutor in a coroutine.
     */
-   suspend fun <T> blocking(executor: WorkerExecutor, block: suspend () -> T): T =
+   protected suspend fun <T> blocking(executor: WorkerExecutor, block: suspend () -> T): T =
       executor.rxExecuteBlocking<T> {
          contextLocal.set(context)
          try {
@@ -416,7 +370,7 @@ abstract class Action<IN : Any, OUT : Any> : IAction<IN, OUT>() {
    /**
     * Runs a coroutineBlock on the default vertx WorkerExecutor in a coroutine.
     */
-   suspend fun <T> rxBlocking(block: suspend () -> T): Single<T> = rxBlocking(false, block)
+   protected suspend fun <T> rxBlocking(block: suspend () -> T): Single<T> = rxBlocking(false, block)
 
    /**
     * Runs a coroutineBlock on the default vertx WorkerExecutor in a coroutine.
@@ -436,13 +390,13 @@ abstract class Action<IN : Any, OUT : Any> : IAction<IN, OUT>() {
    /**
     * Runs a coroutineBlock on a specified vertx WorkerExecutor in a coroutine.
     */
-   suspend fun <T> rxBlocking(executor: WorkerExecutor, block: suspend () -> T): Single<T> =
+   protected suspend fun <T> rxBlocking(executor: WorkerExecutor, block: suspend () -> T): Single<T> =
       rxBlocking(executor, false, block)
 
    /**
     * Runs a coroutineBlock on a specified vertx WorkerExecutor in a coroutine.
     */
-   suspend fun <T> rxBlocking(executor: WorkerExecutor, ordered: Boolean, block: suspend () -> T): Single<T> =
+   protected suspend fun <T> rxBlocking(executor: WorkerExecutor, ordered: Boolean, block: suspend () -> T): Single<T> =
       executor.rxExecuteBlocking<T>({
          contextLocal.set(context)
          try {
@@ -480,24 +434,6 @@ abstract class Action<IN : Any, OUT : Any> : IAction<IN, OUT>() {
          return ActionManager.actionMap[A::class.java] as ActionProvider<A, IN, OUT>
       }
 
-      suspend fun <A : Action<IN, OUT>, IN : Any, OUT : Any> new(cls: KClass<A>): A {
-         val provider = ActionManager.actionMap[cls.java]
-
-         if (provider == null)
-            throw ActionCancelledException()
-
-         return (provider.create() as A)
-      }
-
-      inline operator fun <A : Action<*, *>> plus(cls: KClass<A>): A {
-         val a = ActionManager.actionMap[cls.java]
-         if (a == null) {
-            throw RuntimeException()
-         }
-
-         return (a as ActionProvider<A, *, *>).create()
-      }
-
       inline infix fun <A : Action<*, *>> of(cls: KClass<A>): A {
          val a = ActionManager.actionMap[cls.java]
          if (a == null) {
@@ -516,47 +452,12 @@ abstract class Action<IN : Any, OUT : Any> : IAction<IN, OUT>() {
          return (a as ActionProvider<A, *, *>).create()
       }
 
-      inline fun <reified A : Action<*, *>> new(): A {
-         val a = ActionManager.actionMap[A::class.java]
-         if (a == null) {
-            throw RuntimeException()
-         }
-
-         return (a as ActionProvider<A, *, *>).create()
-      }
-
-      inline fun <reified A : Action<*, *>> new(block: A.() -> Unit): A {
-         val a = ActionManager.actionMap[A::class.java]
-         if (a == null) {
-            throw RuntimeException()
-         }
-
-         val action = (a as ActionProvider<A, *, *>).create()
-         action.apply(block)
-         return action
-      }
-
-
       inline fun <reified A : Action<*, *>> of(): A {
          val a = ActionManager.actionMap[A::class.java]
          if (a == null) {
             throw RuntimeException()
          }
 
-         return (a as ActionProvider<A, *, *>).create()
-      }
-
-      inline fun <reified A : Action<*, *>> instanceOf(): A {
-         val a = ActionManager.actionMap[A::class.java]
-         if (a == null) {
-            throw RuntimeException()
-         }
-
-         return (a as ActionProvider<A, *, *>).create()
-      }
-
-      suspend inline fun <reified A : Action<*, *>> action(): A {
-         val a = ActionManager.actionMap[A::class.java] ?: throw RuntimeException()
          return (a as ActionProvider<A, *, *>).create()
       }
 

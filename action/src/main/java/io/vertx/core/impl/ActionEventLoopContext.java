@@ -17,7 +17,6 @@
 package io.vertx.core.impl;
 
 import io.netty.channel.EventLoop;
-import io.vertx.core.Context;
 import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonObject;
@@ -59,6 +58,8 @@ public class ActionEventLoopContext extends ContextImpl {
   private final LongSkipListMap<AtomicInteger> counterMap = new LongSkipListMap<>();
   private final LongSkipListMap<Action> nonTimeoutActionMap = new LongSkipListMap<>();
   private final AtomicLong nonTimeoutCounter = new AtomicLong(0L);
+
+  private final LongSkipListMap<Action> remoteActions = new LongSkipListMap<>();
 
   public ActionEventLoopContext(
       @NotNull EventLoopContext eventLoopDefault,

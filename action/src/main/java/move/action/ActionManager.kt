@@ -2,8 +2,6 @@ package move.action
 
 import com.google.common.util.concurrent.AbstractIdleService
 import io.vertx.rxjava.core.Vertx
-import javaslang.control.Try
-import move.cluster.HazelcastProvider
 import org.slf4j.LoggerFactory
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -16,29 +14,17 @@ import javax.inject.Singleton
 @Singleton
 class ActionManager @Inject
 internal constructor(val vertx: Vertx,
-                     val workerService: WorkerService,
-                     val scheduledActionManager: ScheduledActionManager) : AbstractIdleService() {
+                     val actions: ActionMap) : AbstractIdleService() {
+
+   init {
+      put(actions.map)
+      ensureActionMap()
+   }
 
    override fun startUp() {
-      // Startup worker service.
-      workerService.startAsync().awaitRunning()
-      // Startup scheduled actions.
-      scheduledActionManager.startAsync().awaitRunning()
    }
 
    override fun shutDown() {
-      // Shutdown scheduled actions.
-      Try.run { scheduledActionManager.stopAsync().awaitTerminated() }
-         .onFailure { e -> LOG.error("Failed to stop ScheduledActionManager", e) }
-
-      // Shutdown worker service.
-      Try.run { workerService.stopAsync().awaitTerminated() }
-         .onFailure { e ->
-            LOG.error(
-               "Failed to stop WorkerService[" + workerService.javaClass.canonicalName + "]",
-               e
-            )
-         }
    }
 
    companion object : ActionLocator() {
