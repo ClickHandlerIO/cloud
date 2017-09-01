@@ -2,7 +2,6 @@ package move.action
 
 import com.google.common.base.Throwables
 import io.vertx.circuitbreaker.CircuitBreakerState
-import io.vertx.core.impl.ActionEventLoopContext
 import io.vertx.rxjava.core.Vertx
 import io.vertx.rxjava.core.WorkerExecutor
 import kotlinx.coroutines.experimental.*

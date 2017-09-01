@@ -1,6 +1,5 @@
 package move.action
 
-import io.vertx.core.impl.ActionEventLoopContext
 import io.vertx.kotlin.circuitbreaker.CircuitBreakerOptions
 import io.vertx.rxjava.core.Vertx
 import rx.Single

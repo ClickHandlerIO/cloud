@@ -14,11 +14,15 @@
  * You may elect to redistribute this code under either of these licenses.
  */
 
-package io.vertx.core.impl;
+package move.action;
 
 import io.netty.channel.EventLoop;
 import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
+import io.vertx.core.impl.ContextExt;
+import io.vertx.core.impl.ContextImpl;
+import io.vertx.core.impl.EventLoopContext;
+import io.vertx.core.impl.VertxInternal;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
@@ -26,10 +30,6 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import move.action.Action;
-import move.action.ActionEventLoopGroup;
-import move.action.LongSkipListMap;
-import move.action.LongTreeMap;
 import org.jetbrains.annotations.NotNull;
 
 /**
@@ -44,13 +44,13 @@ import org.jetbrains.annotations.NotNull;
  *
  * @author Clay Molocznik
  */
-public class ActionEventLoopContext extends ContextImpl {
+public class ActionEventLoopContext extends ContextExt {
 
   // Sequence is a 24bit integer and epoch is a 40bit integer.
   public static final long SEQUENCE_MASK = (1L << 24L) - 1L;
   public static final long FREQUENCY_ADJUSTMENT = 200L;
 
-  private static final Logger log = LoggerFactory.getLogger(ActionEventLoopContext.class);
+  public static final Logger log = LoggerFactory.getLogger(ActionEventLoopContext.class);
 
   public final EventLoop eventLoop;
   private final AtomicBoolean processingTimeouts = new AtomicBoolean(false);
@@ -66,8 +66,7 @@ public class ActionEventLoopContext extends ContextImpl {
       @NotNull VertxInternal vertxInternal,
       @NotNull JsonObject config,
       @NotNull EventLoop eventLoop) {
-    super(vertxInternal, eventLoopDefault.internalBlockingPool, eventLoopDefault.workerPool, null,
-        config, null, eventLoop);
+    super(eventLoopDefault, vertxInternal, config, eventLoop);
     this.eventLoop = eventLoop;
   }
 
@@ -224,7 +223,10 @@ public class ActionEventLoopContext extends ContextImpl {
     return nonTimeoutActionMap.remove(actionId) != null;
   }
 
-  public void processTimeouts() {
+  /**
+   *
+   */
+  void processTimeouts() {
     // Don't overload an already slammed EventLoop thread.
     if (!processingTimeouts.compareAndSet(false, true)) {
       return;
@@ -232,36 +234,41 @@ public class ActionEventLoopContext extends ContextImpl {
 
     eventLoop.execute(() -> {
       try {
+        final long now = System.currentTimeMillis();
+
         // Give plenty of buffer so we don't race and duplicate IDs
-        final long counterCeil =
-            System.currentTimeMillis() / FREQUENCY_ADJUSTMENT - (FREQUENCY_ADJUSTMENT * 16);
+        evictCounters(
+            now / FREQUENCY_ADJUSTMENT - (FREQUENCY_ADJUSTMENT * 16)
+        );
         // Compute the ceiling timeout ID.
-        final long timeoutCeil = pack(System.currentTimeMillis() / FREQUENCY_ADJUSTMENT, 0);
-
-        // Look for timeouts.
-        {
-          LongSkipListMap.Node<AtomicInteger> entry = counterMap.removeFirstIfLessThan(counterCeil);
-          while (entry != null) {
-            // Next entry.
-            entry = counterMap.removeFirstIfLessThan(counterCeil);
-          }
-        }
-        {
-          // Given we are sorted by lowest to highest with lowest being
-          // the next Action that may have timed out.
-          LongSkipListMap.Node<Action> entry = actionMap.removeFirstIfLessThan(timeoutCeil);
-          while (entry != null) {
-            // Cancel Action and flag as timed out.
-            ((Action) entry.value).timedOut();
-
-            // Next entry.
-            entry = actionMap.removeFirstIfLessThan(timeoutCeil);
-          }
-        }
+        evictActions(pack(
+            now / FREQUENCY_ADJUSTMENT, 0
+        ));
       } finally {
         processingTimeouts.compareAndSet(true, false);
       }
     });
+  }
+
+  private void evictCounters(long counterCeil) {
+    LongSkipListMap.Node<AtomicInteger> entry = counterMap.removeFirstIfLessThan(counterCeil);
+    while (entry != null) {
+      // Next entry.
+      entry = counterMap.removeFirstIfLessThan(counterCeil);
+    }
+  }
+
+  private void evictActions(long timeoutCeil) {
+    // Given we are sorted by lowest to highest with lowest being
+    // the next Action that may have timed out.
+    LongSkipListMap.Node<Action> entry = actionMap.removeFirstIfLessThan(timeoutCeil);
+    while (entry != null) {
+      // Cancel Action and flag as timed out.
+      ((Action) entry.value).timedOut();
+
+      // Next entry.
+      entry = actionMap.removeFirstIfLessThan(timeoutCeil);
+    }
   }
 
   public void executeAsync(Handler<Void> task) {
@@ -269,56 +276,9 @@ public class ActionEventLoopContext extends ContextImpl {
     eventLoop.execute(wrapTask(task));
   }
 
-  protected Runnable wrapTask(Handler<Void> hTask) {
-    return () -> {
-      Thread th = Thread.currentThread();
-      if (!(th instanceof VertxThread)) {
-        throw new IllegalStateException(
-            "Uh oh! Event loop eventLoop executing with wrong thread! Expected " + contextThread
-                + " got " + th);
-      }
-      VertxThread current = (VertxThread) th;
-      current.executeStart();
-      current.setContext(this);
-      try {
-        hTask.handle(null);
-      } catch (Throwable t) {
-        log.error("Unhandled exception", t);
-        Handler<Throwable> handler = exceptionHandler();
-        if (handler == null) {
-          handler = owner.exceptionHandler();
-        }
-        if (handler != null) {
-          handler.handle(t);
-        }
-      } finally {
-        // We don't unset the eventLoop after execution - this is done later when the eventLoop is closed via
-        // VertxThreadFactory
-        current.executeEnd();
-      }
-    };
-  }
+  class ActionHolder {
 
-  @Override
-  public boolean isEventLoopContext() {
-    return true;
-  }
-
-  @Override
-  public boolean isMultiThreadedWorkerContext() {
-    return false;
-  }
-
-  @Override
-  protected void checkCorrectThread() {
-    // Skip checks.
-//    Thread current = Thread.currentThread();
-//    if (!(current instanceof VertxThread)) {
-//      throw new IllegalStateException(
-//          "Expected to be on Vert.x thread, but actually on: " + current);
-//    } else if (contextThread != null && current != contextThread) {
-//      throw new IllegalStateException(
-//          "Event delivered on unexpected thread " + current + " expected: " + contextThread);
-//    }
+    String id;
+    Action action;
   }
 }

@@ -1,6 +1,5 @@
 package move.action;
 
-import io.vertx.core.impl.ActionEventLoopContext;
 import io.vertx.rxjava.ext.web.RoutingContext;
 
 /**

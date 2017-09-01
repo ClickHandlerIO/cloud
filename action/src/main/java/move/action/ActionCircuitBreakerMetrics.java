@@ -322,7 +322,7 @@ public class ActionCircuitBreakerMetrics {
     }
 
     long durationInNanos() {
-      return (end - begin);
+      return (end - begin) / 1000;
     }
 
     long durationInMs() {
