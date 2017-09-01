@@ -17,6 +17,12 @@ internal constructor(val vertx: Vertx,
                      val actions: ActionMap) : AbstractIdleService() {
 
    init {
+      // Setup JBoss logging provider for Undertow.
+      System.setProperty("org.jboss.logging.provider", "slf4j")
+      // Setup IP stack. We want IPv4.
+      System.setProperty("java.net.preferIPv6Addresses", "false")
+      System.setProperty("java.net.preferIPv4Stack", "true")
+
       put(actions.map)
       ensureActionMap()
    }

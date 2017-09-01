@@ -7,12 +7,12 @@ import io.vertx.core.json.JsonObject;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.LongAdder;
 import org.HdrHistogram.ActionHistogram;
+import org.HdrHistogram.AtomicHistogram;
+import org.HdrHistogram.ConcurrentHistogram;
 import org.HdrHistogram.Histogram;
 
 /**
  * Circuit breaker metrics.
- *
- * @author <a href="http://escoffier.me">Clement Escoffier</a>
  */
 public class ActionCircuitBreakerMetrics {
 
@@ -34,9 +34,12 @@ public class ActionCircuitBreakerMetrics {
   private LongAdder timeout = new LongAdder();
   private LongAdder exceptions = new LongAdder();
   //  private Histogram statistics = new ConcurrentHistogram(3);
-  private Histogram statistics = new ActionHistogram(60000, 3);
-  private Histogram cachedRolling1 = new ActionHistogram(60000, 3);
-  private Histogram cachedRolling2 = new ActionHistogram(60000, 3);
+  private Histogram statistics = new ConcurrentHistogram(3);
+//  private Histogram statistics = new ActionHistogram(60000, 3);
+  private Histogram cachedRolling1 = new ConcurrentHistogram(3);
+//  private Histogram cachedRolling1 = new ActionHistogram(60000, 3);
+  private Histogram cachedRolling2 = new ConcurrentHistogram(3);
+//  private Histogram cachedRolling2 = new ActionHistogram(60000, 3);
   private volatile RollingWindow currentWindow = new RollingWindow();
 
   ActionCircuitBreakerMetrics(Vertx vertx, ActionCircuitBreaker circuitBreaker,
@@ -61,11 +64,11 @@ public class ActionCircuitBreakerMetrics {
   public void complete(Operation operation) {
     final RollingWindow window = this.currentWindow;
 
-    final long durationInMs = operation.durationInMs();
+    final long durationInMs = operation.durationInNanos();
     this.durationMs.add(durationInMs);
 
     // Compute global statistics
-    statistics.recordValue(operation.durationInMs());
+    statistics.recordValue(operation.durationInNanos());
 
     cpuTime.add(operation.cpu);
     blocking.add(operation.blocking);
@@ -316,6 +319,10 @@ public class ActionCircuitBreakerMetrics {
       end = System.nanoTime();
       shortCircuited = true;
       ActionCircuitBreakerMetrics.this.complete(this);
+    }
+
+    long durationInNanos() {
+      return (end - begin);
     }
 
     long durationInMs() {

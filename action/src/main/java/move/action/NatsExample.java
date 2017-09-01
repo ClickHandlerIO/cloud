@@ -25,8 +25,8 @@ public class NatsExample {
   public static void main(String[] args) throws Throwable {
 
 // Connect to default URL ("nats://localhost:4222")
-    int total = 2_000_000;
-    int connCount = 8;
+    int total = 10_000_000;
+    int connCount = 10;
     int max_per_conn = 5_000;
     int iterations = total / max_per_conn;
 
