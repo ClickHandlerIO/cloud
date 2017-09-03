@@ -133,6 +133,7 @@ http://www.w3.org/2001/XMLSchema-instance ">
     <module>action-pubsub</module>
     <module>action-compiler</module>
     <module>action-ignite</module>
+    <module>action-nats</module>
     <module>gcloud-pubsub</module>
     <module>gcloud-datastore</module>
     <module>common</module>
@@ -188,6 +189,12 @@ http://www.w3.org/2001/XMLSchema-instance ">
       <dependency>
         <groupId>io.clickhandler</groupId>
         <artifactId>action-ignite</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>io.clickhandler</groupId>
+        <artifactId>action-nats</artifactId>
         <version>${project.version}</version>
       </dependency>
 

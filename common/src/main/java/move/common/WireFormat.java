@@ -12,6 +12,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.fasterxml.jackson.module.kotlin.KotlinModule;
 import io.netty.buffer.ByteBuf;
 import io.vertx.core.buffer.Buffer;
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.time.Clock;
@@ -23,6 +24,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import javaslang.collection.List;
+import org.jetbrains.annotations.NotNull;
 import org.msgpack.jackson.dataformat.MessagePackFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -177,6 +179,27 @@ public class WireFormat {
     }
   }
 
+  public static <T> T parse(Class<T> cls, Buffer buffer) {
+    return parse(cls, buffer.getByteBuf().nioBuffer());
+  }
+
+  public static <T> T parse(Class<T> cls, ByteBuf buffer) {
+    return parse(cls, buffer.nioBuffer());
+  }
+
+  public static <T> T parse(Class<T> cls, ByteBuffer buffer) {
+    if (buffer == null) {
+      return null;
+    }
+
+    try {
+      return MAPPER.readValue(new ByteBufferBackedInputStream(buffer), cls);
+    } catch (Throwable e) {
+      LOG.info("Failed to unpack MsgPack data", e);
+      throw new RuntimeException(e);
+    }
+  }
+
   public static byte[] byteify(Object obj) {
     try {
       return MAPPER.writeValueAsBytes(obj);
@@ -214,5 +237,43 @@ public class WireFormat {
     Duration duration = Duration.ofDays(2);
     @JsonProperty
     Instant instant = Instant.now(Clock.systemDefaultZone());
+  }
+
+  public static class ByteBufferBackedInputStream extends InputStream {
+    protected final ByteBuffer _b;
+
+    public ByteBufferBackedInputStream(ByteBuffer buf) { _b = buf; }
+
+    @Override public int available() { return _b.remaining(); }
+
+    @Override
+    public int read() throws IOException { return _b.hasRemaining() ? (_b.get() & 0xFF) : -1; }
+
+    @Override
+    public int read(@NotNull byte[] bytes, int off, int len) throws IOException {
+      if (!_b.hasRemaining()) return -1;
+      len = Math.min(len, _b.remaining());
+      _b.get(bytes, off, len);
+      return len;
+    }
+  }
+
+  public static class ByteBufBackedInputStream extends InputStream {
+    protected final ByteBuf _b;
+
+    public ByteBufBackedInputStream(ByteBuf buf) { _b = buf; }
+
+    @Override public int available() { return _b.readableBytes(); }
+
+    @Override
+    public int read() throws IOException { return _b.readableBytes() > 0 ? (_b.readByte() & 0xFF) : -1; }
+
+    @Override
+    public int read(byte[] bytes, int off, int len) throws IOException {
+      if (_b.readableBytes() <= 0) return -1;
+      len = Math.min(len, _b.readableBytes());
+      _b.readBytes(bytes, off, len);
+      return len;
+    }
   }
 }

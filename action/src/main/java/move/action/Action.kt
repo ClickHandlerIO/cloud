@@ -5,12 +5,16 @@ import io.vertx.circuitbreaker.CircuitBreakerState
 import io.vertx.rxjava.core.Vertx
 import io.vertx.rxjava.core.WorkerExecutor
 import kotlinx.coroutines.experimental.*
+import kotlinx.coroutines.experimental.Job
 import kotlinx.coroutines.experimental.rx1.await
 import kotlinx.coroutines.experimental.rx1.rxSingle
+import kotlinx.coroutines.experimental.selects.SelectBuilder
+import kotlinx.coroutines.experimental.selects.select
 import rx.Single
 import rx.SingleSubscriber
 import rx.Subscription
 import java.util.*
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import kotlin.coroutines.experimental.Continuation
 import kotlin.coroutines.experimental.CoroutineContext
@@ -37,7 +41,7 @@ abstract class Action<IN : Any, OUT : Any> internal constructor() : IAction<IN, 
    // Coroutine Fields
    private lateinit var dispatcher: ActionContextDispatcher
    private lateinit var coroutineBlock: suspend CoroutineScope.() -> OUT
-   private lateinit var coroutine: ActionJobCoroutine
+   internal lateinit var coroutine: ActionJobCoroutine
       get
 
    // Action Context
@@ -71,6 +75,8 @@ abstract class Action<IN : Any, OUT : Any> internal constructor() : IAction<IN, 
     */
    open val isFallbackEnabled: Boolean
       get() = false
+
+   // TODO: Track dependent subscriptions that need to be cleaned automatically
 
    internal fun init(provider: ActionProvider<Action<IN, OUT>, IN, OUT>,
                      context: ActionContext,
@@ -419,6 +425,25 @@ abstract class Action<IN : Any, OUT : Any> internal constructor() : IAction<IN, 
     */
    protected fun <T> rx(block: suspend CoroutineScope.() -> T): Single<T> = rxSingle(dispatcher, block)
 
+   /**
+    * Delays coroutine for a given time without blocking a thread and resumes it after a specified time.
+    * This suspending function is cancellable.
+    * If the [Job] of the current coroutine is cancelled or completed while this suspending function is waiting, this function
+    * immediately resumes with [CancellationException].
+    *
+    * Note, that delay can be used in [select] invocation with [onTimeout][SelectBuilder.onTimeout] clause.
+    *
+    * This function delegates to [Delay.scheduleResumeAfterDelay] if the context [CoroutineDispatcher]
+    * implements [Delay] interface, otherwise it resumes using a built-in single-threaded scheduled executor service.
+    */
+   suspend fun delay(time: Long, unit: TimeUnit = TimeUnit.MILLISECONDS) {
+      return kotlinx.coroutines.experimental.delay(time, unit)
+   }
+
+   suspend fun sleep(time: Long, unit: TimeUnit = TimeUnit.MILLISECONDS) {
+      return kotlinx.coroutines.experimental.delay(time, unit)
+   }
+
    companion object {
       val contextLocal = ThreadLocal<ActionContext?>()
 
@@ -474,17 +499,6 @@ abstract class Action<IN : Any, OUT : Any> internal constructor() : IAction<IN, 
    inner class ActionJobCoroutine(
       parentContext: CoroutineContext
    ) : AbstractCoroutine<OUT>(parentContext, true), Subscription {
-      override fun onStart() {
-      }
-
-      override fun onCancellation() {
-         super.onCancellation()
-      }
-
-      override fun onParentCancellation(cause: Throwable?) {
-         super.onParentCancellation(cause)
-      }
-
       @Suppress("UNCHECKED_CAST")
       override fun afterCompletion(state: Any?, mode: Int) {
          if (state is CompletedExceptionally) {

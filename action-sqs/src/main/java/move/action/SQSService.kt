@@ -350,7 +350,7 @@ internal constructor(val vertx: Vertx,
          val maxConcurrency = entry.value.map {
             it.concurrency
          }.max()?.toInt() ?: DEFAULT_CONCURRENCY
-         // If there are more than 1 action mapped to this queue then find largest "timeout"
+         // If there are more than 1 action mapped to this queue then find largest "deadline"
          val maxExecutionMillis = entry.value.map {
             it.timeoutMillis()
          }.max()?.toInt() ?: DEFAULT_WORKER_TIMEOUT_MILLIS
@@ -737,7 +737,7 @@ internal constructor(val vertx: Vertx,
          // Delete asynchronously.
          // Allow deletes to be batched which can increase performance quite a bit while decreasing
          // resources used and allowing allowing the next receive to happen immediately.
-         // The visibility timeout buffer provides a good safety net.
+         // The visibility deadline buffer provides a good safety net.
          sqsBuffer.deleteMessage(DeleteMessageRequest(queueUrl, receiptHandle), object : AsyncHandler<DeleteMessageRequest, DeleteMessageResult> {
             override fun onError(exception: Exception) {
                receiveMore()

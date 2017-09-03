@@ -19,15 +19,11 @@ public final class NUID {
      * increment. Total is 22 bytes of base 62 ascii text :)
      */
 
-
-  // Global NUID
-  public static final NUID GLOBAL = new NUID();
-  public static final NUID GLOBAL2 = new NUID();
-  // Constants
   static final char[] digits = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C',
       'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T',
       'U', 'V', 'W', 'X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k',
       'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'};
+
   static final int base = 62;
   static final int preLen = 12;
   static final int seqLen = 10;
@@ -36,6 +32,11 @@ public final class NUID {
   static final long maxInc = 333L;
   public static final ThreadLocal<NUID> THREAD_LOCAL = ThreadLocal.withInitial(NUID::new);
   static final int totalLen = preLen + seqLen;
+
+  // Global NUID
+  public static final NUID GLOBAL = new NUID();
+  public static final NUID GLOBAL2 = new NUID();
+
   private final Random prand;
   // Instance fields
   char[] pre;

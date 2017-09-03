@@ -13,5 +13,7 @@ import move.Move_Root_Module;
     AppModule.class
 })
 public interface AppComponent {
+  AppComponent instance = DaggerAppComponent.create();
+
   ActionManager actions();
 }

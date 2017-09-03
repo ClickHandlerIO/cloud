@@ -71,7 +71,7 @@ import java.util.concurrent.Future;
  * and changeMessageVisibility calls. <br> After receiving a call, rather than executing it right
  * away, this client waits for a configurable period of time ( default=200ms) for other calls of the
  * same type to come in; if such calls do come in, they are also not executed immediately, but
- * instead are added to the batch. When the batch becomes full or the timeout period expires, the
+ * instead are added to the batch. When the batch becomes full or the deadline period expires, the
  * entire batch is executed at once and the results are returned to the callers. This method of
  * operation leads to reduced operating costs (since SQS charges per call and fewer calls are made)
  * and increased overall throughput (since more work is performed per call, and all fixed costs of

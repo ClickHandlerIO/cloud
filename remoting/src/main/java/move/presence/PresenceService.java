@@ -264,7 +264,7 @@ public class PresenceService extends AbstractIdleService {
       }
     }
 
-    // Were there any timeout evictions?
+    // Were there any deadline evictions?
     if (evicted == null) {
       if (maxSize < occupants.size()) {
         evicted = new ArrayList<>(occupants.size() - maxSize);

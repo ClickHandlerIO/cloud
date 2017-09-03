@@ -61,17 +61,6 @@ abstract class ActionLocator {
             list += value
 
             workerActionQueueGroupMap.put(value.queueName, list)
-         } else if (value.javaClass.isAssignableFrom(FifoWorkerActionProvider::class.java)) {
-            workerActionMap.put(key, value as FifoWorkerActionProvider<Action<Any, Boolean>, Any>)
-            workerActionMap.put(value.actionClass.canonicalName, value)
-
-            var list: Set<WorkerActionProvider<Action<Any, Boolean>, Any>>? = workerActionQueueGroupMap[value.queueName]
-            if (list == null) {
-               list = setOf()
-            }
-            list += value
-
-            workerActionQueueGroupMap.put(value.queueName, list)
          } else if (value.javaClass.isAssignableFrom(ScheduledActionProvider::class.java)) {
             scheduledActionMap.put(key, value as ScheduledActionProvider<Action<Unit, Unit>>)
          } else {

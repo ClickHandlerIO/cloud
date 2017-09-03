@@ -39,7 +39,7 @@ import org.jetbrains.annotations.NotNull;
  * microsecond/ms/second.
  *
  * Actions are sequenced by the ceiling 200ms block of their calculated unix millisecond epoch
- * timeout. If an Action has no timeout then there is no associated timeout tracking cost. However,
+ * deadline. If an Action has no deadline then there is no associated deadline tracking cost. However,
  * every Action is locally tracked.
  *
  * @author Clay Molocznik
@@ -240,7 +240,7 @@ public class ActionEventLoopContext extends ContextExt {
         evictCounters(
             now / FREQUENCY_ADJUSTMENT - (FREQUENCY_ADJUSTMENT * 16)
         );
-        // Compute the ceiling timeout ID.
+        // Compute the ceiling deadline ID.
         evictActions(pack(
             now / FREQUENCY_ADJUSTMENT, 0
         ));

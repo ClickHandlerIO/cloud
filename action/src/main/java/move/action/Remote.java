@@ -37,6 +37,18 @@ public @interface Remote {
    *
    * @return
    */
+  boolean rest() default true;
+
+  /**
+   *
+   * @return
+   */
+  boolean websocket() default true;
+
+  /**
+   *
+   * @return
+   */
   String path() default "";
 
   /**
@@ -49,8 +61,17 @@ public @interface Remote {
    *
    */
   enum Visibility {
+    /**
+     * HTTP and WebSocket API is available.
+     */
     PUBLIC,
+    /**
+     * Internal API is available.
+     */
     INTERNAL,
+    /**
+     * API generation is ignored.
+     */
     PRIVATE,
   }
 }

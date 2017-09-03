@@ -13,7 +13,7 @@ import javax.inject.Singleton
 
 object App {
    val vertx: Vertx by lazy { Vertx.vertx() }
-   val graph = DaggerAppComponent.create()
+   val graph = AppComponent.instance
 
    init {
       graph.actions()
@@ -34,23 +34,22 @@ object App {
       App.vertx.setPeriodic(statsInternval) {
          if (provider != null) {
             App.vertx.rxExecuteBlocking<Unit> {
-
+               val metrics = provider.breaker.metrics.toJson()
+               println("Action:\t${metrics.getString("name")}")
+               println("\t\tRolling Operations: ${metrics.getLong("rollingOperationCount")}")
+               println("\t\tTotal Operations:   ${metrics.getLong("totalOperationCount")}")
+               println("\t\tTotal Success:      ${metrics.getLong("totalSuccessCount")}")
+               println("\t\tTotal CPU:          ${metrics.getLong("totalCpu")}")
+               println("\t\tLatency Mean:       ${metrics.getLong("rollingLatencyMean")}")
+               println("\t\tLatency 50:         ${Duration.of(metrics.getJsonObject("rollingLatency").getLong("50"), ChronoUnit.MICROS)}")
+               println("\t\tLatency 99:         ${metrics.getJsonObject("rollingLatency").getLong("99").toDouble() / 1_000.0}")
+               println("\t\tLatency 99.5:       ${metrics.getJsonObject("rollingLatency").getLong("99.5").toDouble() / 1_000.0}")
+               println("\t\tLatency 100:        ${metrics.getJsonObject("rollingLatency").getLong("100").toDouble() / 1_000.0}")
+               println("\t\tJSON:               ${metrics}")
+               println()
+               println()
             }.subscribe()
 //            provider.breaker.metrics.toJson().getLong("rollingOperationCount")
-            val metrics = provider.breaker.metrics.toJson()
-            println("Action:\t${metrics.getString("name")}")
-            println("\t\tRolling Operations: ${metrics.getLong("rollingOperationCount")}")
-            println("\t\tTotal Operations:   ${metrics.getLong("totalOperationCount")}")
-            println("\t\tTotal Success:      ${metrics.getLong("totalSuccessCount")}")
-            println("\t\tTotal CPU:          ${metrics.getLong("totalCpu")}")
-            println("\t\tLatency Mean:       ${metrics.getLong("rollingLatencyMean")}")
-            println("\t\tLatency 50:         ${Duration.of(metrics.getJsonObject("rollingLatency").getLong("50"), ChronoUnit.MICROS)}")
-            println("\t\tLatency 99:         ${metrics.getJsonObject("rollingLatency").getLong("99").toDouble() / 1_000.0}")
-            println("\t\tLatency 99.5:       ${metrics.getJsonObject("rollingLatency").getLong("99.5").toDouble() / 1_000.0}")
-            println("\t\tLatency 100:        ${metrics.getJsonObject("rollingLatency").getLong("100").toDouble() / 1_000.0}")
-            println("\t\tJSON:               ${metrics}")
-            println()
-            println()
          }
       }
 

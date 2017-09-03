@@ -16,8 +16,13 @@ import dagger.Module;
 import dagger.Provides;
 import dagger.multibindings.ClassKey;
 import dagger.multibindings.IntoMap;
-import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.StringWriter;
+import java.io.Writer;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -52,11 +57,11 @@ import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
 import javax.tools.Diagnostic.Kind;
 import javax.tools.FileObject;
+import javax.tools.JavaFileObject;
 import javax.tools.StandardLocation;
 import move.action.ActionLocator;
-import move.action.ActionPackage;
 import move.action.ActionProvider;
-import move.action.FifoWorkerActionProvider;
+import move.action.Actor;
 import move.action.IAction;
 import move.action.Internal;
 import move.action.InternalActionProvider;
@@ -75,8 +80,10 @@ import move.action.WorkerActionProvider;
 @AutoService(Processor.class)
 public class ActionProcessor extends AbstractProcessor {
 
-  static final String LOCATOR = "_Locator";
-  static final String LOCATOR_ROOT = "_LocatorRoot";
+  static final String LOCATOR_SUFFIX = "_Locator";
+  static final String LOCATOR_ROOT_SUFFIX = "_LocatorRoot";
+  static final String MODULE_SUFFIX = "_Module";
+  static final String ROOT_MODULE_NAME = "Move_Root_Module";
   static final ParameterizedTypeName ACTION_PROVIDER_NAME = ParameterizedTypeName.get(
       ClassName.bestGuess("move.action.ActionProvider"),
       WildcardTypeName.subtypeOf(TypeName.OBJECT),
@@ -88,8 +95,7 @@ public class ActionProcessor extends AbstractProcessor {
   );
 
   final TreeMap<String, ActionHolder> actionMap = new TreeMap<>();
-  final Pkg rootPackage = new Pkg("Action", "");
-  final ArrayList<ActionPackage> actionPackages = new ArrayList<>();
+  final ActionPackage rootPackage = new ActionPackage("Action", "");
   Types typeUtils;
   Elements elementUtils;
   Filer filer;
@@ -118,11 +124,11 @@ public class ActionProcessor extends AbstractProcessor {
   @Override
   public Set<String> getSupportedAnnotationTypes() {
     final Set<String> annotataions = new LinkedHashSet<>();
-//    annotataions.add(ActionPackage.class.getCanonicalName());
     annotataions.add(Remote.class.getCanonicalName());
     annotataions.add(Internal.class.getCanonicalName());
     annotataions.add(Worker.class.getCanonicalName());
     annotataions.add(Scheduled.class.getCanonicalName());
+    annotataions.add(Actor.class.getCanonicalName());
     return annotataions;
   }
 
@@ -142,6 +148,8 @@ public class ActionProcessor extends AbstractProcessor {
           .getElementsAnnotatedWith(Worker.class);
       final Set<? extends Element> scheduledElements = roundEnv
           .getElementsAnnotatedWith(Scheduled.class);
+      final Set<? extends Element> actorElements = roundEnv
+          .getElementsAnnotatedWith(Actor.class);
 
       final HashSet<Element> elements = new HashSet<>();
 
@@ -157,22 +165,6 @@ public class ActionProcessor extends AbstractProcessor {
       if (scheduledElements != null) {
         elements.addAll(scheduledElements);
       }
-
-//            final Set<? extends Element> packageElements = roundEnv.getElementsAnnotatedWith(ActionPackage.class);
-//
-//            if (packageElements != null) {
-//                packageElements.forEach(e -> actionPackages.add(e.getAnnotation(ActionPackage.class)));
-//            }
-//
-//            if (roundEnv.processingOver() && actionPackages.isEmpty() && !actionMap.isEmpty()) {
-////                messager.printMessage(Diagnostic.Kind.ERROR, "@ActionPackage on package-info.java not found");
-//            }
-//
-//            if (packageElements != null) {
-//
-//                messager.printMessage(Diagnostic.Kind.WARNING, packageElements.size() + " @ActionPackage found");
-//                packageElements.forEach(p -> messager.printMessage(Diagnostic.Kind.WARNING, "@ActionPackage(" + p.getAnnotation(ActionPackage.class).value() + ")"));
-//            }
 
       for (Element annotatedElement : elements) {
         final Remote remote = annotatedElement
@@ -244,55 +236,28 @@ public class ActionProcessor extends AbstractProcessor {
           );
         }
 
-//        if (holder.requestType == null || holder.replyType == null) {
-//          final TypeParameterResolver typeParamResolver = new TypeParameterResolver(element);
-//
-//          try {
-//            holder.requestType = typeParamResolver.resolve(IAction.class, 0);
-//          } catch (Throwable e) {
-//            messager.printMessage(Diagnostic.Kind.ERROR, e.getMessage());
-//          }
-//
-//          try {
-//            holder.replyType = typeParamResolver.resolve(IAction.class, 1);
-//          } catch (Throwable e) {
-//            messager.printMessage(Diagnostic.Kind.ERROR, e.getMessage());
-//          }
-//
-//          messager.printMessage(Diagnostic.Kind.WARNING, element.getQualifiedName().toString());
-//
-//          if (holder.requestType != null) {
-////                        messager.printMessage(Diagnostic.Kind.WARNING, "IN = " + holder.requestType.getResolvedElement().getQualifiedName().toString());
-//          }
-//          if (holder.replyType != null) {
-////                        messager.printMessage(Diagnostic.Kind.WARNING, "OUT = " + holder.replyType.getResolvedElement().getQualifiedName().toString());
-//          }
-//        }
-
         actionMap.put(element.getQualifiedName().toString(), holder);
       }
 
       // Build Packages.
       for (ActionHolder actionHolder : actionMap.values()) {
-        String jpkgName = actionHolder.pkgName;
+        String packageName = actionHolder.packageName;
 
         // Split package parts down.
-        final String[] parts = jpkgName.split("[.]");
+        final String[] parts = packageName.split("[.]");
         final String firstName = parts[0];
-
-//                messager.printMessage(Diagnostic.Kind.WARNING, "PKG: " + jpkgName);
 
         // Is it a Root Action?
         if (parts.length == 1 && firstName.isEmpty()) {
           rootPackage.actions.put(actionHolder.name, actionHolder);
         } else {
           // Let's find it's Package and construct the tree as needed during the process.
-          Pkg parent = rootPackage;
+          ActionPackage parent = rootPackage;
           for (int i = 0; i < parts.length; i++) {
             final String nextName = parts[i];
-            Pkg next = parent.children.get(nextName);
+            ActionPackage next = parent.children.get(nextName);
             if (next == null) {
-              next = new Pkg(nextName, parent.path == null || parent.path.isEmpty()
+              next = new ActionPackage(nextName, parent.path == null || parent.path.isEmpty()
                   ? nextName
                   : parent.path + "." + nextName, parent);
               parent.children.put(nextName, next);
@@ -305,7 +270,7 @@ public class ActionProcessor extends AbstractProcessor {
         }
       }
 
-      rootPackage.generateJava();
+      rootPackage.generate();
     } catch (Throwable e) {
       e.printStackTrace();
       error(null, e.getMessage());
@@ -343,7 +308,7 @@ public class ActionProcessor extends AbstractProcessor {
     final String name;
     final String simpleName;
     final String fieldName;
-    final String pkgName;
+    final String packageName;
     final String moduleName;
     final String generatedProviderName;
     final ClassName generatedProviderClassName;
@@ -407,22 +372,20 @@ public class ActionProcessor extends AbstractProcessor {
 
       final String[] parts = name.split("[.]");
       if (parts.length == 1) {
-        pkgName = "";
+        packageName = "";
       } else {
         final String lastPart = parts[parts.length - 1];
-        pkgName = name.substring(0, name.length() - lastPart.length() - 1);
+        packageName = name.substring(0, name.length() - lastPart.length() - 1);
       }
 
-      generatedProviderClassName = ClassName.bestGuess(pkgName + "." + generatedProviderName);
+      generatedProviderClassName = ClassName.bestGuess(packageName + "." + generatedProviderName);
 
       if (isRemote()) {
         providerClassName = ClassName.get(RemoteActionProvider.class);
       } else if (isInternal()) {
         providerClassName = ClassName.get(InternalActionProvider.class);
       } else if (isWorker()) {
-        providerClassName = worker.fifo() ?
-            ClassName.get(FifoWorkerActionProvider.class) :
-            ClassName.get(WorkerActionProvider.class);
+        providerClassName = ClassName.get(WorkerActionProvider.class);
       } else if (isScheduled()) {
         providerClassName = ClassName.get(ScheduledActionProvider.class);
       } else {
@@ -722,24 +685,24 @@ public class ActionProcessor extends AbstractProcessor {
   /**
    *
    */
-  public class Pkg {
+  public class ActionPackage {
 
     final String name;
     final String simpleName;
     final String moduleSimpleName;
-    final Pkg parent;
-    final TreeMap<String, Pkg> children = new TreeMap<>();
+    final ActionPackage parent;
+    final TreeMap<String, ActionPackage> children = new TreeMap<>();
     final TreeMap<String, ActionHolder> actions = new TreeMap<>();
     final boolean root;
     final ClassName moduleName;
     public String path;
     private boolean processed = false;
 
-    public Pkg(String name, String path) {
+    public ActionPackage(String name, String path) {
       this(name, path, null);
     }
 
-    public Pkg(String name, String path, Pkg parent) {
+    public ActionPackage(String name, String path, ActionPackage parent) {
       this.root = parent == null;
       this.name = name;
       this.path = path;
@@ -748,29 +711,20 @@ public class ActionProcessor extends AbstractProcessor {
       this.simpleName = capitalize(name);
 
       if (path == null || path.isEmpty()) {
-        this.moduleSimpleName = "Move_Root_Module";
-        this.moduleName = ClassName.bestGuess("Move_Root_Module");
+        this.moduleSimpleName = ROOT_MODULE_NAME;
+        this.moduleName = ClassName.bestGuess(moduleSimpleName);
       } else {
-        this.moduleSimpleName = simpleName + "_Module";
+        this.moduleSimpleName = simpleName + MODULE_SUFFIX;
         this.moduleName = ClassName.bestGuess(path + "." + moduleSimpleName);
       }
     }
 
-    public String getFullPath() {
-      if (path == null || path.isEmpty()) {
-        return getClassName();
-      } else {
-        return path + "." + getClassName();
-      }
-    }
-
     public String getClassName() {
-//            return "Action_Locator";
       return name == null || name.isEmpty()
           ? "Root"
           : Character.toUpperCase(name.charAt(0)) + name.substring(1) + (root
-              ? LOCATOR_ROOT
-              : LOCATOR);
+              ? LOCATOR_ROOT_SUFFIX
+              : LOCATOR_SUFFIX);
     }
 
     String capitalize(String value) {
@@ -806,6 +760,10 @@ public class ActionProcessor extends AbstractProcessor {
             path,
             moduleSimpleName + ".java"
         );
+
+        messager
+            .printMessage(Kind.WARNING, "FileObject: " + fileObject.getClass().getCanonicalName());
+        messager.printMessage(Kind.WARNING, "FileObject: " + fileObject.toUri());
         return fileObject;
       } catch (Throwable e) {
         return null;
@@ -830,39 +788,6 @@ public class ActionProcessor extends AbstractProcessor {
       final FileObject packageModuleSource = getModuleFile();
       final List<ClassName> classNames = new ArrayList<>();
 
-      if (packageModuleSource != null) {
-        try {
-          final String contents = packageModuleSource.getCharContent(true).toString();
-
-          messager.printMessage(Kind.WARNING, contents);
-
-          if (!packageModuleSource.delete()) {
-            messager.printMessage(Kind.WARNING,
-                "Failed to delete Package Module File: " +
-                    moduleName.toString()
-            );
-          }
-        } catch (IOException e) {
-          if (e instanceof FileNotFoundException) {
-
-          } else {
-            messager.printMessage(
-                Kind.ERROR,
-                "Failed to get contents of Package Module File: " +
-                    moduleName.toString() +
-                    ": " +
-                    e.getMessage()
-            );
-          }
-        }
-      } else {
-
-      }
-
-//      if (!packageModuleSource.isEmpty()) {
-//
-//        messager.printMessage(Kind.WARNING, "Package Module already exists");
-//      } else {
       // Generate a new package module.
       final AnnotationSpec.Builder builder = AnnotationSpec.builder(Module.class);
 
@@ -900,13 +825,49 @@ public class ActionProcessor extends AbstractProcessor {
 
       try {
         // Write .java source code file.
-        providerJavaFile.writeTo(filer);
+        writeTo(providerJavaFile, packageModuleSource, filer);
       } catch (Throwable e) {
         // Ignore.
         messager.printMessage(Diagnostic.Kind.ERROR,
             "Failed to generate Source File: " + e.getMessage());
       }
-//      }
+    }
+
+    public void writeTo(JavaFile file, FileObject fileObject, Filer filer) throws IOException {
+      String fileName = file.packageName.isEmpty()
+          ? file.typeSpec.name
+          : file.packageName + "." + file.typeSpec.name;
+      List<Element> originatingElements = file.typeSpec.originatingElements;
+
+      if (fileObject.getLastModified() == 0) {
+        JavaFileObject filerSourceFile = filer.createSourceFile(fileName,
+            originatingElements.toArray(new Element[originatingElements.size()]));
+
+        try (Writer writer = filerSourceFile.openWriter()) {
+          file.writeTo(writer);
+        } catch (Exception e) {
+          try {
+            filerSourceFile.delete();
+          } catch (Exception ignored) {
+          }
+          throw e;
+        }
+      } else {
+        try (StringWriter writer = new StringWriter()) {
+          file.writeTo(writer);
+          writer.flush();
+          Files.write(Paths.get(fileObject.toUri()), writer.getBuffer().toString().getBytes(
+              StandardCharsets.UTF_8),
+              StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE,
+              StandardOpenOption.CREATE);
+        } catch (Exception e) {
+          try {
+            fileObject.delete();
+          } catch (Exception ignored) {
+          }
+          throw e;
+        }
+      }
     }
 
     private void generateProvider(ActionHolder action) {
@@ -988,7 +949,25 @@ public class ActionProcessor extends AbstractProcessor {
       }
     }
 
-    public void generateJava() {
+    void generate0() {
+      if (processed) {
+        return;
+      }
+
+      if (root) {
+        if (children.isEmpty()) {
+          return;
+        }
+
+        path = children.values().iterator().next().path;
+      }
+
+      generateSource();
+      children.values().forEach(ActionPackage::generate);
+      processed = true;
+    }
+
+    public void generate() {
       if (processed) {
         return;
       }
@@ -1020,7 +999,7 @@ public class ActionProcessor extends AbstractProcessor {
       final CodeBlock.Builder initChildrenCode = CodeBlock.builder();
 
       // Generate SubPackage locators.
-      for (Pkg childPackage : children.values()) {
+      for (ActionPackage childPackage : children.values()) {
         // Build type name.
         final TypeName typeName = ClassName.get(childPackage.path, childPackage.getClassName());
 
@@ -1108,59 +1087,20 @@ public class ActionProcessor extends AbstractProcessor {
 
           if (!contents.isEmpty()) {
             for (ActionHolder action : actions.values()) {
-              if (action.isInternal()) {
-                if (!contents.contains("InternalActionProvider<" + action.type.getSimpleName())) {
-                  messager.printMessage(
-                      Diagnostic.Kind.ERROR,
-                      "Action: " +
-                          action.name +
-                          " was created. Full Regeneration needed. \"clean\" and \"compile\""
-                  );
-                  return;
-                }
-              } else if (action.isRemote()) {
-                if (!contents.contains("RemoteActionProvider<" + action.type.getSimpleName())) {
-                  messager.printMessage(
-                      Diagnostic.Kind.ERROR,
-                      "Action: " +
-                          action.name +
-                          " was created. Full Regeneration needed. \"clean\" and \"compile\""
-                  );
-                  return;
-                }
-              } else if (action.isWorker()) {
-                if (!contents.contains("WorkerActionProvider<" + action.type.getSimpleName())) {
-                  messager.printMessage(
-                      Diagnostic.Kind.ERROR,
-                      "Action: " +
-                          action.name +
-                          " was created. Full Regeneration needed. \"clean\" and \"compile\""
-                  );
-                  return;
-                }
-              } else if (action.isScheduled()) {
-                if (!contents.contains("ScheduledActionProvider<" + action.type.getSimpleName())) {
-                  messager.printMessage(
-                      Diagnostic.Kind.ERROR,
-                      "Action: " +
-                          action.name +
-                          " was created. Full Regeneration needed. \"clean\" and \"compile\""
-                  );
-                  return;
-                }
+              if (!contents.contains(action.providerClassName.simpleName())) {
+                messager.printMessage(
+                    Diagnostic.Kind.ERROR,
+                    "Action: " +
+                        action.name +
+                        " was created. Full Regeneration needed. \"clean\" and \"compile\""
+                );
+                return;
               }
             }
 
-//                        messager.printMessage(
-//                            Diagnostic.Kind.WARNING,
-//                            getFullPath() +
-//                                " has a change, but it appears that it may save a full re-compile. " +
-//                                "When in doubt \"clean\" and \"compile\""
-//                        );
-
             // Generate child packages.
-            for (Pkg childPackage : children.values()) {
-              childPackage.generateJava();
+            for (ActionPackage childPackage : children.values()) {
+              childPackage.generate();
             }
 
             return;
@@ -1181,7 +1121,7 @@ public class ActionProcessor extends AbstractProcessor {
           final String contents = content.toString();
 
           if (!contents.isEmpty()) {
-            for (Pkg child : children.values()) {
+            for (ActionPackage child : children.values()) {
               if (!contents.contains(child.getClassName() + " " + child.name + ";")) {
                 messager.printMessage(
                     Diagnostic.Kind.ERROR,
@@ -1193,15 +1133,9 @@ public class ActionProcessor extends AbstractProcessor {
               }
             }
 
-//                        messager.printMessage(
-//                            Diagnostic.Kind.WARNING,
-//                            getFullPath() +
-//                                " has a change, but it appears that it may save a full re-compile. " +
-//                                "When in doubt \"clean\" and \"compile\"");
-
             // Generate child packages.
-            for (Pkg childPackage : children.values()) {
-              childPackage.generateJava();
+            for (ActionPackage childPackage : children.values()) {
+              childPackage.generate();
             }
 
             return;
@@ -1213,7 +1147,6 @@ public class ActionProcessor extends AbstractProcessor {
 
       type.addMethod(ctor.build());
 
-//            if (actions.isEmpty() && children.isEmpty()) {
       // Build java file.
       final JavaFile javaFile = JavaFile.builder(path, type.build()).build();
 
@@ -1227,9 +1160,7 @@ public class ActionProcessor extends AbstractProcessor {
       }
 
       // Generate child packages.
-      for (Pkg childPackage : children.values()) {
-        childPackage.generateJava();
-      }
+      children.values().forEach(ActionPackage::generate);
     }
   }
 }

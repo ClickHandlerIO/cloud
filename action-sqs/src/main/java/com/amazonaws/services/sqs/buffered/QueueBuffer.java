@@ -130,7 +130,7 @@ public class QueueBuffer {
   }
 
   /**
-   * asynchronously adjust a message's visibility timeout to SQS.
+   * asynchronously adjust a message's visibility deadline to SQS.
    *
    * @return a Future object that will be notified when the operation is completed; never null
    */
@@ -220,10 +220,10 @@ public class QueueBuffer {
 
   /**
    * We prefetch and load results in the buffer by making basic requests. I.E. we don't _request
-   * queue or message attributes and we have a default visibility timeout. If the user's _request
+   * queue or message attributes and we have a default visibility deadline. If the user's _request
    * deviates from the basic _request we can't fulfill the _request directly from the buffer, we
    * have to hit SQS directly (Note that when going to SQS directly messages currently in the
-   * buffer may be unavailable due to the visibility timeout).
+   * buffer may be unavailable due to the visibility deadline).
    *
    * @return True if the _request can be fulfilled directly from the buffer, false if we have to go
    * back to the service to fetch the results

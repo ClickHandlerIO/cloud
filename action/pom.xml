@@ -38,6 +38,47 @@
       <groupId>io.nats</groupId>
       <artifactId>jnats</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.jetbrains.kotlin</groupId>
+      <artifactId>kotlin-stdlib</artifactId>
+      <version>${kotlin.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-auth-jwt</artifactId>
+      <version>${vertx.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.jetbrains.xodus</groupId>
+      <artifactId>xodus-openAPI</artifactId>
+      <version>1.0.6</version>
+    </dependency>
+    <dependency>
+      <groupId>org.jetbrains.xodus</groupId>
+      <artifactId>xodus-environment</artifactId>
+      <version>1.0.6</version>
+    </dependency>
+    <dependency>
+      <groupId>net.openhft</groupId>
+      <artifactId>chronicle-threads</artifactId>
+      <version>1.8.2</version>
+    </dependency>
+    <dependency>
+      <groupId>net.openhft</groupId>
+      <artifactId>chronicle-queue</artifactId>
+      <version>4.5.27</version>
+    </dependency>
+    <dependency>
+      <groupId>net.openhft</groupId>
+      <artifactId>chronicle-map</artifactId>
+      <version>3.14.1</version>
+    </dependency>
+    <dependency>
+      <groupId>net.openhft</groupId>
+      <artifactId>chronicle-bytes</artifactId>
+      <version>1.9.7</version>
+    </dependency>
   </dependencies>
 
   <build>

@@ -46,6 +46,7 @@ class ActionCircuitBreaker(private val name: String,
 //   private var failures: Long = 0
 
    private val failures = LongAdder()
+
    /**
     * For testing purpose only.
     *

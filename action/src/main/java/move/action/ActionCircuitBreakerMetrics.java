@@ -124,7 +124,7 @@ public class ActionCircuitBreakerMetrics {
     json.put("begin", rollingStatistics.getStartTimeStamp());
     json.put("duration", (end - rollingStatistics.getEndTimeStamp()));
     json.put("resetTimeout", circuitBreakerResetTimeout);
-    json.put("timeout", circuitBreakerTimeout);
+    json.put("deadline", circuitBreakerTimeout);
     json.put("metricRollingWindow", rollingWindow);
     json.put("name", circuitBreaker.name());
     json.put("node", node);

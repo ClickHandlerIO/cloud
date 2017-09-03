@@ -1,8 +1,14 @@
 package move.action
 
+import io.netty.buffer.ByteBuf
+import io.vertx.core.buffer.Buffer
 import io.vertx.kotlin.circuitbreaker.CircuitBreakerOptions
 import io.vertx.rxjava.core.Vertx
+import kotlinx.coroutines.experimental.rx1.await
+import move.common.WireFormat
 import rx.Single
+import java.nio.ByteBuffer
+import java.util.concurrent.TimeUnit
 import javax.inject.Provider
 
 /**
@@ -47,6 +53,9 @@ constructor(val vertx: Vertx, val actionProvider: Provider<A>) {
 
    val eventLoopGroup = ActionEventLoopGroup.get(vertx)
 
+   val visibility
+      get() = Remote.Visibility.PRIVATE
+
    private var executionTimeoutEnabled: Boolean = false
    private var timeoutMillis: Int = annotationTimeout
    var maxConcurrentRequests: Int = 0
@@ -90,7 +99,7 @@ constructor(val vertx: Vertx, val actionProvider: Provider<A>) {
 
       this.timeoutMillis = timeoutMillis
 
-      // Enable timeout?
+      // Enable deadline?
       if (timeoutMillis > 0) {
          if (timeoutMillis < MILLIS_TO_SECONDS_THRESHOLD) {
             // Looks like somebody decided to put seconds instead of milliseconds.
@@ -172,6 +181,134 @@ constructor(val vertx: Vertx, val actionProvider: Provider<A>) {
    open fun rx(request: IN): Single<OUT> {
       return create().rx(request)
    }
+
+
+   suspend internal fun call(request: IN,
+                    timeoutUnit: TimeUnit = TimeUnit.SECONDS,
+                    timeout: Long = 0,
+                    broker: ActionBroker = ActionBroker.DEFAULT): OUT {
+      if (isInternal) {
+         return create().await(request)
+      }
+
+      // Send message through PubSub.
+      // Set deadline to the timeout.
+      // A node will not execute action if it goes past the deadline.
+
+      // Optimize requiring an ACK based on past statistics.
+      // If calls come back within 1 second we can save a message.
+
+
+      // Wait until Response or Timeout expiring.
+
+      return broker.call(request, this).await()
+   }
+
+   suspend internal fun rxCall(request: IN,
+                    timeoutUnit: TimeUnit = TimeUnit.SECONDS,
+                    timeout: Long = 0,
+                    broker: ActionBroker = ActionBroker.DEFAULT): Single<OUT> {
+      return broker.call(request, this)
+   }
+
+
+//   open fun requestAsMsgPack(request: IN): ByteArray {
+//      return WireFormat.pack(request)
+//   }
+//
+//   open fun requestAsJsonString(request: IN): String {
+//      return WireFormat.stringify(request)
+//   }
+//
+//   open fun requestAsJson(request: IN): ByteArray {
+//      return WireFormat.byteify(request)
+//   }
+//
+//   open fun requestFromMsgPack(buffer: ByteArray): IN {
+//      return WireFormat.unpack(requestClass, buffer)
+//   }
+//
+//   open fun requestFromMsgPack(buffer: Buffer): IN {
+//      return WireFormat.unpack(requestClass, buffer)
+//   }
+//
+//   open fun requestFromMsgPack(buffer: ByteBuffer): IN {
+//      return WireFormat.unpack(requestClass, buffer)
+//   }
+//
+//   open fun requestFromMsgPack(buffer: ByteBuf): IN {
+//      return WireFormat.unpack(requestClass, buffer)
+//   }
+//
+//   open fun requestFromJson(buffer: ByteArray): IN {
+//      return WireFormat.parse(requestClass, buffer)
+//   }
+//
+//   open fun requestFromJson(buffer: String): IN {
+//      return WireFormat.parse(requestClass, buffer)
+//   }
+//
+//   open fun requestFromJson(buffer: Buffer): IN {
+//      return WireFormat.parse(requestClass, buffer)
+//   }
+//
+//   open fun requestFromJson(buffer: ByteBuffer): IN {
+//      return WireFormat.parse(requestClass, buffer)
+//   }
+//
+//   open fun requestFromJson(buffer: ByteBuf): IN {
+//      return WireFormat.parse(requestClass, buffer)
+//   }
+//
+//
+//   open fun replyAsMsgPack(request: OUT): ByteArray {
+//      return WireFormat.pack(request)
+//   }
+//
+//   open fun replyAsJson(request: OUT): ByteArray {
+//      return WireFormat.byteify(request)
+//   }
+//
+//   open fun replyAsJsonString(request: OUT): String {
+//      return WireFormat.stringify(request)
+//   }
+//
+//
+//   open fun replyFromMsgPack(buffer: ByteArray): OUT {
+//      return WireFormat.unpack(replyClass, buffer)
+//   }
+//
+//   open fun replyFromMsgPack(buffer: Buffer): OUT {
+//      return WireFormat.unpack(replyClass, buffer)
+//   }
+//
+//   open fun replyFromMsgPack(buffer: ByteBuffer): OUT {
+//      return WireFormat.unpack(replyClass, buffer)
+//   }
+//
+//   open fun replyFromMsgPack(buffer: ByteBuf): OUT {
+//      return WireFormat.unpack(replyClass, buffer)
+//   }
+//
+//   open fun replyFromJson(buffer: ByteArray): OUT {
+//      return WireFormat.parse(replyClass, buffer)
+//   }
+//
+//   open fun replyFromJson(buffer: String): OUT {
+//      return WireFormat.parse(replyClass, buffer)
+//   }
+//
+//   open fun replyFromJson(buffer: Buffer): OUT {
+//      return WireFormat.parse(replyClass, buffer)
+//   }
+//
+//   open fun replyFromJson(buffer: ByteBuffer): OUT {
+//      return WireFormat.parse(replyClass, buffer)
+//   }
+//
+//   open fun replyFromJson(buffer: ByteBuf): OUT {
+//      return WireFormat.parse(replyClass, buffer.nioBuffer())
+//   }
 
    companion object {
       internal val MIN_TIMEOUT_MILLIS = 200

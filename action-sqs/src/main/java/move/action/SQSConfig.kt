@@ -61,8 +61,8 @@ class SQSConfig {
 
    /**
     * The maximum time (milliseconds) a send batch is held open for additional outbound requests.
-    * The longer this timeout, the longer messages wait for other messages to be added to the
-    * batch. Increasing this timeout reduces the number of calls made and increases throughput, but
+    * The longer this deadline, the longer messages wait for other messages to be added to the
+    * batch. Increasing this deadline reduces the number of calls made and increases throughput, but
     * also increases average message latency.
     */
    var maxBatchOpenMs = 100
@@ -78,9 +78,9 @@ class SQSConfig {
     * If more than that number of completed receive batches are waiting in the buffer, the querying
     * for new messages will stop. The larger this number, the more messages the buffer queue will
     * pre-fetch and keep in the buffer on the client side, and the faster receive requests will be
-    * satisfied. The visibility timeout of a pre-fetched message starts at the point of pre-fetch,
+    * satisfied. The visibility deadline of a pre-fetched message starts at the point of pre-fetch,
     * which means that while the message is in the local buffer it is unavailable for other clients
-    * to process, and when this client retrieves it, part of the visibility timeout may have
+    * to process, and when this client retrieves it, part of the visibility deadline may have
     * already expired. The number of messages prefetched will not exceed maxBatchSize *
     * maxDoneReceiveBatches.
     */

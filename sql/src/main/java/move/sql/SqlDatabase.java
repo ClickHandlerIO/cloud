@@ -2281,7 +2281,7 @@ public class SqlDatabase extends AbstractIdleService {
 //    }
 
   /**
-   * Sets the JDBC Statement timeout based on current ActionContext.
+   * Sets the JDBC Statement deadline based on current ActionContext.
    */
   public class TimeoutListener extends DefaultExecuteListener {
 

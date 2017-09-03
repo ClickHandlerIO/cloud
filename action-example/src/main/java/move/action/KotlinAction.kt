@@ -11,6 +11,21 @@ import rx.Single
 import javax.inject.Inject
 
 
+@Internal(timeout = 1000)
+class MyAction : InternalAction<String, String>() {
+   suspend override fun execute(): String {
+//      delay(50)
+//      val reply = of(AllocateInventory::class)
+//         .await(AllocateInventory.Request(id = ""))
+//
+//      val reply2 = of<AllocateInventory>() await AllocateInventory.Request(id = "")
+//
+//      val r = of(AllocateInventory::class)..AllocateInventory.Request(id = "")
+
+      return ""
+   }
+}
+
 /**
  *
  */
