@@ -60,14 +60,11 @@ abstract class Action<IN : Any, OUT : Any> internal constructor() : IAction<IN, 
 
    // Fallback
    private var retryCount = 0
-   private var maxRetries = 1
+   open val maxRetries
+      get() = 0
 
    // ID
    private var actionId = 0L
-
-   // Remote
-   private var remoteActionId: String? = null
-   private var remoteVisibleUntil: Long = 0
 
    /**
     * Flag to enable/disable fallback processing.
@@ -249,6 +246,8 @@ abstract class Action<IN : Any, OUT : Any> internal constructor() : IAction<IN, 
     *
     */
    suspend open fun afterExecute(reply: OUT): OUT {
+      // Help GC.
+      _request = null
       return reply
    }
 
@@ -277,6 +276,13 @@ abstract class Action<IN : Any, OUT : Any> internal constructor() : IAction<IN, 
       // Default to running execute() again.
       return execute()
    }
+
+   /**
+    * Invoked when Action is executed in the context of "replaying" or "streaming"
+    * a queue file. This could also be in real-time and a way to "stream"
+    * to other systems.
+    */
+   open fun replay() {}
 
    /**
     *
@@ -440,10 +446,14 @@ abstract class Action<IN : Any, OUT : Any> internal constructor() : IAction<IN, 
       return kotlinx.coroutines.experimental.delay(time, unit)
    }
 
+   /**
+    * Synonym of delay
+    */
    suspend fun sleep(time: Long, unit: TimeUnit = TimeUnit.MILLISECONDS) {
-      return kotlinx.coroutines.experimental.delay(time, unit)
+      return delay(time, unit)
    }
 
+   @Suppress("UNCHECKED_CAST")
    companion object {
       val contextLocal = ThreadLocal<ActionContext?>()
 
@@ -458,6 +468,9 @@ abstract class Action<IN : Any, OUT : Any> internal constructor() : IAction<IN, 
          return ActionManager.actionMap[A::class.java] as ActionProvider<A, IN, OUT>
       }
 
+      /**
+       *
+       */
       inline infix fun <A : Action<*, *>> of(cls: KClass<A>): A {
          val a = ActionManager.actionMap[cls.java]
          if (a == null) {

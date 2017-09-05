@@ -9,7 +9,7 @@ import kotlinx.coroutines.experimental.CommonPool
 import kotlinx.coroutines.experimental.async
 import kotlinx.coroutines.experimental.rx1.await
 import move.common.UID
-import move.rx.parallel
+import move.rx.await
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -84,7 +84,7 @@ object Main {
          redis.rxSet("hi2", "Bye 2").await()
          redis.rxSet("hi3", UID.next()).await()
 
-         val (v1, v2, v3) = parallel(
+         val (v1, v2, v3) = await(
             redis.rxGet("hi"),
             redis.rxGet("hi2"),
             redis.rxGet("hi3")

@@ -25,8 +25,9 @@ open class RemoteServer(val port: Int = 15000, val host: String = "", var auth: 
 
    // Create map with large initial capcity to ensure we don't have
    // long "re-hashing" delays until extreme load.
+   // Supports 1.5 million.
    val webSocketMap: ConcurrentMap<Long, WS> = ConcurrentHashMap<Long, WS>(
-      1_000_000,
+      2_000_000,
       0.75f,
       Runtime.getRuntime().availableProcessors() * 2
    )
@@ -43,12 +44,15 @@ open class RemoteServer(val port: Int = 15000, val host: String = "", var auth: 
    var requestLog: ChronicleQueue? = null
 
    init {
-
    }
 
    override fun start(startFuture: Future<Void>?) {
       val actions = ActionManager.actionMap.filter {
-         it.value.visibility == Remote.Visibility.PUBLIC
+         it.value.visibility == ActionVisibility.PUBLIC
+      }.map { it.value }.toList()
+
+      val httpActions = ActionManager.actionMap.filter {
+         it.value.actionClass.isAssignableFrom(HttpAction::class.java)
       }.map { it.value }.toList()
 
       httpServer = buildHttpServer()
@@ -131,6 +135,7 @@ open class RemoteServer(val port: Int = 15000, val host: String = "", var auth: 
       // Lazily initialize streams map.
       val streams: Map<Long, Any> by lazy { HashMap<Long, Any>() }
       val expires: Long = 0
+      var paused = false
 
       init {
          webSocket.textMessageHandler(this::handleText)
@@ -150,7 +155,6 @@ open class RemoteServer(val port: Int = 15000, val host: String = "", var auth: 
       }
 
       fun handleClose(event: Void) {
-
       }
 
       fun handleException(exception: Throwable) {
@@ -159,27 +163,56 @@ open class RemoteServer(val port: Int = 15000, val host: String = "", var auth: 
 
       fun handleText(message: String) {
          // Unpack message.
-         inFlight++
-
-         if (inFlight >= maxInflightPerWebSocket) {
-            webSocket.pause()
-         }
+         incInFlight()
       }
 
       fun handleBinary(buffer: Buffer) {
+         incInFlight()
+      }
+
+      private fun incInFlight() {
          inFlight++
+         trafficControl()
+      }
+
+      private fun decInFlight() {
+         inFlight--
+         if (inFlight < 0)
+            inFlight = 0
+
+         trafficControl()
       }
 
       fun trafficControl() {
          if (inFlight >= maxInflightPerWebSocket) {
+            paused = true
             webSocket.pause()
+         } else if (paused) {
+            paused = false
+            webSocket.resume()
          }
       }
    }
 }
 
-interface RemoteTokenVerifier {
-   fun verify(token: String)
+data class VerifyResult(val tokenToPass: String?,
+                        val expires: Long,
+                        /**
+                         *
+                         */
+                        val maxInFlight: Int = 0,
+                        /**
+                         * The unique ID of user or system
+                         */
+                        val userId: String? = null,
+                        /**
+                         * Limit the number of connections the user can have.
+                         * This is across the entire network.
+                         */
+                        val maxConnections: Int = 0)
+
+interface RemoteVerifier {
+   fun verify(token: String): VerifyResult
 }
 
 data class RemoteEnvelope(

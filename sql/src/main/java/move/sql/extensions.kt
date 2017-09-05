@@ -1,7 +1,7 @@
 package move.sql
 
 import kotlinx.coroutines.experimental.rx1.await
-import move.rx.parallel
+import move.rx.await
 import org.jooq.Record
 import rx.Single
 
@@ -207,7 +207,7 @@ class SqlAdapter(val sql: SqlDatabase) {
 
    suspend fun <T1, T2> read(block1: (SqlSession) -> T1,
                              block2: (SqlSession) -> T2): STuple2<T1, T2> {
-      return parallel(
+      return await(
          safeRead(block1),
          safeRead(block2)
       ).let {
@@ -218,7 +218,7 @@ class SqlAdapter(val sql: SqlDatabase) {
    suspend fun <T1, T2, T3> read(block1: (SqlSession) -> T1,
                                  block2: (SqlSession) -> T2,
                                  block3: (SqlSession) -> T3): STuple3<T1, T2, T3> {
-      return parallel(
+      return await(
          safeRead(block1),
          safeRead(block2),
          safeRead(block3)
@@ -231,7 +231,7 @@ class SqlAdapter(val sql: SqlDatabase) {
                                      block2: (SqlSession) -> T2,
                                      block3: (SqlSession) -> T3,
                                      block4: (SqlSession) -> T4): STuple4<T1, T2, T3, T4> {
-      return parallel(
+      return await(
          safeRead(block1),
          safeRead(block2),
          safeRead(block3),
@@ -246,7 +246,7 @@ class SqlAdapter(val sql: SqlDatabase) {
                                          block3: (SqlSession) -> T3,
                                          block4: (SqlSession) -> T4,
                                          block5: (SqlSession) -> T5): STuple5<T1, T2, T3, T4, T5> {
-      return parallel(
+      return await(
          safeRead(block1),
          safeRead(block2),
          safeRead(block3),
@@ -263,7 +263,7 @@ class SqlAdapter(val sql: SqlDatabase) {
                                              block4: (SqlSession) -> T4,
                                              block5: (SqlSession) -> T5,
                                              block6: (SqlSession) -> T6): STuple6<T1, T2, T3, T4, T5, T6> {
-      return parallel(
+      return await(
          safeRead(block1),
          safeRead(block2),
          safeRead(block3),
@@ -282,7 +282,7 @@ class SqlAdapter(val sql: SqlDatabase) {
                                                  block5: (SqlSession) -> T5,
                                                  block6: (SqlSession) -> T6,
                                                  block7: (SqlSession) -> T7): STuple7<T1, T2, T3, T4, T5, T6, T7> {
-      return parallel(
+      return await(
          safeRead(block1),
          safeRead(block2),
          safeRead(block3),
@@ -303,7 +303,7 @@ class SqlAdapter(val sql: SqlDatabase) {
                                                      block6: (SqlSession) -> T6,
                                                      block7: (SqlSession) -> T7,
                                                      block8: (SqlSession) -> T8): STuple8<T1, T2, T3, T4, T5, T6, T7, T8> {
-      return parallel(
+      return await(
          safeRead(block1),
          safeRead(block2),
          safeRead(block3),
@@ -326,7 +326,7 @@ class SqlAdapter(val sql: SqlDatabase) {
                                                          block7: (SqlSession) -> T7,
                                                          block8: (SqlSession) -> T8,
                                                          block9: (SqlSession) -> T9): STuple9<T1, T2, T3, T4, T5, T6, T7, T8, T9> {
-      return parallel(
+      return await(
          safeRead(block1),
          safeRead(block2),
          safeRead(block3),

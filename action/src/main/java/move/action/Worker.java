@@ -18,9 +18,17 @@ import java.lang.annotation.Target;
 public @interface Worker {
 
   /**
+   * Action's name.
+   *
+   * Default name is the FQN of the class minus if it
+   * starts with "action."
+   *
+   * e.g.
+   *    inventory.CreateStock
+   *
    * @return
    */
-  boolean encrypted() default false;
+  String value() default "";
 
   /**
    * @return

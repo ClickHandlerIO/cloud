@@ -15,24 +15,38 @@ import java.lang.annotation.Target;
 @Documented
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
-public @interface Remote {
-  String value() default "";
+public @interface Http {
+  int DEFAULT_TIMEOUT = 15_000;
 
   /**
-   * Default Time in Milliseconds the Action is allowed to be in "ACTIVE" state.
+   * Path expression.
+   *
+   * @return
    */
-  int timeout() default 15_000;
+  String path() default "";
+
+  /**
+   * Default Time in Milliseconds the Action is allowed to be in "ACTIVE" state. HttpResponse will
+   * automatically be closed.
+   */
+  int timeout() default DEFAULT_TIMEOUT;
+
+  /**
+   * HTTP Method
+   */
+  Method method() default Method.ALL;
 
   /**
    *
    * @return
    */
-  boolean guarded() default true;
+  String[] consumes() default {};
 
   /**
-   * HTTP Method
+   *
+   * @return
    */
-  String method() default "POST";
+  String[] produces() default {};
 
   /**
    *
@@ -44,12 +58,18 @@ public @interface Remote {
    *
    * @return
    */
-  String path() default "";
-
-  /**
-   *
-   * @return
-   */
   ActionVisibility visibility() default ActionVisibility.PUBLIC;
 
+  enum Method {
+    ALL,
+    OPTIONS,
+    GET,
+    HEAD,
+    POST,
+    PUT,
+    DELETE,
+    TRACE,
+    CONNECT,
+    PATCH,
+  }
 }

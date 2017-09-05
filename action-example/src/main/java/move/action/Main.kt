@@ -1,11 +1,15 @@
 package move.action
 
+import com.google.common.util.concurrent.Service
 import dagger.Module
 import dagger.Provides
+import io.vertx.core.AbstractVerticle
 import io.vertx.rxjava.core.Vertx
 import kotlinx.coroutines.experimental.Unconfined
 import kotlinx.coroutines.experimental.async
 import kotlinx.coroutines.experimental.rx1.await
+import move.sql.SqlConfig
+import move.sql.SqlDatabase
 import rx.Single
 import java.time.Duration
 import java.time.temporal.ChronoUnit
@@ -17,6 +21,12 @@ object App {
 
    init {
       graph.actions()
+   }
+
+   fun start() {
+      // Connect to Redis.
+      // Connect to SQL.
+
    }
 
    @JvmStatic
@@ -75,6 +85,41 @@ object App {
       }
    }
 }
+
+object Move {
+   var vertx: Vertx = App.vertx
+   var isRemote = true
+   var isWorker = true
+
+   val actions = ActionManager.actionMap
+   val remoteActions = ActionManager.actionMap
+   val httpActions = ActionManager.actionMap
+
+   fun start(service: Service) {
+
+   }
+
+   fun start(verticle: AbstractVerticle) {
+
+   }
+
+   fun start(verticle: io.vertx.rxjava.core.AbstractVerticle) {
+
+   }
+
+   open class Registration {
+
+   }
+
+   class ServiceRegistration(val service: Service) : Registration() {
+   }
+
+   class VerticleRegistration(val verticle: AbstractVerticle) : Registration() {
+
+   }
+}
+
+class SQL : SqlDatabase(App.vertx, SqlConfig(), arrayOf("model"), arrayOf("model"))
 
 @Module
 class AppModule {

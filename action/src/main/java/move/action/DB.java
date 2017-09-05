@@ -1,5 +1,8 @@
 package move.action;
 
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 import jetbrains.exodus.env.Environment;
 import jetbrains.exodus.env.Environments;
 import net.openhft.chronicle.map.ChronicleMap;
@@ -11,7 +14,8 @@ import net.openhft.chronicle.map.ChronicleMapBuilder;
 public class DB {
 
   public static void main(String[] args) {
-    m();
+    m2();
+    m3();
   }
 
   void db() {
@@ -52,6 +56,36 @@ public class DB {
         map.put(i, i);
       }
       System.out.println(System.currentTimeMillis() - start);
+    }
+  }
+
+  static void m2() {
+    ConcurrentMap<Integer, Integer> map = new ConcurrentHashMap<>();
+    int count = 2000000;
+
+    for (int x = 0; x < 10; x++) {
+      long start = System.currentTimeMillis();
+      for (int i = 0; i < count; i++) {
+        map.put(i, i);
+      }
+      long elapsed = System.currentTimeMillis() - start;
+      double runsPerSecond = 1000.0 / elapsed;
+      System.out.println((count * runsPerSecond) + " / sec");
+    }
+  }
+
+  static void m3() {
+    ConcurrentMap<Integer, Integer> map = new ConcurrentSkipListMap<>();
+    int count = 2000000;
+
+    for (int x = 0; x < 10; x++) {
+      long start = System.currentTimeMillis();
+      for (int i = 0; i < count; i++) {
+        map.put(i, i);
+      }
+      long elapsed = System.currentTimeMillis() - start;
+      double runsPerSecond = 1000.0 / elapsed;
+      System.out.println((count * runsPerSecond) + " / sec");
     }
   }
 }

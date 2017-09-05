@@ -7,13 +7,13 @@ import rx.Single
 import rx.functions.Func2
 
 
-suspend fun <T1, T2> parallel(s1: Single<out T1>,
-                              s2: Single<out T2>) =
+suspend fun <T1, T2> await(s1: Single<out T1>,
+                           s2: Single<out T2>) =
    Single.zip(s1, s2) { t1, t2 -> KTuple2(t1, t2) }.await()
 
-suspend fun <T1, T2, T3> parallel(s1: Single<out T1>,
-                                  s2: Single<out T2>,
-                                  s3: Single<out T3>): KTuple3<T1, T2, T3> =
+suspend fun <T1, T2, T3> await(s1: Single<out T1>,
+                               s2: Single<out T2>,
+                               s3: Single<out T3>): KTuple3<T1, T2, T3> =
    Single.zip(
       s1,
       s2,
@@ -21,10 +21,10 @@ suspend fun <T1, T2, T3> parallel(s1: Single<out T1>,
       { t1, t2, t3 -> KTuple3(t1, t2, t3) }
    ).await()
 
-suspend fun <T1, T2, T3, T4> parallel(s1: Single<out T1>,
-                                      s2: Single<out T2>,
-                                      s3: Single<out T3>,
-                                      s4: Single<out T4>) =
+suspend fun <T1, T2, T3, T4> await(s1: Single<out T1>,
+                                   s2: Single<out T2>,
+                                   s3: Single<out T3>,
+                                   s4: Single<out T4>) =
    Single.zip(
       s1,
       s2,
@@ -33,19 +33,19 @@ suspend fun <T1, T2, T3, T4> parallel(s1: Single<out T1>,
       { t1, t2, t3, t4 -> KTuple4(t1, t2, t3, t4) }
    ).await()
 
-suspend fun <T1, T2, T3, T4, T5> parallel(s1: Single<out T1>,
-                                          s2: Single<out T2>,
-                                          s3: Single<out T3>,
-                                          s4: Single<out T4>,
-                                          s5: Single<out T5>) =
+suspend fun <T1, T2, T3, T4, T5> await(s1: Single<out T1>,
+                                       s2: Single<out T2>,
+                                       s3: Single<out T3>,
+                                       s4: Single<out T4>,
+                                       s5: Single<out T5>) =
    Single.zip(s1, s2, s3, s4, s5, { t1, t2, t3, t4, t5 -> KTuple5(t1, t2, t3, t4, t5) }).await()
 
-suspend fun <T1, T2, T3, T4, T5, T6> parallel(s1: Single<out T1>,
-                                              s2: Single<out T2>,
-                                              s3: Single<out T3>,
-                                              s4: Single<out T4>,
-                                              s5: Single<out T5>,
-                                              s6: Single<out T6>) =
+suspend fun <T1, T2, T3, T4, T5, T6> await(s1: Single<out T1>,
+                                           s2: Single<out T2>,
+                                           s3: Single<out T3>,
+                                           s4: Single<out T4>,
+                                           s5: Single<out T5>,
+                                           s6: Single<out T6>) =
    Single.zip(
       s1,
       s2,
@@ -56,13 +56,13 @@ suspend fun <T1, T2, T3, T4, T5, T6> parallel(s1: Single<out T1>,
       { t1, t2, t3, t4, t5, t6 -> KTuple6(t1, t2, t3, t4, t5, t6) }
    ).await()
 
-suspend fun <T1, T2, T3, T4, T5, T6, T7> parallel(s1: Single<out T1>,
-                                                  s2: Single<out T2>,
-                                                  s3: Single<out T3>,
-                                                  s4: Single<out T4>,
-                                                  s5: Single<out T5>,
-                                                  s6: Single<out T6>,
-                                                  s7: Single<out T7>) =
+suspend fun <T1, T2, T3, T4, T5, T6, T7> await(s1: Single<out T1>,
+                                               s2: Single<out T2>,
+                                               s3: Single<out T3>,
+                                               s4: Single<out T4>,
+                                               s5: Single<out T5>,
+                                               s6: Single<out T6>,
+                                               s7: Single<out T7>) =
    Single.zip(
       s1,
       s2,
@@ -74,14 +74,14 @@ suspend fun <T1, T2, T3, T4, T5, T6, T7> parallel(s1: Single<out T1>,
       { t1, t2, t3, t4, t5, t6, t7 -> KTuple7(t1, t2, t3, t4, t5, t6, t7) }
    ).await()
 
-suspend fun <T1, T2, T3, T4, T5, T6, T7, T8> parallel(s1: Single<out T1>,
-                                                      s2: Single<out T2>,
-                                                      s3: Single<out T3>,
-                                                      s4: Single<out T4>,
-                                                      s5: Single<out T5>,
-                                                      s6: Single<out T6>,
-                                                      s7: Single<out T7>,
-                                                      s8: Single<out T8>) =
+suspend fun <T1, T2, T3, T4, T5, T6, T7, T8> await(s1: Single<out T1>,
+                                                   s2: Single<out T2>,
+                                                   s3: Single<out T3>,
+                                                   s4: Single<out T4>,
+                                                   s5: Single<out T5>,
+                                                   s6: Single<out T6>,
+                                                   s7: Single<out T7>,
+                                                   s8: Single<out T8>) =
    Single.zip(
       s1,
       s2,
@@ -94,15 +94,15 @@ suspend fun <T1, T2, T3, T4, T5, T6, T7, T8> parallel(s1: Single<out T1>,
       { t1, t2, t3, t4, t5, t6, t7, t8 -> KTuple8(t1, t2, t3, t4, t5, t6, t7, t8) }
    ).await()
 
-suspend fun <T1, T2, T3, T4, T5, T6, T7, T8, T9> parallel(s1: Single<out T1>,
-                                                          s2: Single<out T2>,
-                                                          s3: Single<out T3>,
-                                                          s4: Single<out T4>,
-                                                          s5: Single<out T5>,
-                                                          s6: Single<out T6>,
-                                                          s7: Single<out T7>,
-                                                          s8: Single<out T8>,
-                                                          s9: Single<out T9>) =
+suspend fun <T1, T2, T3, T4, T5, T6, T7, T8, T9> await(s1: Single<out T1>,
+                                                       s2: Single<out T2>,
+                                                       s3: Single<out T3>,
+                                                       s4: Single<out T4>,
+                                                       s5: Single<out T5>,
+                                                       s6: Single<out T6>,
+                                                       s7: Single<out T7>,
+                                                       s8: Single<out T8>,
+                                                       s9: Single<out T9>) =
    Single.zip(
       s1,
       s2,

@@ -7,6 +7,7 @@ import rx.Single
  *
  */
 abstract class InternalAction<IN : Any, OUT : Any> : Action<IN, OUT>() {
+
    /**
     *
     */

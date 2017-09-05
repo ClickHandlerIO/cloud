@@ -1,30 +1,66 @@
 package move.action
 
-import kotlinx.coroutines.experimental.Unconfined
-import kotlinx.coroutines.experimental.async
-import kotlinx.coroutines.experimental.delay
-import kotlinx.coroutines.experimental.rx1.await
 import move.common.WireFormat
+import move.rx.await
 import move.rx.ordered
-import move.rx.parallel
-import rx.Single
 import javax.inject.Inject
+
+
+@Http(
+   method = Http.Method.GET,
+   path = "/catalogue/products/:type/:productid/",
+   consumes = arrayOf("application/json"),
+   produces = arrayOf("application/json")
+)
+class Login : HttpAction() {
+   suspend override fun execute() {
+      val productType = param("type")
+      val id = param("id")
+
+      resp.end("")
+   }
+}
+
+@Http(
+   method = Http.Method.GET,
+   path = "/ping"
+)
+class Ping : HttpAction() {
+   suspend override fun execute() {
+      resp.setStatusCode(200).end("PONG")
+   }
+}
 
 
 @Internal(timeout = 1000)
 class MyAction : InternalAction<String, String>() {
+   companion object : MyAction_Factory()
+
    suspend override fun execute(): String {
-//      delay(50)
-//      val reply = of(AllocateInventory::class)
-//         .await(AllocateInventory.Request(id = ""))
+      // Ask using Factory pattern.
+//      AllocateInventory ask { id = "" }
+//      AllocateInventory.ask("")
 //
-//      val reply2 = of<AllocateInventory>() await AllocateInventory.Request(id = "")
+//      AllocateInventory rxAsk ""
+//      AllocateInventory.rxAsk("")
 //
-//      val r = of(AllocateInventory::class)..AllocateInventory.Request(id = "")
+//      // Ask with builder.
+//      AllocateInventory ask { id("") }
+//
+//      MyAction ask ""
 
       return ""
    }
 }
+
+open class MyAction_Factory : InternalActionFactory<MyAction, String, String>() {
+   @Inject
+   lateinit var _provider: MyAction_Provider
+
+   override val provider: MyAction_Provider
+      get() = _provider
+}
+
 
 /**
  *
@@ -32,6 +68,15 @@ class MyAction : InternalAction<String, String>() {
 @Internal(timeout = 1000)
 class Allocate : InternalAction<String, String>() {
    suspend override fun execute(): String {
+//      MyAction ask ""
+//
+//      MyAction job ""
+//
+//      val (r1, r2) = await(
+//         MyAction rx "",
+//         MyAction rx ""
+//      )
+
 //      delay(50)
 //      val reply = of(AllocateInventory::class)
 //         .await(AllocateInventory.Request(id = ""))
@@ -69,7 +114,13 @@ class AllocateStock : InternalAction<AllocateStock.Request, AllocateStock.Reply>
 
 @Internal
 class AllocateInventory @Inject constructor() : InternalAction<AllocateInventory.Request, AllocateInventory.Reply>() {
-   data class Request(var id: String)
+   companion object : JavaFactory.F2()
+
+   data class Request(var id: String = "")
+
+   fun id(id: String): Request {
+      return Request(id = id)
+   }
 
    data class Reply(var code: String = "")
 
@@ -85,7 +136,7 @@ class AllocateInventory @Inject constructor() : InternalAction<AllocateInventory
 //        val ar = AppComponent.instance.actions().move.action.allocate("Hi")
 //        println(ar)
 
-      val blockingParallel = parallel(
+      val blockingParallel = await(
          rxBlocking {
             delay(1000)
             println("Worker 1")
@@ -146,7 +197,7 @@ class AllocateInventory @Inject constructor() : InternalAction<AllocateInventory
       println(blockingOrdered)
 
       val asyncParallel =
-         parallel(
+         await(
             rx {
                delay(1000)
                println("Async 1")

@@ -8,17 +8,29 @@ import io.vertx.core.net.NetSocket
 import move.NUID
 import move.action.ActionEventLoopContext
 import move.action.ActionEventLoopGroup
+import move.common.WireFormat
 import rx.Single
 import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
 internal val EMPTY_BYTE_ARRAY = ByteArray(0)
 
+/**
+ * Attempts to maintain at least 1 connection per CPU core.
+ * Connections will be evenly distributed across all NATS
+ * servers in the cluster. Supports auto cluster
+ * reconfiguration. Auto reconnects dropped connections and
+ * has a backoff when dropped for being a slow consumer.
+ *
+ * @author Clay Molocznik
+ */
 class NATSCluster(val vertx: Vertx,
                   urls: List<Pair<String, Int>>,
-                  var connectionsPerServer: Int = 2) {
+                  var connectionsPerServer: Int = 2,
+                  var connectionsPerCore: Int = 1) {
 
    val context = vertx.orCreateContext
    var running = true
@@ -34,8 +46,8 @@ class NATSCluster(val vertx: Vertx,
    var netClient = vertx.createNetClient(NetClientOptions()
       .setUsePooledBuffers(true)
       .setTcpNoDelay(true)
-      .setReceiveBufferSize(RECV_BUFFER_SIZE)
-      .setSendBufferSize(SEND_BUFFER_SIZE)
+      .setReceiveBufferSize(NATSParser.RECV_BUFFER_SIZE)
+      .setSendBufferSize(NATSParser.SEND_BUFFER_SIZE)
    )
 
    fun start() {
@@ -73,70 +85,11 @@ class NATSCluster(val vertx: Vertx,
    }
 
    /**
-    * Creates a subscription across each server and each server's connection.
+    * Creates a subscription across each server and each server's listener.
     */
    fun stripedSub() {
 
    }
-}
-
-internal val RECV_BUFFER_SIZE = 2 * 1024 * 1024
-internal val SEND_BUFFER_SIZE = 2 * 1024 * 1024
-
-internal val ascii_0 = 48
-internal val ascii_9 = 57
-
-internal val ZERO = '0'.toByte()
-internal val ONE = '1'.toByte()
-internal val TWO = '2'.toByte()
-internal val THREE = '3'.toByte()
-internal val FOUR = '4'.toByte()
-internal val FIVE = '5'.toByte()
-internal val SIX = '6'.toByte()
-internal val SEVEN = '7'.toByte()
-internal val EIGHT = '8'.toByte()
-internal val NINE = '9'.toByte()
-
-val digits = arrayOf(ZERO, ONE, TWO, THREE, FOUR, FIVE, SIX, SEVEN, EIGHT, NINE)
-
-class SimpleParser {
-
-
-   fun parse(buffer: ByteBuf) {
-
-   }
-}
-
-enum class ParserState {
-   M_OR_P_OR_I_PLUS_OR_MINUS,
-}
-
-
-
-fun Buffer.appendNumberAsText(msgSize: Int) {
-   if (msgSize > 0) {
-      var l = msgSize
-      while (l > 0) {
-         appendByte(digits[l % 10])
-         l /= 10
-      }
-   } else {
-      appendByte(digits[0])
-   }
-}
-
-fun Buffer.readAsciiInt64(length: Int): Long {
-   var num:Long = 0
-
-   var dec:Byte
-   for (i in 0..length) {
-      dec = getByte(i)
-      if (dec < ascii_0 || dec > ascii_9) {
-         return -1
-      }
-      num = (num * 10) + dec - ascii_0
-   }
-   return num
 }
 
 enum class ConnectionState {
@@ -149,7 +102,10 @@ enum class ConnectionState {
    ESTABLISHED,
 }
 
-class Server(val cluster: NATSCluster, val host: String, val port: Int, var poolSize: Int) {
+class Server(val cluster: NATSCluster,
+             val host: String,
+             val port: Int,
+             var poolSize: Int) {
    val connections = Array<Connection>(poolSize) {
       Connection(cluster, this, cluster.nextEventLoop())
    }
@@ -236,19 +192,21 @@ val PONG = "PONG\r\n".toByteArray()
  */
 class Connection(val cluster: NATSCluster,
                  val server: Server,
-                 val context: ActionEventLoopContext) {
+                 val context: ActionEventLoopContext) : NATSParser.Listener {
 
    val counter = AtomicLong(0L)
-   val subscriptions = mutableMapOf<ByteArray, Sub>()
+   val subscriptions = mutableMapOf<Long, Sub>()
+   val subscriptionsByClass = mutableMapOf<ByteArray, Long>()
    var stateTimestamp = System.nanoTime()
    var state = ConnectionState.DISCONNECTED
    var socket: NetSocket? = null
-   var parser = Parser(this)
+   var parser = NATSParser(this)
 
    var lastPingReceivedMs = 0L
    var lastPongReceivedMs = 0L
 
    val queue = ConcurrentLinkedQueue<Any>()
+   var info: Info? = null
 
    init {
    }
@@ -284,26 +242,33 @@ class Connection(val cluster: NATSCluster,
    }
 
    private fun handleClose(void: Void) {
-      parser = Parser(this)
+      parser = NATSParser(this)
       counter.set(0L)
       state = ConnectionState.DISCONNECTED
       socket = null
       server.connect()
    }
 
-   fun processOk() {
-
+   override fun onSubject(byteBuf: ByteBuf?) {
+      TODO("not implemented")
    }
 
-   fun processMsg(byteArray: ByteArray, offset: Int, length: Int) {
-      parser.ps.ma.sid
+   override fun onMessage(sid: Long, replyTo: ByteArray?, replyToLength: Int, payload: ByteBuf?) {
+      TODO("not implemented")
+   }
+
+   override fun onInfo(buffer: ByteBuf) {
+      info = WireFormat.parse(Info::class.java, buffer)
+      if (info == null) {
+         protocolErr("Malformed INFO payload: " + buffer.toString(StandardCharsets.UTF_8))
+      }
    }
 
    fun processAsyncInfo(byteArray: ByteArray, offset: Int, length: Int) {
       // Cluster state changed.
    }
 
-   fun protocolErr(msg: String) {
+   override fun protocolErr(msg: String) {
 
    }
 

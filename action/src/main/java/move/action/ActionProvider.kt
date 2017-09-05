@@ -1,13 +1,10 @@
 package move.action
 
-import io.netty.buffer.ByteBuf
-import io.vertx.core.buffer.Buffer
+import dagger.MembersInjector
 import io.vertx.kotlin.circuitbreaker.CircuitBreakerOptions
 import io.vertx.rxjava.core.Vertx
 import kotlinx.coroutines.experimental.rx1.await
-import move.common.WireFormat
 import rx.Single
-import java.nio.ByteBuffer
 import java.util.concurrent.TimeUnit
 import javax.inject.Provider
 
@@ -54,7 +51,7 @@ constructor(val vertx: Vertx, val actionProvider: Provider<A>) {
    val eventLoopGroup = ActionEventLoopGroup.get(vertx)
 
    val visibility
-      get() = Remote.Visibility.PRIVATE
+      get() = ActionVisibility.PRIVATE
 
    private var executionTimeoutEnabled: Boolean = false
    private var timeoutMillis: Int = annotationTimeout
@@ -75,6 +72,11 @@ constructor(val vertx: Vertx, val actionProvider: Provider<A>) {
       eventLoopGroup
    )
 
+   private lateinit var name: String
+   private lateinit var queueGroup: String
+
+   var injector: MembersInjector<Any>? = null
+
    init {
       init()
    }
@@ -89,6 +91,18 @@ constructor(val vertx: Vertx, val actionProvider: Provider<A>) {
    open val isRemote = false
    open val isWorker = false
    open val isScheduled = false
+
+   internal fun initBus(nodeId: String) {
+      queueGroup = nodeId + name
+   }
+
+   protected open fun findName(): String {
+      var n = javaClass.canonicalName
+      if (n.startsWith("action.")) {
+         return n.substring("action.".length)
+      }
+      return n
+   }
 
    protected open fun init() {
       // Timeout milliseconds.
@@ -184,9 +198,9 @@ constructor(val vertx: Vertx, val actionProvider: Provider<A>) {
 
 
    suspend internal fun call(request: IN,
-                    timeoutUnit: TimeUnit = TimeUnit.SECONDS,
-                    timeout: Long = 0,
-                    broker: ActionBroker = ActionBroker.DEFAULT): OUT {
+                             timeoutUnit: TimeUnit = TimeUnit.SECONDS,
+                             timeout: Long = 0,
+                             broker: ActionBroker = ActionBroker.DEFAULT): OUT {
       if (isInternal) {
          return create().await(request)
       }
@@ -205,9 +219,9 @@ constructor(val vertx: Vertx, val actionProvider: Provider<A>) {
    }
 
    suspend internal fun rxCall(request: IN,
-                    timeoutUnit: TimeUnit = TimeUnit.SECONDS,
-                    timeout: Long = 0,
-                    broker: ActionBroker = ActionBroker.DEFAULT): Single<OUT> {
+                               timeoutUnit: TimeUnit = TimeUnit.SECONDS,
+                               timeout: Long = 0,
+                               broker: ActionBroker = ActionBroker.DEFAULT): Single<OUT> {
       return broker.call(request, this)
    }
 

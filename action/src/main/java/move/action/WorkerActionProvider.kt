@@ -34,6 +34,13 @@ constructor(vertx: Vertx,
 
    internal var producer: WorkerProducer? = null
 
+   override fun findName(): String {
+      if (annotation?.value?.isNotBlank() == true) {
+         return annotation.value.trim()
+      }
+      return super.findName()
+   }
+
    /**
     *
     */

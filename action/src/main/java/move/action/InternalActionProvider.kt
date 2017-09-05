@@ -18,4 +18,11 @@ constructor(vertx: Vertx,
 
    override val annotationTimeout: Int
       get() = annotation?.timeout ?: 0
+
+   override fun findName(): String {
+      if (annotation?.value?.isNotBlank() == true) {
+         return annotation.value.trim()
+      }
+      return super.findName()
+   }
 }
