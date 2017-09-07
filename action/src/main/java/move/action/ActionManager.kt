@@ -1,12 +1,14 @@
 package move.action
 
 import com.google.common.util.concurrent.AbstractIdleService
-import io.vertx.core.impl.VertxInternal
 import io.vertx.rxjava.core.Vertx
 import move.NUID
 import org.slf4j.LoggerFactory
 import javax.inject.Inject
 import javax.inject.Singleton
+
+val Actions
+   get() = ActionManager.Companion.store
 
 /**
  * Central repository of all actions.
@@ -16,7 +18,7 @@ import javax.inject.Singleton
 @Singleton
 class ActionManager @Inject
 internal constructor(val vertx: Vertx,
-                     val actions: ActionMap) : AbstractIdleService() {
+                     val actions: ActionStore) : AbstractIdleService() {
 
    // Does this node accept HTTP and WebSocket requests?
    var isRemote = true
@@ -24,6 +26,8 @@ internal constructor(val vertx: Vertx,
    var isWorker = true
 
    var timerID: Long = -1L
+
+   var remoteServer: RemoteServer? = null
 
    init {
       // Setup JBoss logging provider.
@@ -33,14 +37,13 @@ internal constructor(val vertx: Vertx,
       System.setProperty("java.net.preferIPv4Stack", "true")
 
       // Register actions from Dagger
-      put(actions.map)
-      ensureActionMap()
+      Companion.store = actions
 
-      // Start stats timer
-      timerID = vertx.delegate.setPeriodic(1000L) { publishStats() }
-      (vertx.delegate as VertxInternal).addCloseHook {
-         vertx.delegate.cancelTimer(timerID)
-      }
+//      // Start stats timer
+//      timerID = vertx.delegate.setPeriodic(1000L) { publishStats() }
+//      (vertx.delegate as VertxInternal).addCloseHook {
+//         vertx.delegate.cancelTimer(timerID)
+//      }
    }
 
    override fun startUp() {
@@ -55,20 +58,17 @@ internal constructor(val vertx: Vertx,
       }.subscribe()
    }
 
-   companion object : ActionLocator() {
+   companion object {
+      internal lateinit var store: ActionStore
+         get
+         private set
+
       private val LOG = LoggerFactory.getLogger(ActionManager::class.java)
+      private var brokers: Map<Class<*>, ActionBroker> = mapOf()
 
       private var nodeId: String = NUID.nextGlobal()
 
       val NODE_ID
          get() = nodeId
-   }
-}
-
-class ActionStats : ScheduledLocalActor() {
-   override suspend fun next() {
-      blocking {
-
-      }
    }
 }

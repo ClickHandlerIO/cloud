@@ -4,7 +4,6 @@ import com.google.auto.service.AutoService;
 import com.squareup.javapoet.AnnotationSpec;
 import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.CodeBlock;
-import com.squareup.javapoet.FieldSpec;
 import com.squareup.javapoet.JavaFile;
 import com.squareup.javapoet.MethodSpec;
 import com.squareup.javapoet.ParameterSpec;
@@ -14,8 +13,7 @@ import com.squareup.javapoet.TypeSpec;
 import com.squareup.javapoet.WildcardTypeName;
 import dagger.Module;
 import dagger.Provides;
-import dagger.multibindings.ClassKey;
-import dagger.multibindings.IntoMap;
+import dagger.multibindings.IntoSet;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.io.Writer;
@@ -59,17 +57,17 @@ import javax.tools.Diagnostic.Kind;
 import javax.tools.FileObject;
 import javax.tools.JavaFileObject;
 import javax.tools.StandardLocation;
-import move.action.ActionLocator;
+import move.action.ActionProducer;
 import move.action.ActionProvider;
 import move.action.Actor;
-import move.action.IAction;
+import move.action.Daemon;
+import move.action.Http;
 import move.action.Internal;
+import move.action.InternalActionProducer;
 import move.action.InternalActionProvider;
-import move.action.Remote;
-import move.action.RemoteActionProvider;
-import move.action.Scheduled;
-import move.action.ScheduledActionProvider;
+import move.action.JobAction;
 import move.action.Worker;
+import move.action.WorkerActionProducer;
 import move.action.WorkerActionProvider;
 
 /**
@@ -86,6 +84,13 @@ public class ActionProcessor extends AbstractProcessor {
   static final String ROOT_MODULE_NAME = "Move_Root_Module";
   static final ParameterizedTypeName ACTION_PROVIDER_NAME = ParameterizedTypeName.get(
       ClassName.bestGuess("move.action.ActionProvider"),
+      WildcardTypeName.subtypeOf(TypeName.OBJECT),
+      WildcardTypeName.subtypeOf(TypeName.OBJECT),
+      WildcardTypeName.subtypeOf(TypeName.OBJECT)
+  );
+  static final ParameterizedTypeName ACTION_PRODUCER_NAME = ParameterizedTypeName.get(
+      ClassName.bestGuess("move.action.ActionProducer"),
+      WildcardTypeName.subtypeOf(TypeName.OBJECT),
       WildcardTypeName.subtypeOf(TypeName.OBJECT),
       WildcardTypeName.subtypeOf(TypeName.OBJECT),
       WildcardTypeName.subtypeOf(TypeName.OBJECT)
@@ -124,11 +129,11 @@ public class ActionProcessor extends AbstractProcessor {
   @Override
   public Set<String> getSupportedAnnotationTypes() {
     final Set<String> annotataions = new LinkedHashSet<>();
-    annotataions.add(Remote.class.getCanonicalName());
     annotataions.add(Internal.class.getCanonicalName());
     annotataions.add(Worker.class.getCanonicalName());
-    annotataions.add(Scheduled.class.getCanonicalName());
+    annotataions.add(Http.class.getCanonicalName());
     annotataions.add(Actor.class.getCanonicalName());
+    annotataions.add(Daemon.class.getCanonicalName());
     return annotataions;
   }
 
@@ -140,79 +145,95 @@ public class ActionProcessor extends AbstractProcessor {
   @Override
   public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
     try {
-      final Set<? extends Element> remoteElements = roundEnv
-          .getElementsAnnotatedWith(Remote.class);
       final Set<? extends Element> internalElements = roundEnv
           .getElementsAnnotatedWith(Internal.class);
       final Set<? extends Element> workerElements = roundEnv
           .getElementsAnnotatedWith(Worker.class);
-      final Set<? extends Element> scheduledElements = roundEnv
-          .getElementsAnnotatedWith(Scheduled.class);
+      final Set<? extends Element> httpElements = roundEnv
+          .getElementsAnnotatedWith(Http.class);
       final Set<? extends Element> actorElements = roundEnv
+          .getElementsAnnotatedWith(Actor.class);
+      final Set<? extends Element> internalActorElements = roundEnv
           .getElementsAnnotatedWith(Actor.class);
 
       final HashSet<Element> elements = new HashSet<>();
 
-      if (remoteElements != null) {
-        elements.addAll(remoteElements);
-      }
       if (internalElements != null) {
         elements.addAll(internalElements);
       }
       if (workerElements != null) {
         elements.addAll(workerElements);
       }
-      if (scheduledElements != null) {
-        elements.addAll(scheduledElements);
+      if (httpElements != null) {
+        elements.addAll(httpElements);
+      }
+      if (actorElements != null) {
+        elements.addAll(actorElements);
+      }
+      if (internalActorElements != null) {
+        elements.addAll(internalActorElements);
       }
 
       for (Element annotatedElement : elements) {
-        final Remote remote = annotatedElement
-            .getAnnotation(Remote.class);
         final Internal internal = annotatedElement
             .getAnnotation(Internal.class);
         final Worker worker = annotatedElement
             .getAnnotation(Worker.class);
-        final Scheduled scheduled = annotatedElement
-            .getAnnotation(Scheduled.class);
+        final Http http = annotatedElement
+            .getAnnotation(Http.class);
+        final Actor actor = annotatedElement
+            .getAnnotation(Actor.class);
+        final Daemon daemon = annotatedElement
+            .getAnnotation(Daemon.class);
 
         final TypeElement element = elementUtils.getTypeElement(annotatedElement.toString());
 
         ActionHolder holder = actionMap.get(element.getQualifiedName().toString());
 
         if (holder == null) {
-          final TypeParameterResolver typeParamResolver = TypeParameterResolver.resolve(element);
+          final TypeParameterResolver typeParamResolver = resolve(element);
 
           DeclaredTypeVar requestType = null;
           try {
-            requestType = typeParamResolver.resolve(IAction.class, 0);
+            requestType = typeParamResolver.resolve(JobAction.class, 0);
           } catch (Throwable e) {
             messager.printMessage(Diagnostic.Kind.ERROR, e.getMessage());
           }
+
+          messager.printMessage(Kind.WARNING, "IN = " + (requestType == null ? "<Null>"
+              : requestType.varTypeElement.getQualifiedName()));
 
           DeclaredTypeVar responseType = null;
           try {
-            responseType = typeParamResolver.resolve(IAction.class, 1);
+            responseType = typeParamResolver.resolve(JobAction.class, 1);
           } catch (Throwable e) {
             messager.printMessage(Diagnostic.Kind.ERROR, e.getMessage());
           }
 
-          holder = new ActionHolder(element, requestType, responseType, remote, internal, worker,
-              scheduled);
+          messager.printMessage(Kind.WARNING, "OUT = " + (responseType == null ? "<Null>"
+              : responseType.varTypeElement.getQualifiedName()));
+
+          holder = new ActionHolder(element, requestType, responseType, internal, worker, http,
+              actor,
+              daemon);
         }
 
         // Ensure only 1 action annotation was used.
         int actionAnnotationCount = 0;
-        if (holder.remote != null) {
-          actionAnnotationCount++;
-        }
+
         if (holder.internal != null) {
           actionAnnotationCount++;
         }
         if (holder.worker != null) {
           actionAnnotationCount++;
         }
-        if (holder.scheduled != null) {
+        if (holder.http != null) {
+          actionAnnotationCount++;
+        }
+        if (holder.actor != null) {
+          actionAnnotationCount++;
+        }
+        if (holder.daemon != null) {
           actionAnnotationCount++;
         }
         if (actionAnnotationCount > 1) {
@@ -289,17 +310,23 @@ public class ActionProcessor extends AbstractProcessor {
     messager.printMessage(Diagnostic.Kind.ERROR, msg, e);
   }
 
+  TypeParameterResolver resolve(TypeElement element) {
+    final TypeParameterResolver resolver = new TypeParameterResolver(element);
+    resolver.resolve();
+    return resolver;
+  }
+
   /**
    *
    */
   public static class ActionHolder {
 
     // Configure Remote options
-    final Remote remote;
     final Internal internal;
     final Worker worker;
-    // Deprecated
-    final Scheduled scheduled;
+    final Http http;
+    final Actor actor;
+    final Daemon daemon;
     final ClassName className;
     final TypeElement type;
     final TypeName typeName;
@@ -318,22 +345,29 @@ public class ActionProcessor extends AbstractProcessor {
     final boolean hasInjectCtor;
     final boolean hasFieldsInject;
 
+    final ClassName producerClassName;
+    final ParameterizedTypeName producerTypeName;
+    final String generatedProducerName;
+    final ClassName generatedProducerClassName;
+
     boolean generated;
 
     public ActionHolder(TypeElement type,
         DeclaredTypeVar requestType,
         DeclaredTypeVar replyType,
-        Remote remote,
         Internal internal,
         Worker worker,
-        Scheduled scheduled) {
+        Http http,
+        Actor actor,
+        Daemon daemon) {
       this.type = type;
       this.requestType = requestType;
       this.replyType = replyType;
-      this.remote = remote;
       this.internal = internal;
       this.worker = worker;
-      this.scheduled = scheduled;
+      this.http = http;
+      this.actor = actor;
+      this.daemon = daemon;
       this.className = ClassName.get(type);
       this.name = type.getQualifiedName().toString();
       this.simpleName = type.getSimpleName().toString();
@@ -341,6 +375,7 @@ public class ActionProcessor extends AbstractProcessor {
       this.fieldName = Character.toLowerCase(f.charAt(0)) + f.substring(1);
       this.moduleName = simpleName + "_Module";
       this.generatedProviderName = simpleName + "_Provider";
+      this.generatedProducerName = simpleName + "_Producer";
 
       typeName = ClassName.get(type);
 
@@ -379,50 +414,40 @@ public class ActionProcessor extends AbstractProcessor {
       }
 
       generatedProviderClassName = ClassName.bestGuess(packageName + "." + generatedProviderName);
+      generatedProducerClassName = ClassName.bestGuess(packageName + "." + generatedProducerName);
 
-      if (isRemote()) {
-        providerClassName = ClassName.get(RemoteActionProvider.class);
-      } else if (isInternal()) {
+      if (isInternal()) {
         providerClassName = ClassName.get(InternalActionProvider.class);
+        producerClassName = ClassName.get(InternalActionProducer.class);
       } else if (isWorker()) {
         providerClassName = ClassName.get(WorkerActionProvider.class);
-      } else if (isScheduled()) {
-        providerClassName = ClassName.get(ScheduledActionProvider.class);
+        producerClassName = ClassName.get(WorkerActionProducer.class);
       } else {
         providerClassName = ClassName.get(ActionProvider.class);
+        producerClassName = ClassName.get(ActionProducer.class);
       }
 
-      if (isWorker()) {
-        // Get Action IN resolved name.
-        ClassName inName = ClassName.get(requestType.getResolvedElement());
+      // Get Action IN resolved name.
+      ClassName inName = ClassName.get(requestType.getResolvedElement());
+      // Get Action OUT resolved name.
+      ClassName outName = ClassName.get(replyType.getResolvedElement());
 
-        providerTypeName = ParameterizedTypeName.get(
-            providerClassName,
-            className,
-            inName
-        );
-      } else if (isScheduled()) {
-        providerTypeName = ParameterizedTypeName.get(
-            providerClassName,
-            className
-        );
-      } else {
-        // Get Action IN resolved name.
-        ClassName inName = ClassName.get(requestType.getResolvedElement());
-        // Get Action OUT resolved name.
-        ClassName outName = ClassName.get(replyType.getResolvedElement());
+      // Provider Type.
+      providerTypeName = ParameterizedTypeName.get(
+          providerClassName,
+          className,
+          inName,
+          outName
+      );
 
-        providerTypeName = ParameterizedTypeName.get(
-            providerClassName,
-            className,
-            inName,
-            outName
-        );
-      }
-    }
-
-    boolean isRemote() {
-      return remote != null;
+      // Producer Type.
+      producerTypeName = ParameterizedTypeName.get(
+          producerClassName,
+          className,
+          inName,
+          outName,
+          generatedProviderClassName
+      );
     }
 
     boolean isInternal() {
@@ -433,8 +458,16 @@ public class ActionProcessor extends AbstractProcessor {
       return worker != null;
     }
 
-    boolean isScheduled() {
-      return scheduled != null;
+    boolean isHttp() {
+      return http != null;
+    }
+
+    boolean isActor() {
+      return actor != null;
+    }
+
+    boolean getDaemon() {
+      return daemon != null;
     }
   }
 
@@ -580,7 +613,7 @@ public class ActionProcessor extends AbstractProcessor {
   /**
    * @author Clay Molocznik
    */
-  public static class TypeParameterResolver {
+  public class TypeParameterResolver {
 
     private final TypeElement element;
     private final List<DeclaredTypeVar> vars = new ArrayList<>();
@@ -590,17 +623,12 @@ public class ActionProcessor extends AbstractProcessor {
       this.element = element;
     }
 
-    public static TypeParameterResolver resolve(TypeElement element) {
-      final TypeParameterResolver resolver = new TypeParameterResolver(element);
-      resolver.resolve();
-      return resolver;
-    }
-
     void resolve() {
       if (resolved) {
         return;
       }
 
+      messager.printMessage(Kind.WARNING, element.getQualifiedName());
       resolveDeclaredTypeVars(element.getSuperclass());
 
       final List<? extends TypeMirror> interfaces = element.getInterfaces();
@@ -619,7 +647,11 @@ public class ActionProcessor extends AbstractProcessor {
       }
 
       for (DeclaredTypeVar var : vars) {
-        final ResolvedTypeVar actionTypeVar = var.getResolved(cls.getName());
+        ResolvedTypeVar actionTypeVar = var.getResolved(cls.getCanonicalName());
+
+        if (actionTypeVar == null) {
+          actionTypeVar = var.getResolved(cls.getName());
+        }
         if (actionTypeVar != null) {
           if (actionTypeVar.getIndex() == typeVarIndex) {
             return var;
@@ -781,6 +813,7 @@ public class ActionProcessor extends AbstractProcessor {
       actions.values().stream().filter(a -> !a.generated).forEach(action -> {
         action.generated = true;
         generateProvider(action);
+        generateProducer(action);
         generateModule(action);
       });
 
@@ -902,6 +935,32 @@ public class ActionProcessor extends AbstractProcessor {
       }
     }
 
+    private void generateProducer(ActionHolder action) {
+      final MethodSpec.Builder providerCtor = MethodSpec.constructorBuilder()
+          .addAnnotation(Inject.class)
+          .addModifiers(Modifier.PUBLIC);
+
+      final TypeSpec.Builder producerType = TypeSpec
+          .classBuilder(action.generatedProducerName)
+          .addModifiers(Modifier.PUBLIC)
+          .superclass(action.producerTypeName)
+          .addAnnotation(Singleton.class);
+
+      producerType.addMethod(providerCtor.build());
+
+      // Build java file.
+      final JavaFile providerJavaFile = JavaFile.builder(path, producerType.build()).build();
+
+      try {
+        // Write .java source code file.
+        providerJavaFile.writeTo(filer);
+      } catch (Throwable e) {
+        // Ignore.
+        messager.printMessage(Diagnostic.Kind.ERROR,
+            "Failed to generate Source File: " + e.getMessage());
+      }
+    }
+
     private void generateModule(ActionHolder action) {
       final TypeSpec.Builder actionModuleType = TypeSpec
           .classBuilder(action.moduleName)
@@ -916,24 +975,43 @@ public class ActionProcessor extends AbstractProcessor {
         actionModuleType.addMethod(provideActionMethod.build());
       }
 
-      final MethodSpec.Builder mapMethod = MethodSpec.methodBuilder("_2")
-          .addAnnotation(Provides.class)
-          .addAnnotation(IntoMap.class)
-          .addAnnotation(AnnotationSpec
-              .builder(ClassKey.class)
-              .addMember("value", CodeBlock
-                  .builder()
-                  .add("$T.class", action.type)
-                  .build())
-              .build())
-          .returns(ACTION_PROVIDER_NAME)
-          .addParameter(ParameterSpec
-              .builder(action.generatedProviderClassName, "provider")
-              .build()
-          )
-          .addStatement("return provider");
+      actionModuleType.addMethod(
+          MethodSpec.methodBuilder("_2")
+              .addAnnotation(Provides.class)
+              .addAnnotation(IntoSet.class)
+//          .addAnnotation(AnnotationSpec
+//              .builder(ClassKey.class)
+//              .addMember("value", CodeBlock
+//                  .builder()
+//                  .add("$T.class", action.type)
+//                  .build())
+//              .build())
+              .returns(ACTION_PROVIDER_NAME)
+              .addParameter(ParameterSpec
+                  .builder(action.generatedProviderClassName, "provider")
+                  .build()
+              )
+              .addStatement("return provider")
+              .build());
 
-      actionModuleType.addMethod(mapMethod.build());
+      actionModuleType.addMethod(
+          MethodSpec.methodBuilder("_3")
+              .addAnnotation(Provides.class)
+              .addAnnotation(IntoSet.class)
+//          .addAnnotation(AnnotationSpec
+//              .builder(ClassKey.class)
+//              .addMember("value", CodeBlock
+//                  .builder()
+//                  .add("$T.class", action.generatedProducerClassName)
+//                  .build())
+//              .build())
+              .returns(ACTION_PRODUCER_NAME)
+              .addParameter(ParameterSpec
+                  .builder(action.generatedProducerClassName, "producer")
+                  .build()
+              )
+              .addStatement("return producer")
+              .build());
 
       // Build java file.
       final JavaFile moduleFile = JavaFile.builder(path, actionModuleType.build())
@@ -983,181 +1061,181 @@ public class ActionProcessor extends AbstractProcessor {
       generateSource();
       processed = true;
 
-      // Build empty @Inject constructor.
-      final MethodSpec.Builder ctor = MethodSpec.constructorBuilder()
-          .addAnnotation(Inject.class);
-//                .addModifiers(Modifier.PUBLIC, Modifier.FINAL);
-
-      // Init Class.
-      final TypeSpec.Builder type = TypeSpec.classBuilder(getClassName())
-          .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-          .superclass(TypeName.get(ActionLocator.class))
-          .addAnnotation(Singleton.class);
-
-      // We generate the code for "initActions()" and "initChildren()" as we process.
-      final CodeBlock.Builder initActionsCode = CodeBlock.builder();
-      final CodeBlock.Builder initChildrenCode = CodeBlock.builder();
-
-      // Generate SubPackage locators.
-      for (ActionPackage childPackage : children.values()) {
-        // Build type name.
-        final TypeName typeName = ClassName.get(childPackage.path, childPackage.getClassName());
-
-        // Add field.
-        type.addField(
-            FieldSpec.builder(typeName, childPackage.name)
-                .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-//                        .addAnnotation(Inject.class)
-                .build()
-        );
-
-        ctor.addParameter(
-            ParameterSpec.builder(typeName, childPackage.name, Modifier.FINAL).build()
-        );
-
-        ctor.addStatement("this.$L = $L", childPackage.name, childPackage.name);
-
-        // Add code to initChildren() code.
-        initChildrenCode.addStatement("getChildren().add($L)", childPackage.name);
-
-        // Add getter method.
-        type.addMethod(
-            MethodSpec.methodBuilder(childPackage.name)
-                .addModifiers(Modifier.PUBLIC)
-                .returns(typeName)
-                .addStatement("return " + childPackage.name)
-                .build()
-        );
-      }
-
-      // Go through all actions.
-      actions.forEach((classPath, action) -> {
-        type.addField(
-            FieldSpec.builder(action.generatedProviderClassName, action.fieldName)
-                .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-                .build()
-        );
-
-        ctor.addParameter(
-            ParameterSpec
-                .builder(action.generatedProviderClassName, action.fieldName, Modifier.FINAL)
-                .build()
-        );
-
-        ctor.addStatement("this.$L = $L", action.fieldName, action.fieldName);
-
-        initActionsCode.addStatement("put($T.class, $L)", action.type, action.fieldName);
-
-        type.addMethod(
-            MethodSpec.methodBuilder(action.fieldName)
-                .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-                .returns(action.generatedProviderClassName)
-                .addStatement("return " + action.fieldName)
-                .build()
-        );
-      });
-
-      // Add implemented "initActions()".
-      type.addMethod(
-          MethodSpec.methodBuilder("initActions")
-              .addAnnotation(Override.class)
-              .addModifiers(Modifier.PROTECTED)
-              .returns(void.class)
-              .addCode(initActionsCode.build()).build()
-      );
-
-      // Add implemented "initChildren()".
-      type.addMethod(
-          MethodSpec.methodBuilder("initChildren")
-              .addAnnotation(Override.class)
-              .addModifiers(Modifier.PROTECTED)
-              .returns(void.class)
-              .addCode(initChildrenCode.build()).build()
-      );
-
-      if (!actions.isEmpty()) {
-        try {
-          final FileObject fileObject = filer.getResource(
-              StandardLocation.SOURCE_OUTPUT,
-              path,
-              getClassName() + ".java"
-          );
-          final CharSequence content = fileObject.getCharContent(true);
-          final String contents = content.toString();
-
-          if (!contents.isEmpty()) {
-            for (ActionHolder action : actions.values()) {
-              if (!contents.contains(action.providerClassName.simpleName())) {
-                messager.printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "Action: " +
-                        action.name +
-                        " was created. Full Regeneration needed. \"clean\" and \"compile\""
-                );
-                return;
-              }
-            }
-
-            // Generate child packages.
-            for (ActionPackage childPackage : children.values()) {
-              childPackage.generate();
-            }
-
-            return;
-          }
-        } catch (Throwable e) {
-          // Ignore.
-        }
-      }
-
-      if (!children.isEmpty()) {
-        try {
-          final FileObject fileObject = filer.getResource(
-              StandardLocation.SOURCE_OUTPUT,
-              path,
-              getClassName() + ".java"
-          );
-          final CharSequence content = fileObject.getCharContent(true);
-          final String contents = content.toString();
-
-          if (!contents.isEmpty()) {
-            for (ActionPackage child : children.values()) {
-              if (!contents.contains(child.getClassName() + " " + child.name + ";")) {
-                messager.printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "ActionLocator: " +
-                        child.path +
-                        " was created. Full Regeneration needed. \"clean\" and \"compile\""
-                );
-                return;
-              }
-            }
-
-            // Generate child packages.
-            for (ActionPackage childPackage : children.values()) {
-              childPackage.generate();
-            }
-
-            return;
-          }
-        } catch (Throwable e) {
-          // Ignore.
-        }
-      }
-
-      type.addMethod(ctor.build());
-
-      // Build java file.
-      final JavaFile javaFile = JavaFile.builder(path, type.build()).build();
-
-      try {
-        // Write .java source code file.
-        javaFile.writeTo(filer);
-      } catch (Throwable e) {
-        // Ignore.
-        messager.printMessage(Diagnostic.Kind.ERROR,
-            "Failed to generate Source File: " + e.getMessage());
-      }
+//      // Build empty @Inject constructor.
+//      final MethodSpec.Builder ctor = MethodSpec.constructorBuilder()
+//          .addAnnotation(Inject.class);
+////                .addModifiers(Modifier.PUBLIC, Modifier.FINAL);
+//
+//      // Init Class.
+//      final TypeSpec.Builder type = TypeSpec.classBuilder(getClassName())
+//          .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+//          .superclass(TypeName.get(ActionLocator.class))
+//          .addAnnotation(Singleton.class);
+//
+//      // We generate the code for "initActions()" and "initChildren()" as we process.
+//      final CodeBlock.Builder initActionsCode = CodeBlock.builder();
+//      final CodeBlock.Builder initChildrenCode = CodeBlock.builder();
+//
+//      // Generate SubPackage locators.
+//      for (ActionPackage childPackage : children.values()) {
+//        // Build type name.
+//        final TypeName typeName = ClassName.get(childPackage.path, childPackage.getClassName());
+//
+//        // Add field.
+//        type.addField(
+//            FieldSpec.builder(typeName, childPackage.name)
+//                .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+////                        .addAnnotation(Inject.class)
+//                .build()
+//        );
+//
+//        ctor.addParameter(
+//            ParameterSpec.builder(typeName, childPackage.name, Modifier.FINAL).build()
+//        );
+//
+//        ctor.addStatement("this.$L = $L", childPackage.name, childPackage.name);
+//
+//        // Add code to initChildren() code.
+//        initChildrenCode.addStatement("getChildren().add($L)", childPackage.name);
+//
+//        // Add getter method.
+//        type.addMethod(
+//            MethodSpec.methodBuilder(childPackage.name)
+//                .addModifiers(Modifier.PUBLIC)
+//                .returns(typeName)
+//                .addStatement("return " + childPackage.name)
+//                .build()
+//        );
+//      }
+//
+//      // Go through all actions.
+//      actions.forEach((classPath, action) -> {
+//        type.addField(
+//            FieldSpec.builder(action.generatedProviderClassName, action.fieldName)
+//                .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+//                .build()
+//        );
+//
+//        ctor.addParameter(
+//            ParameterSpec
+//                .builder(action.generatedProviderClassName, action.fieldName, Modifier.FINAL)
+//                .build()
+//        );
+//
+//        ctor.addStatement("this.$L = $L", action.fieldName, action.fieldName);
+//
+//        initActionsCode.addStatement("put($T.class, $L)", action.type, action.fieldName);
+//
+//        type.addMethod(
+//            MethodSpec.methodBuilder(action.fieldName)
+//                .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+//                .returns(action.generatedProviderClassName)
+//                .addStatement("return " + action.fieldName)
+//                .build()
+//        );
+//      });
+//
+//      // Add implemented "initActions()".
+//      type.addMethod(
+//          MethodSpec.methodBuilder("initActions")
+//              .addAnnotation(Override.class)
+//              .addModifiers(Modifier.PROTECTED)
+//              .returns(void.class)
+//              .addCode(initActionsCode.build()).build()
+//      );
+//
+//      // Add implemented "initChildren()".
+//      type.addMethod(
+//          MethodSpec.methodBuilder("initChildren")
+//              .addAnnotation(Override.class)
+//              .addModifiers(Modifier.PROTECTED)
+//              .returns(void.class)
+//              .addCode(initChildrenCode.build()).build()
+//      );
+//
+//      if (!actions.isEmpty()) {
+//        try {
+//          final FileObject fileObject = filer.getResource(
+//              StandardLocation.SOURCE_OUTPUT,
+//              path,
+//              getClassName() + ".java"
+//          );
+//          final CharSequence content = fileObject.getCharContent(true);
+//          final String contents = content.toString();
+//
+//          if (!contents.isEmpty()) {
+//            for (ActionHolder action : actions.values()) {
+//              if (!contents.contains(action.providerClassName.simpleName())) {
+//                messager.printMessage(
+//                    Diagnostic.Kind.ERROR,
+//                    "Action: " +
+//                        action.name +
+//                        " was created. Full Regeneration needed. \"clean\" and \"compile\""
+//                );
+//                return;
+//              }
+//            }
+//
+//            // Generate child packages.
+//            for (ActionPackage childPackage : children.values()) {
+//              childPackage.generate();
+//            }
+//
+//            return;
+//          }
+//        } catch (Throwable e) {
+//          // Ignore.
+//        }
+//      }
+//
+//      if (!children.isEmpty()) {
+//        try {
+//          final FileObject fileObject = filer.getResource(
+//              StandardLocation.SOURCE_OUTPUT,
+//              path,
+//              getClassName() + ".java"
+//          );
+//          final CharSequence content = fileObject.getCharContent(true);
+//          final String contents = content.toString();
+//
+//          if (!contents.isEmpty()) {
+//            for (ActionPackage child : children.values()) {
+//              if (!contents.contains(child.getClassName() + " " + child.name + ";")) {
+//                messager.printMessage(
+//                    Diagnostic.Kind.ERROR,
+//                    "ActionLocator: " +
+//                        child.path +
+//                        " was created. Full Regeneration needed. \"clean\" and \"compile\""
+//                );
+//                return;
+//              }
+//            }
+//
+//            // Generate child packages.
+//            for (ActionPackage childPackage : children.values()) {
+//              childPackage.generate();
+//            }
+//
+//            return;
+//          }
+//        } catch (Throwable e) {
+//          // Ignore.
+//        }
+//      }
+//
+//      type.addMethod(ctor.build());
+//
+//      // Build java file.
+//      final JavaFile javaFile = JavaFile.builder(path, type.build()).build();
+//
+//      try {
+//        // Write .java source code file.
+//        javaFile.writeTo(filer);
+//      } catch (Throwable e) {
+//        // Ignore.
+//        messager.printMessage(Diagnostic.Kind.ERROR,
+//            "Failed to generate Source File: " + e.getMessage());
+//      }
 
       // Generate child packages.
       children.values().forEach(ActionPackage::generate);

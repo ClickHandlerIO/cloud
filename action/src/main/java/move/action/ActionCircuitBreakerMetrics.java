@@ -6,8 +6,6 @@ import io.vertx.core.impl.VertxInternal;
 import io.vertx.core.json.JsonObject;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.LongAdder;
-import org.HdrHistogram.ActionHistogram;
-import org.HdrHistogram.AtomicHistogram;
 import org.HdrHistogram.ConcurrentHistogram;
 import org.HdrHistogram.Histogram;
 
@@ -35,11 +33,11 @@ public class ActionCircuitBreakerMetrics {
   private LongAdder exceptions = new LongAdder();
   //  private Histogram statistics = new ConcurrentHistogram(3);
   private Histogram statistics = new ConcurrentHistogram(3);
-//  private Histogram statistics = new ActionHistogram(60000, 3);
+  //  private Histogram statistics = new ActionHistogram(60000, 3);
   private Histogram cachedRolling1 = new ConcurrentHistogram(3);
-//  private Histogram cachedRolling1 = new ActionHistogram(60000, 3);
+  //  private Histogram cachedRolling1 = new ActionHistogram(60000, 3);
   private Histogram cachedRolling2 = new ConcurrentHistogram(3);
-//  private Histogram cachedRolling2 = new ActionHistogram(60000, 3);
+  //  private Histogram cachedRolling2 = new ActionHistogram(60000, 3);
   private volatile RollingWindow currentWindow = new RollingWindow();
 
   ActionCircuitBreakerMetrics(Vertx vertx, ActionCircuitBreaker circuitBreaker,
@@ -230,23 +228,82 @@ public class ActionCircuitBreakerMetrics {
   class Operation {
 
     final long constructed;
-    private long begin;
-    private long end;
-    private long cpu;
-    private long cpuBegin;
-    private long blocking;
-    private long blockingBegin;
-    private long suspended;
-    private boolean complete;
-    private boolean failed;
-    private boolean timeout;
-    private boolean exception;
-    private boolean fallbackFailed;
-    private boolean fallbackSucceed;
-    private boolean shortCircuited;
+    long begin;
+    long end;
+    long cpu;
+    long cpuBegin;
+    long blocking;
+    long blockingBegin;
+    long child;
+    long childCpu;
+    long childBlocking;
+    boolean childTimeout;
+    boolean complete;
+    boolean failed;
+    boolean timeout;
+    boolean exception;
+    boolean fallbackFailed;
+    boolean fallbackSucceed;
+    boolean shortCircuited;
 
     Operation() {
       constructed = System.nanoTime();
+    }
+
+    public long getConstructed() {
+      return constructed;
+    }
+
+    public long getBegin() {
+      return begin;
+    }
+
+    public long getEnd() {
+      return end;
+    }
+
+    public long getCpu() {
+      return cpu;
+    }
+
+    public long getCpuBegin() {
+      return cpuBegin;
+    }
+
+    public long getBlocking() {
+      return blocking;
+    }
+
+    public long getBlockingBegin() {
+      return blockingBegin;
+    }
+
+    public boolean isComplete() {
+      return complete;
+    }
+
+    public boolean isFailed() {
+      return failed;
+    }
+
+    public boolean isTimeout() {
+      return timeout;
+    }
+
+    public boolean isException() {
+      return exception;
+    }
+
+    public boolean isFallbackFailed() {
+      return fallbackFailed;
+    }
+
+    public boolean isFallbackSucceed() {
+      return fallbackSucceed;
+    }
+
+    public boolean isShortCircuited() {
+      return shortCircuited;
     }
 
     void begin() {
@@ -257,9 +314,14 @@ public class ActionCircuitBreakerMetrics {
       cpuBegin = System.nanoTime();
     }
 
-    void cpuEnd() {
-      if (!complete)
-        cpu += System.nanoTime() - cpuBegin;
+    long cpuEnd() {
+      if (!complete) {
+        long increaseBy = System.nanoTime() - cpuBegin;
+        cpu += increaseBy;
+        return increaseBy;
+      } else {
+        return 0L;
+      }
     }
 
     synchronized void blockingBegin() {
@@ -267,19 +329,14 @@ public class ActionCircuitBreakerMetrics {
     }
 
     synchronized void blockingEnd() {
-      if (!complete)
+      if (!complete) {
         blocking += System.nanoTime() - blockingBegin;
+      }
     }
 
     void complete() {
       end = System.nanoTime();
       complete = true;
-      if (cpuBegin > 0L) {
-        cpu = end - cpuBegin;
-      }
-      if (blockingBegin > 0L) {
-        blocking = end - blockingBegin;
-      }
       ActionCircuitBreakerMetrics.this.complete(this);
     }
 

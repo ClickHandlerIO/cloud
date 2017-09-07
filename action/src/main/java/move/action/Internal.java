@@ -13,6 +13,12 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.TYPE})
 public @interface Internal {
+
+  /**
+   * Name of action.
+   *
+   * @return
+   */
   String value() default "";
 
   /**

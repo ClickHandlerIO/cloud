@@ -4,13 +4,13 @@ import io.netty.handler.codec.http.HttpResponseStatus
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.buffer.Buffer
+import io.vertx.core.http.HttpMethod
 import io.vertx.core.http.HttpServer
 import io.vertx.core.http.HttpServerOptions
 import io.vertx.core.http.ServerWebSocket
 import io.vertx.ext.auth.jwt.JWTAuth
 import io.vertx.ext.web.Router
 import io.vertx.ext.web.RoutingContext
-import net.openhft.chronicle.queue.ChronicleQueue
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentMap
 import java.util.concurrent.atomic.AtomicLong
@@ -35,26 +35,10 @@ open class RemoteServer(val port: Int = 15000, val host: String = "", var auth: 
    var maxWebSockets = MAX_WEBSOCKETS
    var maxInflightPerWebSocket = MAX_WEBSOCKET_INFLIGHT
 
-   // Every request is logged.
-   // Connection request
-   // Connection response
-   // Action request
-   // Action response
-   // Streams may optionally be logged
-   var requestLog: ChronicleQueue? = null
-
    init {
    }
 
    override fun start(startFuture: Future<Void>?) {
-      val actions = ActionManager.actionMap.filter {
-         it.value.visibility == ActionVisibility.PUBLIC
-      }.map { it.value }.toList()
-
-      val httpActions = ActionManager.actionMap.filter {
-         it.value.actionClass.isAssignableFrom(HttpAction::class.java)
-      }.map { it.value }.toList()
-
       httpServer = buildHttpServer()
       httpServer?.listen {
          if (it.failed())
@@ -75,12 +59,67 @@ open class RemoteServer(val port: Int = 15000, val host: String = "", var auth: 
 
    fun buildHttpServer(): HttpServer {
       val router = Router.router(vertx)
+
+      Actions.http
+         .filter { it.visibleTo(ActionVisibility.PUBLIC) }
+         .forEach { producer ->
+            val annotation = producer.provider.annotation ?:
+               throw RuntimeException(
+                  "HttpAction [${producer.provider.actionClass.canonicalName}] missing @Http"
+               )
+
+            var route = if (annotation.path.isBlank())
+               router.route()
+            else
+               router.route(annotation.path)
+
+            when (annotation.method) {
+               Http.Method.CONNECT -> route.method(HttpMethod.CONNECT)
+               Http.Method.DELETE -> route.method(HttpMethod.DELETE)
+               Http.Method.GET -> route.method(HttpMethod.GET)
+               Http.Method.HEAD -> route.method(HttpMethod.HEAD)
+               Http.Method.OPTIONS -> route.method(HttpMethod.OPTIONS)
+               Http.Method.POST -> route.method(HttpMethod.POST)
+               Http.Method.PATCH -> route.method(HttpMethod.PATCH)
+               Http.Method.PUT -> route.method(HttpMethod.PUT)
+               Http.Method.TRACE -> route.method(HttpMethod.TRACE)
+               Http.Method.ALL -> route
+            }
+
+            annotation.produces.forEach { route.produces(it) }
+            annotation.consumes.forEach { route.consumes(it) }
+
+            // Create handler.
+            route.handler { routingContext ->
+               // Ask
+               producer.rxAsk(request = routingContext).asSingle().subscribe(
+                  {
+                     if (!routingContext.response().ended()) {
+                        onIncompleteResponse(producer, routingContext)
+                     }
+                  },
+                  { onException(producer, routingContext, it) }
+               )
+            }
+         }
+
       router.route().handler(this::catchAll)
 
       return vertx
          .createHttpServer(buildHttpOptions())
          .websocketHandler(this::websocket)
          .requestHandler(router::accept)
+   }
+
+   protected open fun onIncompleteResponse(producer: HttpActionProducer<*, *>,
+                                           context: RoutingContext) {
+      context.response().setStatusCode(500).end()
+   }
+
+   protected open fun onException(producer: HttpActionProducer<*, *>,
+                                  context: RoutingContext,
+                                  cause: Throwable) {
+      context.response().setStatusCode(500).end(cause.localizedMessage)
    }
 
    protected open fun buildHttpOptions(): HttpServerOptions {
@@ -134,6 +173,7 @@ open class RemoteServer(val port: Int = 15000, val host: String = "", var auth: 
       var counter = 0
       // Lazily initialize streams map.
       val streams: Map<Long, Any> by lazy { HashMap<Long, Any>() }
+      val presence: Map<String, Any> by lazy { HashMap<String, Any>() }
       val expires: Long = 0
       var paused = false
 
@@ -155,6 +195,7 @@ open class RemoteServer(val port: Int = 15000, val host: String = "", var auth: 
       }
 
       fun handleClose(event: Void) {
+         webSocketMap.remove(id)
       }
 
       fun handleException(exception: Throwable) {

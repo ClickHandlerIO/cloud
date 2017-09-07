@@ -26,7 +26,7 @@ class StreamConnector(val vertx: Vertx) {
  *
  * @author Clay Molocznik
  */
-abstract class AbstractStreamAction<IN : StreamRequest<ARGS>, OUT : StreamReply, ARGS : Any> : Action<IN, OUT>() {
+abstract class AbstractStreamAction<IN : StreamRequest<ARGS>, OUT : StreamReply, ARGS : Any> : InternalAction<IN, OUT>() {
 //   suspend override fun execute(): OUT {
 //      buildSequence<Buffer> {
 //         yield(Buffer.buffer())

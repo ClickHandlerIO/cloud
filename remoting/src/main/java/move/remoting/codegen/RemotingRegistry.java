@@ -24,7 +24,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import javaslang.control.Try;
 import move.action.Action;
-import move.action.RemoteActionProvider;
+import move.action.WorkerActionProvider;
 import move.remoting.Push;
 import move.remoting.RemotingType;
 import org.reflections.Reflections;
@@ -34,7 +34,7 @@ import org.reflections.Reflections;
  */
 public class RemotingRegistry {
 
-  public final Map<Object, RemoteActionProvider<?, ?, ?>> providerMap;
+  public final Map<Object, WorkerActionProvider<?, ?, ?>> providerMap;
   final StandardType OBJECT_TYPE = new PrimitiveType(Object.class, DataType.WILDCARD, true);
   private final Map<Type, StandardType> types = new HashMap<>();
   private final Map<Class, ActionSpec> actionSpecs = new HashMap<>();
@@ -50,7 +50,7 @@ public class RemotingRegistry {
    * @param providerMap
    * @param prefixMap
    */
-  public RemotingRegistry(Map<Object, RemoteActionProvider<?, ?, ?>> providerMap,
+  public RemotingRegistry(Map<Object, WorkerActionProvider<?, ?, ?>> providerMap,
       TreeMap<String, String> prefixMap) {
     this.providerMap = providerMap;
     this.prefixMap = prefixMap == null ? new TreeMap<>() : prefixMap;

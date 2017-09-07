@@ -15,7 +15,6 @@ import com.amazonaws.services.sqs.AmazonSQSAsync
 import com.amazonaws.services.sqs.AmazonSQSAsyncClientBuilder
 import com.amazonaws.services.sqs.buffered.MoveAmazonSQSBufferedAsyncClient
 import com.amazonaws.services.sqs.buffered.QueueBuffer
-import com.amazonaws.services.sqs.buffered.QueueBufferConfig
 import com.amazonaws.services.sqs.model.*
 import com.codahale.metrics.Counter
 import com.codahale.metrics.Gauge
@@ -26,7 +25,6 @@ import com.google.common.cache.Cache
 import com.google.common.cache.CacheBuilder
 import com.google.common.cache.RemovalListener
 import com.google.common.cache.RemovalNotification
-import com.google.common.collect.ImmutableSet
 import com.google.common.util.concurrent.AbstractIdleService
 import com.google.common.util.concurrent.Service
 import com.netflix.hystrix.exception.HystrixTimeoutException
@@ -59,7 +57,7 @@ import javax.inject.Singleton
 @Singleton
 class SQSService @Inject
 internal constructor(val vertx: Vertx,
-                     val config: SQSConfig) : AbstractIdleService(), WorkerService {
+                     val config: SQSConfig) : AbstractIdleService() {
 
    private val queueMap = HashMap<String, QueueContext>()
 
@@ -170,7 +168,7 @@ internal constructor(val vertx: Vertx,
       }
    }
 
-   private fun workerEnabled(provider: WorkerActionProvider<*, *>): Boolean {
+   private fun workerEnabled(provider: WorkerActionProvider<*, *, *>): Boolean {
       if (config.worker == null || config.worker == false) {
          return false
       }
@@ -265,8 +263,6 @@ internal constructor(val vertx: Vertx,
          config.worker = false
       }
 
-      val numberOfQueues = ActionManager.workerActionQueueGroupMap.size
-
       // Create SQS QueueBuffer Executor.
       // Uses a cached thread strategy with the core size set to 0.
       // So it won't consume any threads if there isn't any activity.
@@ -323,104 +319,104 @@ internal constructor(val vertx: Vertx,
       }
 
       // Set a good limit to max HTTP connections in SQS client.
-      val maxConnections = ActionManager.workerActionQueueGroupMap.map { it.value.size }.sum() * 2
+//      val maxConnections = ActionManager.workerActionQueueGroupMap.map { it.value.size }.sum() * 2
 
       builder.withClientConfiguration(ClientConfiguration()
          // WorkerPacker takes care of GZIP compression already.
          .withGzip(false)
          .withThrottledRetries(true)
-         .withMaxConnections(Math.max(MIN_MAX_CONNECTIONS, maxConnections))
+//         .withMaxConnections(Math.max(MIN_MAX_CONNECTIONS, maxConnections))
       )
 
       // Build SQS client and the Buffered client based on the "Real" SQS client.
       realSQS = builder.build()
       client = MoveAmazonSQSBufferedAsyncClient(realSQS)
 
-      ActionManager.workerActionQueueGroupMap.forEach { entry ->
-         val queueName = config.namespace + entry.key
-         val queueMetricName = "action-worker-queue" + entry.key
-         LOG.info("Calling getQueueUrl() for " + queueName)
-
-         val result = realSQS.getQueueUrl(queueName)
-
-         val queueUrl =
-            if (result == null || result.queueUrl == null || result.queueUrl.isEmpty()) {
-               val createQueueResult = realSQS.createQueue(queueName)
-               createQueueResult.queueUrl
-            } else {
-               result.queueUrl
-            }
-
-         // If there are more than 1 action mapped to this queue then find the max "concurrency"
-         val maxConcurrency = entry.value.map {
-            it.concurrency
-         }.max()?.toInt() ?: DEFAULT_CONCURRENCY
-         // If there are more than 1 action mapped to this queue then find largest "deadline"
-         val maxExecutionMillis = entry.value.map {
-            it.timeoutMillis()
-         }.max()?.toInt() ?: DEFAULT_WORKER_TIMEOUT_MILLIS
-         // Determine if any action in the group is enabled as a worker.
-         val workerEnabled = isWorkerEnabled && entry.value.find { workerEnabled(it) } != null
-
-         val queueConfig = queueConfig(queueName)
-
-         val bufferConfig = QueueBufferConfig()
-            .withMaxBatchSize(queueConfig.maxBatchSize)
-            .withMaxBatchOpenMs(queueConfig.maxBatchOpenMs.toLong())
-            .withFlushOnShutdown(config.flushOnShutdown)
-
-            // Turn off pre-fetching
-            .withMaxInflightReceiveBatches(0)
-            .withMaxDoneReceiveBatches(0)
-
-         if (workerEnabled) {
-            // Enable pre-fetching
-            bufferConfig.withLongPoll(true)
-            bufferConfig.withLongPollWaitTimeoutSeconds(SQS_POLL_WAIT_SECONDS)
-            bufferConfig.withMaxInflightReceiveBatches(queueConfig.maxInflightReceiveBatches)
-            bufferConfig.withMaxDoneReceiveBatches(queueConfig.maxDoneReceiveBatches)
-
-            if (queueConfig.maxInflightReceiveBatches > 0 && queueConfig.maxDoneReceiveBatches > 0) {
-               bufferConfig.withVisibilityTimeoutSeconds(
-                  TimeUnit.MILLISECONDS.toSeconds((maxExecutionMillis * VISIBILITY_MULTIPLIER).toLong()).toInt()
-               )
-            } else {
-               bufferConfig.withVisibilityTimeoutSeconds(
-                  TimeUnit.MILLISECONDS.toSeconds((maxExecutionMillis + VISIBILITY_PADDING_MILLIS)).toInt()
-               )
-            }
-         }
-
-         val buffer = client.putQBuffer(queueUrl, bufferConfig, bufferExecutor)
-
-         val sender = SQSQueueSender(
-            queueUrl,
-            buffer
-         )
-
-         entry.value.forEach { ActionManager.bindProducer(it, sender) }
-
-         val receiver: SQSQueueReceiver? = if (workerEnabled) {
-            SQSQueueReceiver(
-               vertx,
-               queueName,
-               queueMetricName,
-               queueUrl,
-               buffer,
-               if (queueConfig.parallelism > 0)
-                  queueConfig.parallelism
-               else
-                  0
-            )
-         } else {
-            null
-         }
-
-         queueMap.put(
-            queueName,
-            QueueContext(sender, receiver, queueUrl, queueConfig, ImmutableSet.of(entry.value))
-         )
-      }
+//      Actions.workers.forEach { entry ->
+//         val queueName = config.namespace + entry.key
+//         val queueMetricName = "action-worker-queue" + entry.key
+//         LOG.info("Calling getQueueUrl() for " + queueName)
+//
+//         val result = realSQS.getQueueUrl(queueName)
+//
+//         val queueUrl =
+//            if (result == null || result.queueUrl == null || result.queueUrl.isEmpty()) {
+//               val createQueueResult = realSQS.createQueue(queueName)
+//               createQueueResult.queueUrl
+//            } else {
+//               result.queueUrl
+//            }
+//
+//         // If there are more than 1 action mapped to this queue then find the max "concurrency"
+//         val maxConcurrency = entry.value.map {
+//            it.concurrency
+//         }.max()?.toInt() ?: DEFAULT_CONCURRENCY
+//         // If there are more than 1 action mapped to this queue then find largest "deadline"
+//         val maxExecutionMillis = entry.value.map {
+//            it.timeoutMillis()
+//         }.max()?.toInt() ?: DEFAULT_WORKER_TIMEOUT_MILLIS
+//         // Determine if any action in the group is enabled as a worker.
+//         val workerEnabled = isWorkerEnabled && entry.value.find { workerEnabled(it) } != null
+//
+//         val queueConfig = queueConfig(queueName)
+//
+//         val bufferConfig = QueueBufferConfig()
+//            .withMaxBatchSize(queueConfig.maxBatchSize)
+//            .withMaxBatchOpenMs(queueConfig.maxBatchOpenMs.toLong())
+//            .withFlushOnShutdown(config.flushOnShutdown)
+//
+//            // Turn off pre-fetching
+//            .withMaxInflightReceiveBatches(0)
+//            .withMaxDoneReceiveBatches(0)
+//
+//         if (workerEnabled) {
+//            // Enable pre-fetching
+//            bufferConfig.withLongPoll(true)
+//            bufferConfig.withLongPollWaitTimeoutSeconds(SQS_POLL_WAIT_SECONDS)
+//            bufferConfig.withMaxInflightReceiveBatches(queueConfig.maxInflightReceiveBatches)
+//            bufferConfig.withMaxDoneReceiveBatches(queueConfig.maxDoneReceiveBatches)
+//
+//            if (queueConfig.maxInflightReceiveBatches > 0 && queueConfig.maxDoneReceiveBatches > 0) {
+//               bufferConfig.withVisibilityTimeoutSeconds(
+//                  TimeUnit.MILLISECONDS.toSeconds((maxExecutionMillis * VISIBILITY_MULTIPLIER).toLong()).toInt()
+//               )
+//            } else {
+//               bufferConfig.withVisibilityTimeoutSeconds(
+//                  TimeUnit.MILLISECONDS.toSeconds((maxExecutionMillis + VISIBILITY_PADDING_MILLIS)).toInt()
+//               )
+//            }
+//         }
+//
+//         val buffer = client.putQBuffer(queueUrl, bufferConfig, bufferExecutor)
+//
+//         val sender = SQSQueueSender(
+//            queueUrl,
+//            buffer
+//         )
+//
+//         entry.value.forEach { ActionManager.bindProducer(it, sender) }
+//
+//         val receiver: SQSQueueReceiver? = if (workerEnabled) {
+//            SQSQueueReceiver(
+//               vertx,
+//               queueName,
+//               queueMetricName,
+//               queueUrl,
+//               buffer,
+//               if (queueConfig.parallelism > 0)
+//                  queueConfig.parallelism
+//               else
+//                  0
+//            )
+//         } else {
+//            null
+//         }
+//
+//         queueMap.put(
+//            queueName,
+//            QueueContext(sender, receiver, queueUrl, queueConfig, ImmutableSet.of(entry.value))
+//         )
+//      }
 
       // Startup all receivers.
       queueMap.values.forEach { queueContext ->
@@ -919,7 +915,7 @@ internal constructor(val vertx: Vertx,
             return
          }
 
-         val actionProvider = ActionManager.workerActionMap[envelope.name]
+         val actionProvider = Actions[envelope.name]
          if (actionProvider == null) {
             LOG.error("Could not find action named '" + envelope.name + "'. Deleting...")
             deletesCounter.inc()
@@ -940,38 +936,38 @@ internal constructor(val vertx: Vertx,
 
             jobsCounter.inc()
 
-            actionProvider.rx(request).subscribe(
-               {
-                  activeMessages.decrementAndGet()
-                  Try.run { receiveMore() }
-
-                  if (it != null && it) {
-                     completesCounter.inc()
-                     deletesCounter.inc()
-
-                     try {
-                        deleteMessage(message.receiptHandle)
-                     } catch (e: Throwable) {
-                        LOG.error("Delete message from queue '" + queueUrl + "' with receipt handle '" + message.receiptHandle + "' failed", e)
-                        deleteFailuresCounter.inc()
-                     }
-                  } else {
-                     inCompletesCounter.inc()
-                  }
-               },
-               {
-                  activeMessages.decrementAndGet()
-                  Try.run { receiveMore() }
-                  LOG.error("Action " + actionProvider.actionClass.canonicalName + " threw an exception", it)
-
-                  val rootCause = Throwables.getRootCause(it)
-                  if (rootCause is HystrixTimeoutException || rootCause is TimeoutException) {
-                     timeoutsCounter.inc()
-                  } else {
-                     exceptionsCounter.inc()
-                  }
-               }
-            )
+//            actionProvider.rx(request).subscribe(
+//               {
+//                  activeMessages.decrementAndGet()
+//                  Try.run { receiveMore() }
+//
+//                  if (it != null && it) {
+//                     completesCounter.inc()
+//                     deletesCounter.inc()
+//
+//                     try {
+//                        deleteMessage(message.receiptHandle)
+//                     } catch (e: Throwable) {
+//                        LOG.error("Delete message from queue '" + queueUrl + "' with receipt handle '" + message.receiptHandle + "' failed", e)
+//                        deleteFailuresCounter.inc()
+//                     }
+//                  } else {
+//                     inCompletesCounter.inc()
+//                  }
+//               },
+//               {
+//                  activeMessages.decrementAndGet()
+//                  Try.run { receiveMore() }
+//                  LOG.error("Action " + actionProvider.actionClass.canonicalName + " threw an exception", it)
+//
+//                  val rootCause = Throwables.getRootCause(it)
+//                  if (rootCause is HystrixTimeoutException || rootCause is TimeoutException) {
+//                     timeoutsCounter.inc()
+//                  } else {
+//                     exceptionsCounter.inc()
+//                  }
+//               }
+//            )
          } catch (e: Exception) {
             activeMessages.decrementAndGet()
             Try.run { receiveMore() }
@@ -996,8 +992,7 @@ internal constructor(val vertx: Vertx,
    private inner class QueueContext(val sender: SQSQueueSender,
                                     val receiver: SQSQueueReceiver?,
                                     val queueUrl: String,
-                                    val config: SQSQueueConfig,
-                                    var actionProviders: ImmutableSet<Set<WorkerActionProvider<Action<Any, Boolean>, Any>>>)
+                                    val config: SQSQueueConfig)
 
    companion object {
       private val LOG = LoggerFactory.getLogger(SQSService::class.java)

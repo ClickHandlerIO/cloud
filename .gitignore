@@ -1,5 +1,9 @@
 Git Ignore
 
+.vertx
+.gradle
+.idea
+
 # Package Files
 *.jar
 *.war
@@ -12,7 +16,6 @@ Git Ignore
 
 # Generated Sources
 target
-*/target/
 */out
 /build
 */gwtweb/
@@ -26,8 +29,6 @@ out/*
 node_modules
 
 
-.gradle
 /local.properties
-/.idea
 .DS_Store
 /captures

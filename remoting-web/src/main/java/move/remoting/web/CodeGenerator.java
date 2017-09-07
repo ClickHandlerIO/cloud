@@ -33,7 +33,7 @@ import jsinterop.annotations.JsPackage;
 import jsinterop.annotations.JsProperty;
 import jsinterop.annotations.JsType;
 import moment.client.Moment;
-import move.action.Remote;
+import move.action.Worker;
 import move.remoting.Push;
 import move.remoting.codegen.ActionSpec;
 import move.remoting.codegen.ArrayType;
@@ -197,8 +197,8 @@ public class CodeGenerator {
             .build()
         );
 
-        final Remote remote =
-            (Remote) actionSpec.provider().getActionClass().getAnnotation(Remote.class);
+        final Worker worker =
+            (Worker) actionSpec.provider().getActionClass().getAnnotation(Worker.class);
 
         final TypeName responseEventName = ClassName
             .bestGuess(actionSpec.canonicalName() + "." + RESPONSE_EVENT_NAME);
@@ -207,7 +207,7 @@ public class CodeGenerator {
             .addAnnotation(Override.class)
             .addModifiers(Modifier.PROTECTED)
             .returns(String.class)
-            .addStatement("return $S", remote.path()).build());
+            .addStatement("return $S", worker.value().isEmpty() ? actionSpec.canonicalName() : worker.value()).build());
 
         type.addMethod(MethodSpec.methodBuilder("timeoutMillis")
             .addAnnotation(Override.class)

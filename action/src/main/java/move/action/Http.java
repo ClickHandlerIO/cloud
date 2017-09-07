@@ -60,7 +60,7 @@ public @interface Http {
    */
   ActionVisibility visibility() default ActionVisibility.PUBLIC;
 
-  enum Method {
+  public enum Method {
     ALL,
     OPTIONS,
     GET,

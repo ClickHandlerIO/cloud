@@ -15,15 +15,14 @@
 
   <name>Action SQS</name>
 
+  <properties>
+    <kotlin.version>1.1.4-3</kotlin.version>
+  </properties>
+
   <dependencies>
     <dependency>
       <groupId>com.google.dagger</groupId>
       <artifactId>dagger</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.jetbrains.kotlin</groupId>
-      <artifactId>kotlin-stdlib-jre8</artifactId>
-      <version>${kotlin.version}</version>
     </dependency>
     <!--<dependency>-->
     <!--<groupId>com.google.dagger</groupId>-->
@@ -50,6 +49,12 @@
     <dependency>
       <groupId>com.squareup</groupId>
       <artifactId>javapoet</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.jetbrains.kotlin</groupId>
+      <artifactId>kotlin-test</artifactId>
+      <version>${kotlin.version}</version>
+      <scope>test</scope>
     </dependency>
   </dependencies>
 
@@ -88,15 +93,23 @@
           </execution>
           <execution>
             <id>compile</id>
+            <phase>compile</phase>
             <goals>
               <goal>compile</goal>
             </goals>
             <configuration>
               <sourceDirs>
-                <sourceDir>src/main/kotlin</sourceDir>
-                <sourceDir>src/main/java</sourceDir>
+                <source>src/main/java</source>
+                <source>src/main/kotlin</source>
               </sourceDirs>
             </configuration>
+          </execution>
+          <execution>
+            <id>test-compile</id>
+            <phase>test-compile</phase>
+            <goals>
+              <goal>test-compile</goal>
+            </goals>
           </execution>
         </executions>
       </plugin>

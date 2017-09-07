@@ -20,26 +20,14 @@ public @interface Worker {
   /**
    * Action's name.
    *
-   * Default name is the FQN of the class minus if it
-   * starts with "action."
+   * Default name is the FQN of the class minus if it starts with "action."
    *
-   * e.g.
-   *    inventory.CreateStock
-   *
-   * @return
+   * e.g. inventory.CreateStock
    */
   String value() default "";
 
   /**
-   * @return
-   */
-  boolean fifo() default false;
-
-  /**
-   * Default Time in Milliseconds the Action is allowed to
-   * be in "ACTIVE" state.
-   *
-   * @return
+   * Default Time in Milliseconds the Action is allowed to be in "ACTIVE" state.
    */
   int timeout() default 30_000;
 
@@ -47,11 +35,28 @@ public @interface Worker {
    *
    * @return
    */
-  int concurrency() default 32;
+  boolean fifo() default false;
 
   /**
    *
    * @return
    */
   String queueName() default "";
+
+  /**
+   *
+   * @return
+   */
+  ActionVisibility visibility() default ActionVisibility.PUBLIC;
+
+  /**
+   *
+   * @return
+   */
+  int concurrency() default 0;
+
+  /**
+   * Default Broker to Use.
+   */
+  Class<? extends ActionBroker> broker() default ActionBroker.class;
 }

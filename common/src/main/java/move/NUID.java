@@ -1,5 +1,6 @@
 package move;
 
+import io.netty.buffer.ByteBuf;
 import java.nio.ByteBuffer;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
@@ -19,11 +20,15 @@ public final class NUID {
      * increment. Total is 22 bytes of base 62 ascii text :)
      */
 
-  static final char[] digits = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C',
+  static final char[] DIGIT_CHARS = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B',
+      'C',
       'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T',
       'U', 'V', 'W', 'X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k',
       'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'};
-
+  static final byte[] DIGITS = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C',
+      'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T',
+      'U', 'V', 'W', 'X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k',
+      'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'};
   static final int base = 62;
   static final int preLen = 12;
   static final int seqLen = 10;
@@ -32,17 +37,15 @@ public final class NUID {
   static final long maxInc = 333L;
   public static final ThreadLocal<NUID> THREAD_LOCAL = ThreadLocal.withInitial(NUID::new);
   static final int totalLen = preLen + seqLen;
-
-  // Global NUID
-  public static final NUID GLOBAL = new NUID();
-  public static final NUID GLOBAL2 = new NUID();
-
   private final Random prand;
   // Instance fields
-  char[] pre;
+  byte[] pre;
   private SecureRandom srand;
   private long seq;
   private long inc;
+
+  public static final NUID GLOBAL = new NUID();
+  public static final NUID GLOBAL2 = new NUID();
 
   /**
    * The default NUID constructor.
@@ -65,7 +68,7 @@ public final class NUID {
 
     seq = nextLong(prand, maxSeq);
     inc = minInc + nextLong(prand, maxInc - minInc);
-    pre = new char[preLen];
+    pre = new byte[preLen];
     for (int i = 0; i < preLen; i++) {
       pre[i] = '0';
     }
@@ -120,6 +123,10 @@ public final class NUID {
    * @return the next NUID string from this instance.
    */
   public final String next() {
+    return new String(nextBytes());
+  }
+
+  public final byte[] nextBytes() {
     // Increment and capture.
     seq += inc;
     if (seq >= maxSeq) {
@@ -128,16 +135,39 @@ public final class NUID {
     }
 
     // Copy prefix
-    char[] b = new char[totalLen];
+    byte[] b = new byte[totalLen];
     System.arraycopy(pre, 0, b, 0, preLen);
 
     // copy in the seq in base36.
     int i = b.length;
     for (long l = seq; i > preLen; l /= base) {
       i--;
-      b[i] = digits[(int) (l % base)];
+      b[i] = DIGITS[(int) (l % base)];
     }
-    return new String(b);
+    return b;
+  }
+
+  public final void into(ByteBuf buffer) {
+    buffer.ensureWritable(totalLen);
+
+    // Increment and capture.
+    seq += inc;
+    if (seq >= maxSeq) {
+      randomizePrefix();
+      resetSequential();
+    }
+
+    // Copy prefix
+    byte[] b = new byte[seqLen];
+    buffer.writeBytes(pre);
+
+    // copy in the seq in base36.
+    int i = b.length;
+    for (long l = seq; i > preLen; l /= base) {
+      i--;
+      b[i] = DIGITS[(int) (l % base)];
+    }
+    buffer.writeBytes(b);
   }
 
   public String nextComplex() {
@@ -158,14 +188,14 @@ public final class NUID {
 
     for (int i = 0; i < preLen; i++) {
       final int index = (cb[i] & 0xFF) % base;
-      pre[i] = digits[index];
+      pre[i] = DIGITS[index];
     }
   }
 
   /**
    * @return the pre
    */
-  char[] getPre() {
+  byte[] getPre() {
     return pre;
   }
 
@@ -174,7 +204,7 @@ public final class NUID {
    *
    * @param pre the pre to set
    */
-  void setPre(char[] pre) {
+  void setPre(byte[] pre) {
     this.pre = Arrays.copyOf(pre, pre.length);
   }
 

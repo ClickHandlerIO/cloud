@@ -26,11 +26,20 @@ import io.vertx.core.impl.VertxInternal;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import org.jetbrains.annotations.NotNull;
+import org.quartz.CronScheduleBuilder;
+import org.quartz.CronTrigger;
+import org.quartz.Job;
+import org.quartz.JobBuilder;
+import org.quartz.JobExecutionContext;
+import org.quartz.JobExecutionException;
+import org.quartz.TriggerBuilder;
 
 /**
  * Optimized EvenLoop Context for managing Action lifecycle. Action timeouts are efficiently tracked
@@ -54,13 +63,15 @@ public class ActionEventLoopContext extends ContextExt {
 
   public final EventLoop eventLoop;
   private final AtomicBoolean processingTimeouts = new AtomicBoolean(false);
-  private final LongSkipListMap<Action> actionMap = new LongSkipListMap<>();
+  private final LongSkipListMap<JobAction> actionMap = new LongSkipListMap<>();
   private final LongSkipListMap<AtomicInteger> counterMap = new LongSkipListMap<>();
-  private final LongSkipListMap<Action> nonTimeoutActionMap = new LongSkipListMap<>();
+  private final LongSkipListMap<JobAction> nonTimeoutActionMap = new LongSkipListMap<>();
   private final AtomicLong nonTimeoutCounter = new AtomicLong(0L);
 
-  private final LongSkipListMap<Action> remoteActions = new LongSkipListMap<>();
+  private final LongSkipListMap<JobAction> workerActions = new LongSkipListMap<>();
 
+  private final HashMap<String, CronList> cronMap = new HashMap<>();
+  public final EventLoopDispatcher dispatcher = new EventLoopDispatcher(this);
 
   public ActionEventLoopContext(
       @NotNull EventLoopContext eventLoopDefault,
@@ -76,6 +87,17 @@ public class ActionEventLoopContext extends ContextExt {
   }
 
   public static void main(String[] args) throws InterruptedException {
+    final CronTrigger trigger = TriggerBuilder
+        .newTrigger()
+        .withSchedule(CronScheduleBuilder.cronSchedule("0/25 0/5 * * * *"))
+        .forJob(JobBuilder.newJob().ofType(CronJob.class).build())
+        .startNow()
+        .build();
+
+    Thread.sleep(100000000);
+  }
+
+  private static void testPerf() {
     final Vertx vertx = Vertx.vertx();
     final ActionEventLoopGroup eventLoopGroup = ActionEventLoopGroup.Companion.get(vertx);
 
@@ -204,13 +226,13 @@ public class ActionEventLoopContext extends ContextExt {
     return pack(unix, counter.incrementAndGet());
   }
 
-  public long registerAction(Action action, long epochMillis) {
+  public long registerAction(JobAction action, long epochMillis) {
     final long id = nextId(epochMillis);
     actionMap.put(id, action);
     return id;
   }
 
-  public long registerAction(Action action) {
+  public long registerAction(JobAction action) {
     final long id = nonTimeoutCounter.incrementAndGet();
     nonTimeoutActionMap.put(id, action);
     return id;
@@ -222,6 +244,13 @@ public class ActionEventLoopContext extends ContextExt {
 
   public boolean removeAction(long actionId) {
     return nonTimeoutActionMap.remove(actionId) != null;
+  }
+
+  /**
+   *
+   */
+  void stop() {
+    // Cancels all running Actions and Timers and Rejects new tasks.
   }
 
   /**
@@ -262,10 +291,10 @@ public class ActionEventLoopContext extends ContextExt {
   private void evictActions(long timeoutCeil) {
     // Given we are sorted by lowest to highest with lowest being
     // the next Action that may have timed out.
-    LongSkipListMap.Node<Action> entry = actionMap.removeFirstIfLessThan(timeoutCeil);
+    LongSkipListMap.Node<JobAction> entry = actionMap.removeFirstIfLessThan(timeoutCeil);
     while (entry != null) {
       // Cancel Action and flag as timed out.
-      ((Action) entry.value).timedOut();
+      ((InternalAction) entry.value).cancel(new ActionTimeoutException());
 
       // Next entry.
       entry = actionMap.removeFirstIfLessThan(timeoutCeil);
@@ -277,9 +306,22 @@ public class ActionEventLoopContext extends ContextExt {
     eventLoop.execute(wrapTask(task));
   }
 
-  class ActionHolder {
+  private class CronList {
+    CronTrigger trigger;
+    CronJob job;
+    String expression;
+    HashSet<Daemon> daemons = new HashSet<>();
+  }
 
-    String id;
-    Action action;
+  private static class CronJob implements Job {
+
+    @Override
+    public void execute(JobExecutionContext jobExecutionContext) throws JobExecutionException {
+      System.out.println(jobExecutionContext.getFireTime());
+    }
+  }
+
+  private class TimerList {
+    public HashSet<Daemon> daemons = new HashSet<>();
   }
 }

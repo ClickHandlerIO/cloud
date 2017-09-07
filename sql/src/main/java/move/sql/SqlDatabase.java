@@ -56,7 +56,6 @@ import javaslang.control.Try;
 import javax.sql.DataSource;
 import move.WorkerPool;
 import move.action.Action;
-import move.action.ActionContext;
 import move.action.ActionProvider;
 import move.common.Metrics;
 import move.common.UID;

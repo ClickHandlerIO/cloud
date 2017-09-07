@@ -13,5 +13,13 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
 public @interface Actor {
+
+  /**
+   * Name of Actor.
+   *
+   * Defaults to FQN minus "actor."
+   *
+   * @return
+   */
   String value();
 }

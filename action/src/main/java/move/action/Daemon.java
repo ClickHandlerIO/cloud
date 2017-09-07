@@ -12,6 +12,10 @@ import java.lang.annotation.Target;
 @Documented
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
-public @interface InternalActor {
+public @interface Daemon {
 
+  /**
+   * Name of Daemon.
+   */
+  String value();
 }

@@ -41,6 +41,10 @@ class ActionEventLoopGroup(private val vertxInternal: VertxInternal) {
       return next(io.vertx.core.Vertx.currentContext())
    }
 
+   fun nextBiased(context: Context?): ActionEventLoopContext {
+      return nextRandom()
+   }
+
    fun next(context: Context?): ActionEventLoopContext {
       if (context == null)
          return nextRandom()

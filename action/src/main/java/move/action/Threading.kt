@@ -1,5 +1,0 @@
-package move.action
-
-/**
- *
- */

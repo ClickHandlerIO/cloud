@@ -1,25 +1,23 @@
 package move.action
 
+import io.vertx.ext.web.RoutingContext
 import io.vertx.rxjava.core.Vertx
 import kotlinx.coroutines.experimental.CoroutineStart
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Provider
 
-/**
 
- */
-open class InternalActionProvider<A : InternalAction<IN, OUT>, IN : Any, OUT : Any> @Inject
-constructor(vertx: Vertx,
-            actionProvider: Provider<A>) : ActionProvider<A, IN, OUT>(
-   vertx, actionProvider
-) {
-   override val isInternal = true
+open class HttpActionProvider<A : HttpAction>
+@Inject constructor(vertx: Vertx, provider: Provider<A>)
+   : ActionProvider<A, RoutingContext, Unit>(vertx, provider) {
+   override val isHttp = true
 
-   val annotation: Internal? = actionClass.getAnnotation(Internal::class.java)
+   val annotation: Http? = actionClass.getAnnotation(Http::class.java)
+   val visibility: ActionVisibility = annotation?.visibility ?: ActionVisibility.PUBLIC
 
    @Suppress("UNCHECKED_CAST")
-   val self = this as InternalActionProvider<InternalAction<IN, OUT>, IN, OUT>
+   val self = this as HttpActionProvider<HttpAction>
 
    val annotationTimeout: Int
       get() = annotation?.timeout ?: 0
@@ -28,14 +26,10 @@ constructor(vertx: Vertx,
    internal var timeoutMillis: Int = annotationTimeout
    internal var timeoutMillisLong = timeoutMillis.toLong()
 
-   var maxConcurrentRequests: Int = 0
-      internal set
-
    var isExecutionTimeoutEnabled: Boolean
       get() = executionTimeoutEnabled
       set(enabled) {
       }
-
 
    override fun init() {
       // Timeout milliseconds.
@@ -76,18 +70,18 @@ constructor(vertx: Vertx,
    }
 
 
-   fun createAsRoot(request: IN): A {
+   fun createAsRoot(request: RoutingContext): A {
       return createAsRoot(request, timeoutMillisLong)
    }
 
-   fun createAsRoot(request: IN, timeout: Long, unit: TimeUnit): A {
+   fun createAsRoot(request: RoutingContext, timeout: Long, unit: TimeUnit): A {
       return createAsRoot(request, unit.toMillis(timeout))
    }
 
    /**
     *
     */
-   fun createAsRoot(request: IN, timeoutMillis: Long): A {
+   fun createAsRoot(request: RoutingContext, timeoutMillis: Long): A {
       // Create new Action instance.
       val action = actionProvider.get()
 
@@ -106,15 +100,15 @@ constructor(vertx: Vertx,
       return action
    }
 
-   fun create(request: IN): A {
+   fun create(request: RoutingContext): A {
       return createAsChild(request, timeoutMillisLong)
    }
 
-   fun createAsChild(request: IN, timeout: Long, unit: TimeUnit): A {
+   fun createAsChild(request: RoutingContext, timeout: Long, unit: TimeUnit): A {
       return createAsChild(request, unit.toMillis(timeout))
    }
 
-   fun createAsChild(request: IN, timeoutMillis: Long): A {
+   fun createAsChild(request: RoutingContext, timeoutMillis: Long): A {
       // Create new Action instance.
       val action = actionProvider.get()
 

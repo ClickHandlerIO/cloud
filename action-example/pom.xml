@@ -18,6 +18,7 @@
   <properties>
     <kotlin.compiler.incremental>true</kotlin.compiler.incremental>
     <kotlin.compiler.jvmTarget>1.8</kotlin.compiler.jvmTarget>
+    <kotlin.version>1.1.4-3</kotlin.version>
   </properties>
 
   <repositories>
@@ -33,62 +34,62 @@
       <artifactId>logback-core</artifactId>
       <version>1.2.3</version>
     </dependency>
-    <!--<dependency>-->
-    <!--<groupId>com.google.dagger</groupId>-->
-    <!--<artifactId>dagger</artifactId>-->
-    <!--</dependency>-->
-    <!--<dependency>-->
-    <!--<groupId>org.projectlombok</groupId>-->
-    <!--<artifactId>lombok</artifactId>-->
-    <!--<version>1.16.16</version>-->
-    <!--<scope>provided</scope>-->
-    <!--</dependency>-->
-    <!--<dependency>-->
-    <!--<groupId>com.google.dagger</groupId>-->
-    <!--<artifactId>dagger-compiler</artifactId>-->
-    <!--</dependency>-->
+    <dependency>
+      <groupId>io.clickhandler</groupId>
+      <artifactId>common</artifactId>
+    </dependency>
     <dependency>
       <groupId>io.clickhandler</groupId>
       <artifactId>action</artifactId>
     </dependency>
     <dependency>
       <groupId>io.clickhandler</groupId>
-      <artifactId>action-sqs</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>io.clickhandler</groupId>
       <artifactId>action-compiler</artifactId>
     </dependency>
-    <dependency>
-      <groupId>io.clickhandler</groupId>
-      <artifactId>sql</artifactId>
-    </dependency>
-
-    <!--<dependency>-->
-    <!--<groupId>com.sun</groupId>-->
-    <!--<artifactId>tools</artifactId>-->
-    <!--<scope>system</scope>-->
-    <!--<version>1</version>-->
-    <!--<systemPath>${java.home}/../lib/tools.jar</systemPath>-->
-    <!--</dependency>-->
-
-    <!--<dependency>-->
-    <!--<groupId>org.projectlombok</groupId>-->
-    <!--<artifactId>lombok</artifactId>-->
-    <!--<version>1.16.8</version>-->
-    <!--<scope>provided</scope>-->
-    <!--</dependency>-->
 
     <dependency>
-      <groupId>org.apache.pdfbox</groupId>
-      <artifactId>pdfbox</artifactId>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-core</artifactId>
     </dependency>
-
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-web</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-rx-java</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.msgpack</groupId>
+      <artifactId>msgpack-core</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.jetbrains.kotlin</groupId>
-      <artifactId>kotlin-test</artifactId>
-      <version>${kotlin.version}</version>
-      <scope>test</scope>
+      <artifactId>kotlin-stdlib</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.jetbrains.kotlin</groupId>
+      <artifactId>kotlin-stdlib-jre8</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.jetbrains.kotlinx</groupId>
+      <artifactId>kotlinx-coroutines-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.reactivex</groupId>
+      <artifactId>rxjava</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.jetbrains.kotlinx</groupId>
+      <artifactId>kotlinx-coroutines-rx1</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.jetbrains.kotlinx</groupId>
+      <artifactId>kotlinx-coroutines-rx2</artifactId>
     </dependency>
   </dependencies>
 
@@ -158,15 +159,23 @@
           </execution>
           <execution>
             <id>compile</id>
+            <phase>compile</phase>
             <goals>
               <goal>compile</goal>
             </goals>
             <configuration>
               <sourceDirs>
-                <sourceDir>src/main/kotlin</sourceDir>
-                <sourceDir>src/main/java</sourceDir>
+                <source>src/main/java</source>
+                <source>src/main/kotlin</source>
               </sourceDirs>
             </configuration>
+          </execution>
+          <execution>
+            <id>test-compile</id>
+            <phase>test-compile</phase>
+            <goals>
+              <goal>test-compile</goal>
+            </goals>
           </execution>
         </executions>
       </plugin>

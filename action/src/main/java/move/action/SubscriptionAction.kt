@@ -6,7 +6,7 @@ import rx.Subscription
 /**
  *
  */
-abstract class SubscriptionAction : Action<Unit, Unit>() {
+abstract class SubscriptionAction : InternalAction<Unit, Unit>() {
    fun listenOn(channel: String, numberOfMessages: Int = 0): Subscription {
       return Single.just("").subscribe()
    }
