@@ -630,6 +630,18 @@ public class LongTreeMap<V>
     return p;
   }
 
+  public V pollFirstEntryIfLessThan(long ceil) {
+    Entry<V> p = getFirstEntry();
+    if (p != null) {
+      final V v = p.value;
+      if (p.getKey() < ceil) {
+        deleteEntry(p);
+      }
+      return v;
+    }
+    return null;
+  }
+
     /*
      * Unlike Values and EntrySet, the KeySet class is static,
      * delegating to a NavigableMap to allow use by SubMaps, which

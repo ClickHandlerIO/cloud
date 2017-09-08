@@ -21,6 +21,14 @@ class MoveEventLoopGroup(private val vertxInternal: VertxInternal) {
       .map { MoveEventLoop(eventLoopDefault, vertxInternal, JsonObject(), it as EventLoop) }
       .toList()
    val executorsByEventLoop = executors.map { it.eventLoop to it }.toMap()
+
+   // Application wide scheduled executor.
+   // This is used to process ticks for each MoveEventLoop.
+   // Each MoveEventLoop has it's own structures and WheelTimers to
+   // invoke and resume Actions that are assigned to it.
+   // This allows for a very scalable and predictable behavior when managing
+   // large amounts of Timers. Millions of timers can effectively be managed
+   // with minimal overhead at the cost of loss of precision.
    val scheduledExecutor = Executors.newSingleThreadScheduledExecutor()
 
    init {

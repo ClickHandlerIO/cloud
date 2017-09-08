@@ -2,8 +2,8 @@
  * License: GPL with Classpath exception (see below). This file is based on ConcurrentSkipListMap in
  * standard java library, but the class is optimized for primitive long key type.
  *
- * Some of the methods in ConcurrentSkipListMap are not supported. LongSkipListMap
- * supports the following APIs:
+ * Some of the methods in ConcurrentSkipListMap are not supported. LongSkipListMap supports the
+ * following APIs:
  *
  * - Map API methods public boolean containsKey(long key) public V get(long key) public V put(long
  * key, V value) public V remove(long key) public boolean containsValue(Object value) public int
@@ -59,7 +59,6 @@ package move.action;
 import java.util.NoSuchElementException;
 import java.util.Random;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
 
 /**
  * Modified version of ConcurrentSkipListMap. The "Concurrent" part was removed
@@ -610,50 +609,50 @@ public class LongSkipListMap<V> {
   final V doRemove(long key, V value) {
 //    outer:
 //    for (; ; ) {
-      for (Node<V> b = findPredecessor(key), n = b.next; ; ) {
-        Object v;
-        int c;
-        if (n == null) {
-          return null;
-        }
-        Node<V> f = n.next;
-        if (n != b.next)                    // inconsistent read
-        {
-          break;
-        }
-        if ((v = n.value) == null) {        // n is deleted
-          n.helpDelete(b, f);
-          break;
-        }
-        if (b.value == null || v == n)      // b is deleted
-        {
-          break;
-        }
-        if ((c = Long.compare(key, n.key)) < 0) {
-          return null;
-        }
-        if (c > 0) {
-          b = n;
-          n = f;
-          continue;
-        }
-        if (value != null && !value.equals(v)) {
-          return null;
-        }
-        if (!n.casValue(v, null)) {
-          break;
-        }
-        if (!n.appendMarker(f) || !b.casNext(n, f)) {
-          findNode(key);                  // retry via findNode
-        } else {
-          findPredecessor(key);      // clean index
-          if (head.right == null) {
-            tryReduceLevel();
-          }
-        }
-        @SuppressWarnings("unchecked") V vv = (V) v;
-        return vv;
+    for (Node<V> b = findPredecessor(key), n = b.next; ; ) {
+      Object v;
+      int c;
+      if (n == null) {
+        return null;
       }
+      Node<V> f = n.next;
+      if (n != b.next)                    // inconsistent read
+      {
+        break;
+      }
+      if ((v = n.value) == null) {        // n is deleted
+        n.helpDelete(b, f);
+        break;
+      }
+      if (b.value == null || v == n)      // b is deleted
+      {
+        break;
+      }
+      if ((c = Long.compare(key, n.key)) < 0) {
+        return null;
+      }
+      if (c > 0) {
+        b = n;
+        n = f;
+        continue;
+      }
+      if (value != null && !value.equals(v)) {
+        return null;
+      }
+      if (!n.casValue(v, null)) {
+        break;
+      }
+      if (!n.appendMarker(f) || !b.casNext(n, f)) {
+        findNode(key);                  // retry via findNode
+      } else {
+        findPredecessor(key);      // clean index
+        if (head.right == null) {
+          tryReduceLevel();
+        }
+      }
+      @SuppressWarnings("unchecked") V vv = (V) v;
+      return vv;
+    }
 //    }
     return null;
   }
@@ -691,7 +690,7 @@ public class LongSkipListMap<V> {
     }
   }
 
-  public Node<V> removeFirstIfLessThan(long ceil) {
+  public V pollFirstEntryIfLessThan(long ceil) {
     for (; ; ) {
       Node<V> b = head.node;
       Node<V> n = b.next;
@@ -710,12 +709,21 @@ public class LongSkipListMap<V> {
         return null;
       }
 
-//      n.casValue(v, null);
-//      n.appendMarker(f);
-      b.casNext(n, f);
+      if (n.value instanceof Node) {
+        b.casNext(n, f);
 
+        clearIndexToFirst();
+        return null;
+      }
+
+      final V value = (V) n.value;
+
+      n.casValue(v, null);
+      n.appendMarker(f);
+      b.casNext(n, f);
       clearIndexToFirst();
-      return n;
+
+      return value;
     }
   }
 

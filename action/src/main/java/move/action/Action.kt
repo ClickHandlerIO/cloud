@@ -40,7 +40,7 @@ interface IActionContext {
 //   fun isHead(action: Action<*, *>) = head == action
 }
 
-class EventLoopDispatcher(val eventLoop: MoveEventLoop) : CoroutineDispatcher() {
+class MoveDispatcher(val eventLoop: MoveEventLoop) : CoroutineDispatcher() {
    override fun dispatch(context: CoroutineContext, block: Runnable) {
       if (Vertx.currentContext() === eventLoop) {
          block.run()
@@ -70,7 +70,7 @@ abstract class AbstractInternalAction<A : Action<IN, OUT>, IN : Any, OUT : Any, 
       get
       private set
 
-   lateinit var dispatcher: EventLoopDispatcher
+   lateinit var dispatcher: MoveDispatcher
    lateinit var block: suspend CoroutineScope.() -> OUT
 
    // Field helpers.
@@ -96,12 +96,14 @@ abstract class AbstractInternalAction<A : Action<IN, OUT>, IN : Any, OUT : Any, 
 
    fun isTimeOut(time: Long) = _deadline > 0 && time >= deadline
 
+   internal var timer: MoveEventLoop.TimerHandle? = null
+
    @Suppress("LeakingThis")
    override val context: CoroutineContext = this
    override val coroutineContext: CoroutineContext get() = this
    override val hasCancellingState: Boolean get() = true
 
-   internal open fun init(dispatcher: EventLoopDispatcher,
+   internal open fun init(dispatcher: MoveDispatcher,
                           provider: P,
                           request: IN,
                           deadline: Long = 0,
@@ -123,11 +125,10 @@ abstract class AbstractInternalAction<A : Action<IN, OUT>, IN : Any, OUT : Any, 
          // Begin operation
          op.begin()
 
-         eventLoopActionId =
-            if (deadline > 0L)
-               dispatcher.eventLoop.registerAction(this@AbstractInternalAction, deadline)
-            else
-               dispatcher.eventLoop.registerAction(this@AbstractInternalAction)
+         if (deadline > 0L)
+            handle = dispatcher.eventLoop.registerJobTimer(this@AbstractInternalAction, deadline)
+         else
+            eventLoopActionId = dispatcher.eventLoop.registerAction(this@AbstractInternalAction)
 
          try {
             onStart()
@@ -207,10 +208,11 @@ abstract class AbstractInternalAction<A : Action<IN, OUT>, IN : Any, OUT : Any, 
                }
             }
          } finally {
-            if (deadline > 0L)
-               dispatcher.eventLoop.removeTimeOutAction(eventLoopActionId)
-            else
-               dispatcher.eventLoop.removeAction(eventLoopActionId)
+            if (handle != null) {
+               handle.remove()
+            } else if (eventLoopActionId > 0L) {
+               dispatcher.eventLoop.removeAction(eventLoopActionId);
+            }
          }
       }
 
@@ -379,6 +381,29 @@ abstract class AbstractInternalAction<A : Action<IN, OUT>, IN : Any, OUT : Any, 
 //         }
 //      }, ordered)
 
+   internal fun doCancel() {
+      cancelTimer()
+      cancel(CancellationException())
+   }
+
+   override fun onCancellation() {
+      super.onCancellation()
+
+      cancelTimer()
+   }
+
+   override fun onParentCancellation(cause: Throwable?) {
+      super.onParentCancellation(cause)
+
+      cancelTimer()
+   }
+
+   private fun cancelTimer() {
+      if (super.timer != null) {
+         super.timer?.expired()
+         super.timer = null
+      }
+   }
 
    /**
     * Delays coroutine for a given time without blocking a thread and resumes it after a specified time.
@@ -392,8 +417,10 @@ abstract class AbstractInternalAction<A : Action<IN, OUT>, IN : Any, OUT : Any, 
     * implements [Delay] interface, otherwise it resumes using a built-in single-threaded scheduled executor service.
     */
    suspend fun delay(time: Long, unit: TimeUnit = TimeUnit.MILLISECONDS) {
+      cancelTimer()
+
       suspendCancellableCoroutine<Unit> {
-         dispatcher.eventLoop.registerTimer(it, unit.toMillis(time))
+         super.timer = dispatcher.eventLoop.createDelayTimer(this, it, unit.toMillis(time))
       }
    }
 
@@ -459,6 +486,8 @@ abstract class AbstractInternalAction<A : Action<IN, OUT>, IN : Any, OUT : Any, 
 
    override fun afterCompletion(state: Any?, mode: Int) {
       super.afterCompletion(state, mode)
+
+      cancelTimer()
 
       // Operation finished.
       op.complete()
