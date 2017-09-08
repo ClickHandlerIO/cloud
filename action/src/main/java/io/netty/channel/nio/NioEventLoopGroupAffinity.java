@@ -106,7 +106,7 @@ public class NioEventLoopGroupAffinity extends MultithreadEventLoopGroup {
      */
     public void setIoRatio(int ioRatio) {
         for (EventExecutor e: this) {
-            ((NioEventLoop) e).setIoRatio(ioRatio);
+            ((NioEventLoopAffinity) e).setIoRatio(ioRatio);
         }
     }
 
@@ -116,7 +116,7 @@ public class NioEventLoopGroupAffinity extends MultithreadEventLoopGroup {
      */
     public void rebuildSelectors() {
         for (EventExecutor e: this) {
-            ((NioEventLoop) e).rebuildSelector();
+            ((NioEventLoopAffinity) e).rebuildSelector();
         }
     }
 

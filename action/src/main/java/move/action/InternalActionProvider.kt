@@ -75,6 +75,23 @@ constructor(vertx: Vertx,
       return deadline
    }
 
+   protected open fun deadline(timeoutMillis: Long): Long {
+      // Force No-Timeout.
+      if (timeoutMillis < 0)
+         return 0L
+
+      // Use default timeout.
+      if (timeoutMillis == 0L) {
+         return if (timeoutMillisLong > 0L)
+            System.currentTimeMillis() + timeoutMillisLong
+         else
+            0
+      }
+
+      // Calculate deadline.
+      return System.currentTimeMillis() + timeoutMillis
+   }
+
 
    fun createAsRoot(request: IN): A {
       return createAsRoot(request, timeoutMillisLong)
@@ -92,12 +109,12 @@ constructor(vertx: Vertx,
       val action = actionProvider.get()
 
       // Get or create ActionContext.
-      val eventLoop: ActionEventLoopContext = eventLoopGroup.next()
+      val eventLoop: MoveEventLoop = eventLoopGroup.next()
       action.init(
          eventLoop.dispatcher,
          self,
          request,
-         timeoutMillis,
+         deadline(timeoutMillis),
          CoroutineStart.DEFAULT,
          false
       )
@@ -119,12 +136,12 @@ constructor(vertx: Vertx,
       val action = actionProvider.get()
 
       // Get or create ActionContext.
-      val eventLoop: ActionEventLoopContext = eventLoopGroup.next()
+      val eventLoop: MoveEventLoop = eventLoopGroup.next()
       action.init(
          eventLoop.dispatcher,
          self,
          request,
-         timeoutMillis,
+         deadline(timeoutMillis),
          CoroutineStart.DEFAULT,
          true
       )

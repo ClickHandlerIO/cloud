@@ -4,10 +4,9 @@ import com.sun.xml.internal.ws.message.stream.StreamMessage
 import io.vertx.core.buffer.Buffer
 import io.vertx.rxjava.core.Vertx
 import move.common.UID
-import kotlin.coroutines.experimental.buildSequence
 
 class StreamConnector(val vertx: Vertx) {
-   val eventLoopGroup = ActionEventLoopGroup.get(vertx)
+   val eventLoopGroup = MoveEventLoopGroup.get(vertx)
 }
 
 /**

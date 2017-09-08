@@ -6,7 +6,7 @@ import io.vertx.core.impl.VertxInternal;
 import io.vertx.core.json.JsonObject;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.LongAdder;
-import org.HdrHistogram.ConcurrentHistogram;
+import org.HdrHistogram.ActionHistogram;
 import org.HdrHistogram.Histogram;
 
 /**
@@ -32,12 +32,12 @@ public class ActionCircuitBreakerMetrics {
   private LongAdder timeout = new LongAdder();
   private LongAdder exceptions = new LongAdder();
   //  private Histogram statistics = new ConcurrentHistogram(3);
-  private Histogram statistics = new ConcurrentHistogram(3);
-  //  private Histogram statistics = new ActionHistogram(60000, 3);
-  private Histogram cachedRolling1 = new ConcurrentHistogram(3);
-  //  private Histogram cachedRolling1 = new ActionHistogram(60000, 3);
-  private Histogram cachedRolling2 = new ConcurrentHistogram(3);
-  //  private Histogram cachedRolling2 = new ActionHistogram(60000, 3);
+//  private Histogram statistics = new ConcurrentHistogram(3);
+  private Histogram statistics = new ActionHistogram(60000, 3);
+  //  private Histogram cachedRolling1 = new ConcurrentHistogram(3);
+  private Histogram cachedRolling1 = new ActionHistogram(60000, 3);
+  //  private Histogram cachedRolling2 = new ConcurrentHistogram(3);
+  private Histogram cachedRolling2 = new ActionHistogram(60000, 3);
   private volatile RollingWindow currentWindow = new RollingWindow();
 
   ActionCircuitBreakerMetrics(Vertx vertx, ActionCircuitBreaker circuitBreaker,
@@ -60,44 +60,47 @@ public class ActionCircuitBreakerMetrics {
   }
 
   public void complete(Operation operation) {
-    final RollingWindow window = this.currentWindow;
+//    final RollingWindow window = this.currentWindow;
 
-    final long durationInMs = operation.durationInNanos();
-    this.durationMs.add(durationInMs);
+//    final long durationInMs = operation.durationInNanos();
+//    this.durationMs.add(durationInMs);
 
     // Compute global statistics
-    statistics.recordValue(operation.durationInNanos());
+//    statistics.recordValue(operation.durationInNanos());
 
-    cpuTime.add(operation.cpu);
-    blocking.add(operation.blocking);
-    window.cpuTime.add(operation.cpu);
-    window.blocking.add(operation.blocking);
+//    cpuTime.add(operation.cpu);
+//    window.cpuTime.add(operation.cpu);
 
-    window.operationDurationMs.add(durationInMs);
-    window.stats.recordValue(durationInMs);
-    if (operation.exception) {
-      exceptions.increment();
-      window.exception.increment();
-    } else if (operation.complete) {
-      success.increment();
-      window.success.increment();
-    } else if (operation.timeout) {
-      timeout.increment();
-      window.timeout.increment();
-    } else if (operation.failed) {
-      failures.increment();
-      window.failure.increment();
-    }
+//    if (operation.blocking > 0L) {
+//      blocking.add(operation.blocking);
+////      window.blocking.add(operation.blocking);
+//    }
 
-    if (operation.fallbackSucceed) {
-      window.fallbackSuccess.increment();
-    } else if (operation.fallbackFailed) {
-      window.fallbackFailure.increment();
-    }
-
-    if (operation.shortCircuited) {
-      window.shortCircuited.increment();
-    }
+//    window.operationDurationMs.add(durationInMs);
+//    window.stats.recordValue(durationInMs);
+//    if (operation.exception) {
+//      exceptions.increment();
+////      window.exception.increment();
+//    } else if (operation.complete) {
+//      success.increment();
+////      window.success.increment();
+//    } else if (operation.timeout) {
+//      timeout.increment();
+////      window.timeout.increment();
+//    } else if (operation.failed) {
+//      failures.increment();
+////      window.failure.increment();
+//    }
+//
+//    if (operation.fallbackSucceed) {
+////      window.fallbackSuccess.increment();
+//    } else if (operation.fallbackFailed) {
+////      window.fallbackFailure.increment();
+//    }
+//
+//    if (operation.shortCircuited) {
+////      window.shortCircuited.increment();
+//    }
   }
 
   public synchronized JsonObject toJson() {
@@ -227,9 +230,7 @@ public class ActionCircuitBreakerMetrics {
 
   class Operation {
 
-    final long constructed;
     long begin;
-    long end;
     long cpu;
     long cpuBegin;
     long blocking;
@@ -237,73 +238,15 @@ public class ActionCircuitBreakerMetrics {
     long child;
     long childCpu;
     long childBlocking;
-    boolean childTimeout;
-    boolean complete;
-    boolean failed;
-    boolean timeout;
-    boolean exception;
-    boolean fallbackFailed;
-    boolean fallbackSucceed;
-    boolean shortCircuited;
+//    boolean complete;
+//    boolean failed;
+//    boolean timeout;
+//    boolean exception;
+//    boolean fallbackFailed;
+//    boolean fallbackSucceed;
+//    boolean shortCircuited;
 
     Operation() {
-      constructed = System.nanoTime();
-    }
-
-    public long getConstructed() {
-      return constructed;
-    }
-
-    public long getBegin() {
-      return begin;
-    }
-
-    public long getEnd() {
-      return end;
-    }
-
-    public long getCpu() {
-      return cpu;
-    }
-
-    public long getCpuBegin() {
-      return cpuBegin;
-    }
-
-    public long getBlocking() {
-      return blocking;
-    }
-
-    public long getBlockingBegin() {
-      return blockingBegin;
-    }
-
-    public boolean isComplete() {
-      return complete;
-    }
-
-    public boolean isFailed() {
-      return failed;
-    }
-
-    public boolean isTimeout() {
-      return timeout;
-    }
-
-    public boolean isException() {
-      return exception;
-    }
-
-    public boolean isFallbackFailed() {
-      return fallbackFailed;
-    }
-
-    public boolean isFallbackSucceed() {
-      return fallbackSucceed;
-    }
-
-    public boolean isShortCircuited() {
-      return shortCircuited;
     }
 
     void begin() {
@@ -315,13 +258,10 @@ public class ActionCircuitBreakerMetrics {
     }
 
     long cpuEnd() {
-      if (!complete) {
-        long increaseBy = System.nanoTime() - cpuBegin;
-        cpu += increaseBy;
-        return increaseBy;
-      } else {
-        return 0L;
-      }
+      long increaseBy = System.nanoTime() - cpuBegin;
+      cpu += increaseBy;
+      ActionCircuitBreakerMetrics.this.cpuTime.add(increaseBy);
+      return increaseBy;
     }
 
     synchronized void blockingBegin() {
@@ -329,61 +269,47 @@ public class ActionCircuitBreakerMetrics {
     }
 
     synchronized void blockingEnd() {
-      if (!complete) {
-        blocking += System.nanoTime() - blockingBegin;
-      }
+      blocking += System.nanoTime() - blockingBegin;
+      ActionCircuitBreakerMetrics.this.blocking.add(blocking);
     }
 
     void complete() {
-      end = System.nanoTime();
-      complete = true;
-      ActionCircuitBreakerMetrics.this.complete(this);
+      ActionCircuitBreakerMetrics.this.success.increment();
+      final long duration = (System.nanoTime() - begin) / 1000000;
+      ActionCircuitBreakerMetrics.this.durationMs.add(duration);
+      cachedRolling1.recordValue(duration);
+//      cachedRolling1.recordValue(duration);
     }
 
     void failed() {
-      if (timeout || exception) {
-        // Already completed.
-        return;
-      }
-      end = System.nanoTime();
-      failed = true;
-      ActionCircuitBreakerMetrics.this.complete(this);
+      failures.increment();
+      final long duration = (System.nanoTime() - begin) / 1000000;
+      ActionCircuitBreakerMetrics.this.durationMs.add(duration);
     }
 
     void timeout() {
-      end = System.nanoTime();
-      failed = false;
-      timeout = true;
-      ActionCircuitBreakerMetrics.this.complete(this);
+      ActionCircuitBreakerMetrics.this.timeout.increment();
+      final long duration = (System.nanoTime() - begin) / 1000000;
+      ActionCircuitBreakerMetrics.this.durationMs.add(duration);
     }
 
     void error() {
-      end = System.nanoTime();
-      failed = false;
-      exception = true;
-      ActionCircuitBreakerMetrics.this.complete(this);
+      ActionCircuitBreakerMetrics.this.exceptions.increment();
+      final long duration = (System.nanoTime() - begin) / 1000000;
+      ActionCircuitBreakerMetrics.this.durationMs.add(duration);
     }
 
     void fallbackFailed() {
-      fallbackFailed = true;
+
     }
 
     void fallbackSucceed() {
-      fallbackSucceed = true;
+
     }
 
     void shortCircuited() {
-      end = System.nanoTime();
-      shortCircuited = true;
-      ActionCircuitBreakerMetrics.this.complete(this);
-    }
-
-    long durationInNanos() {
-      return (end - begin) / 1000;
-    }
-
-    long durationInMs() {
-      return (end - begin) / 1000000;
+      final long duration = (System.nanoTime() - begin) / 1000000;
+      ActionCircuitBreakerMetrics.this.durationMs.add(duration);
     }
   }
 }

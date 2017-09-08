@@ -2,18 +2,16 @@ package move.action;
 
 import dagger.Component;
 import javax.inject.Singleton;
-import move.Move_Root_Module;
 
 /**
  *
  */
 @Singleton
 @Component(modules = {
-    Move_Root_Module.class,
-    AppModule.class
+    MoveFirstModule.class,
+    move.MoveSecondModule.class
 })
-public interface AppComponent {
-  AppComponent instance = DaggerAppComponent.create();
+public interface AppComponent extends MoveComponent {
 
-  ActionManager actions();
+  Action_Locator locator();
 }

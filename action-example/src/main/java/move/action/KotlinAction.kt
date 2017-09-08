@@ -18,15 +18,15 @@ import javax.inject.Inject
 //   }
 //}
 //
-//@Http(
-//   method = Http.Method.GET,
-//   path = "/ping"
-//)
-//class Ping : HttpAction() {
-//   suspend override fun execute() {
-//      resp.setStatusCode(200).end("PONG")
-//   }
-//}
+@Http(
+   method = Http.Method.GET,
+   path = "/ping"
+)
+class Ping : HttpAction() {
+   suspend override fun execute() {
+      resp.setStatusCode(200).end("PONG")
+   }
+}
 //
 //
 //@Internal(timeout = 1000)
@@ -50,41 +50,41 @@ import javax.inject.Inject
 //   }
 //}
 //
-////open class MyAction_Factory : InternalActionProducer<MyAction, String, String, MyAction_Provider>() {
-////   @Inject
-////   lateinit var _provider: MyAction_Provider
-////
-////   override val provider: MyAction_Provider
-////      get() = _provider
-////}
-//
 //
 ///**
 // *
 // */
-//@Internal(timeout = 1000)
-//class Allocate : InternalAction<String, String>() {
-//   suspend override fun execute(): String {
-////      MyAction ask ""
-////
-////      MyAction job ""
-////
-////      val (r1, r2) = await(
-////         MyAction rx "",
-////         MyAction rx ""
-////      )
+@Internal(timeout = 1000)
+class Allocate : InternalAction<String, String>() {
+   companion object : Allocate_Producer()
+
+//   companion object : Allocate_Producer()
+
+   suspend override fun execute(): String {
+
+      sleep(5000)
+
+//      MyAction ask ""
 //
-////      delay(50)
-////      val reply = of(AllocateInventory::class)
-////         .await(AllocateInventory.Request(id = ""))
-////
-////      val reply2 = of<AllocateInventory>() await AllocateInventory.Request(id = "")
-////
-////      val r = of(AllocateInventory::class)..AllocateInventory.Request(id = "")
+//      MyAction job ""
 //
-//      return ""
-//   }
-//}
+//      val (r1, r2) = await(
+//         MyAction rx "",
+//         MyAction rx ""
+//      )
+
+//      delay(50)
+//      val reply = of(AllocateInventory::class)
+//         .await(AllocateInventory.Request(id = ""))
+//
+//      val reply2 = of<AllocateInventory>() await AllocateInventory.Request(id = "")
+//
+//      val r = of(AllocateInventory::class)..AllocateInventory.Request(id = "")
+
+      return ""
+   }
+}
+
 //
 //@Internal(timeout = 1000)
 //class Allocate2 : InternalAction<String, String>() {
@@ -111,7 +111,11 @@ abstract class SomeJobAction<REQUEST : Any> : InternalAction<REQUEST, AllocateIn
 
 @Internal
 class AllocateInventory @Inject constructor() : SomeJobAction<AllocateInventory.Request>() {
-   companion object : AllocateInventory_Producer()
+   companion object : AllocateInventory_Producer() {
+      suspend infix fun ask(id: String): Reply {
+         return ask(Request(id))
+      }
+   }
 
    data class Request(var id: String = "")
 

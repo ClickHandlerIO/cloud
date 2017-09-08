@@ -45,14 +45,18 @@ open class ActionProducer<A : Action<IN, OUT>, IN : Any, OUT : Any, P : ActionPr
          A : Action<IN, OUT>,
          IN : Any,
          OUT : Any,
-         P : ActionProvider<A, IN, OUT>> register(cls: Class<PRODUCER>, producer: PRODUCER): ProducerEntry<A, IN, OUT, P> {
-         val rawClass = TypeResolver
+         P : ActionProvider<A, IN, OUT>> register(producerClass: Class<PRODUCER>, producer: PRODUCER): ProducerEntry<A, IN, OUT, P> {
+         val rawProducerClass = TypeResolver
             .resolveRawClass(
                ActionProducer::class.java,
-               cls
+               producerClass
             )
 
-         val actionClass = TypeResolver.resolveRawArgument(rawClass.typeParameters[0], cls)
+         val actionClass = TypeResolver
+            .resolveRawArgument(
+               rawProducerClass.typeParameters[0],
+               producerClass
+            )
 
          if (registry.containsKey(actionClass)) {
             @Suppress("UNCHECKED_CAST")
@@ -63,17 +67,6 @@ open class ActionProducer<A : Action<IN, OUT>, IN : Any, OUT : Any, P : ActionPr
 
             return entry
          }
-
-//         val t = TypeResolver.resolveGenericType(cls, ActionProducer::class.java)
-//         TypeResolver.resolveRawArgument()
-//
-//         var c: Class<*>? = cls
-//
-//         while (c != null && c != Any::class.java) {
-//
-//
-//            c = c.superclass
-//         }
 
          val entry = ProducerEntry(producer)
          registry[actionClass] = entry
@@ -94,7 +87,7 @@ open class WorkerActionProducer<A : WorkerAction<IN, OUT>, IN : Any, OUT : Any, 
 //    * Ask with an optional user specified timeout.
 //    */
 //   fun send(request: IN, timeout: Long = 0, unit: TimeUnit = TimeUnit.MILLISECONDS) {
-//      provider.defaultBroker.rxAsk(
+//      provider.broker.rxAsk(
 //         request = request,
 //         provider = provider,
 //         timeout = timeout,
@@ -108,7 +101,7 @@ open class WorkerActionProducer<A : WorkerAction<IN, OUT>, IN : Any, OUT : Any, 
     * Exception is thrown if it times out.
     */
    suspend infix fun ask(request: IN): OUT {
-      return provider.defaultBroker.ask(
+      return provider.broker.ask(
          request = request,
          provider = provider
       )
@@ -118,7 +111,7 @@ open class WorkerActionProducer<A : WorkerAction<IN, OUT>, IN : Any, OUT : Any, 
     * Ask with an optional user specified timeout.
     */
    suspend fun ask(request: IN, timeout: Long = 0, unit: TimeUnit = TimeUnit.MILLISECONDS): OUT {
-      return provider.defaultBroker.ask(
+      return provider.broker.ask(
          request = request,
          provider = provider,
          timeout = timeout,
@@ -130,7 +123,7 @@ open class WorkerActionProducer<A : WorkerAction<IN, OUT>, IN : Any, OUT : Any, 
 //    *
 //    */
 //   infix fun rxAsk(request: IN): Single<OUT> {
-//      return provider.defaultBroker.rxAsk(
+//      return provider.broker.rxAsk(
 //         request = request,
 //         provider = provider
 //      )
@@ -140,7 +133,7 @@ open class WorkerActionProducer<A : WorkerAction<IN, OUT>, IN : Any, OUT : Any, 
 //    *
 //    */
 //   fun rxAsk(request: IN, timeout: Long, unit: TimeUnit = TimeUnit.MILLISECONDS): Single<OUT> {
-//      return provider.defaultBroker.rxAsk(
+//      return provider.broker.rxAsk(
 //         request = request,
 //         provider = provider,
 //         timeout = timeout,
@@ -197,7 +190,7 @@ open class InternalActionProducer<A : InternalAction<IN, OUT>, IN : Any, OUT : A
 //    * Ask with an optional user specified timeout.
 //    */
 //   fun send(request: IN, timeout: Long = 0, unit: TimeUnit = TimeUnit.MILLISECONDS) {
-//      provider.defaultBroker.rxAsk(
+//      provider.broker.rxAsk(
 //         request = request,
 //         provider = provider,
 //         timeout = timeout,
@@ -211,7 +204,7 @@ open class InternalActionProducer<A : InternalAction<IN, OUT>, IN : Any, OUT : A
     * Exception is thrown if it times out.
     */
    suspend open infix fun ask(request: IN): OUT {
-      return provider.defaultBroker.ask(
+      return provider.broker.ask(
          request = request,
          provider = provider
       )
@@ -221,7 +214,7 @@ open class InternalActionProducer<A : InternalAction<IN, OUT>, IN : Any, OUT : A
     * Ask with an optional user specified timeout.
     */
    suspend open fun ask(request: IN, timeout: Long = 0, unit: TimeUnit = TimeUnit.MILLISECONDS): OUT {
-      return provider.defaultBroker.ask(
+      return provider.broker.ask(
          request = request,
          provider = provider,
          timeout = timeout,
@@ -230,7 +223,7 @@ open class InternalActionProducer<A : InternalAction<IN, OUT>, IN : Any, OUT : A
    }
 
    infix fun rxAsk(request: IN): Deferred<OUT> {
-      return provider.defaultBroker.rxAsk(
+      return provider.broker.rxAsk(
          request = request,
          provider = provider
       )
@@ -240,7 +233,7 @@ open class InternalActionProducer<A : InternalAction<IN, OUT>, IN : Any, OUT : A
 //    *
 //    */
 //   infix fun rxAsk(request: IN): Single<OUT> {
-//      return provider.defaultBroker.rxAsk(
+//      return provider.broker.rxAsk(
 //         request = request,
 //         provider = provider
 //      )
@@ -250,7 +243,7 @@ open class InternalActionProducer<A : InternalAction<IN, OUT>, IN : Any, OUT : A
 //    *
 //    */
 //   fun rxAsk(request: IN, timeout: Long, unit: TimeUnit = TimeUnit.MILLISECONDS): Single<OUT> {
-//      return provider.defaultBroker.rxAsk(
+//      return provider.broker.rxAsk(
 //         request = request,
 //         provider = provider,
 //         timeout = timeout,
@@ -268,7 +261,7 @@ open class HttpActionProducer<A : HttpAction, P : HttpActionProvider<A>> @Inject
     * Exception is thrown if it times out.
     */
    suspend open infix fun ask(request: RoutingContext) {
-      return provider.defaultBroker.ask(
+      return provider.broker.ask(
          request = request,
          provider = provider
       )
@@ -278,7 +271,7 @@ open class HttpActionProducer<A : HttpAction, P : HttpActionProvider<A>> @Inject
     * Ask with an optional user specified timeout.
     */
    suspend open fun ask(request: RoutingContext, timeout: Long = 0, unit: TimeUnit = TimeUnit.MILLISECONDS) {
-      return provider.defaultBroker.ask(
+      return provider.broker.ask(
          request = request,
          provider = provider,
          timeout = timeout,
@@ -287,7 +280,7 @@ open class HttpActionProducer<A : HttpAction, P : HttpActionProvider<A>> @Inject
    }
 
    infix fun rxAsk(request: RoutingContext): JobAction<RoutingContext, Unit> {
-      return provider.defaultBroker.rxAsk(
+      return provider.broker.rxAsk(
          request = request,
          provider = provider
       )

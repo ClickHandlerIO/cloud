@@ -3,7 +3,6 @@ package move.action
 import io.vertx.ext.web.RoutingContext
 import io.vertx.rxjava.core.Vertx
 import kotlinx.coroutines.experimental.Deferred
-import kotlinx.coroutines.experimental.channels.actor
 import java.util.concurrent.TimeUnit
 
 /**
@@ -29,7 +28,7 @@ val GATEWAY_BROKER
  * Each node has a single queue
  */
 class ActionKernel(val vertx: Vertx) {
-   val eventLoopGroup = ActionEventLoopGroup.get(vertx)
+   val eventLoopGroup = MoveEventLoopGroup.get(vertx)
    val eventLoops = eventLoopGroup.executors
 
    fun invokeInternal(provider: InternalActionProvider<*, *, *>) {
@@ -54,7 +53,7 @@ abstract class ActionBroker {
       request: IN,
       provider: InternalActionProvider<A, IN, OUT>,
       timeout: Long = 0,
-      unit: TimeUnit = TimeUnit.SECONDS,
+      unit: TimeUnit = TimeUnit.MILLISECONDS,
       delaySeconds: Int = 0,
       root: Boolean = false
    ): OUT
@@ -66,7 +65,7 @@ abstract class ActionBroker {
       request: IN,
       provider: InternalActionProvider<A, IN, OUT>,
       timeout: Long = 0,
-      unit: TimeUnit = TimeUnit.SECONDS,
+      unit: TimeUnit = TimeUnit.MILLISECONDS,
       delaySeconds: Int = 0,
       root: Boolean = false
    ): Deferred<OUT>
@@ -78,7 +77,7 @@ abstract class ActionBroker {
       request: RoutingContext,
       provider: HttpActionProvider<A>,
       timeout: Long = 0,
-      unit: TimeUnit = TimeUnit.SECONDS,
+      unit: TimeUnit = TimeUnit.MILLISECONDS,
       delaySeconds: Int = 0,
       root: Boolean = false
    )
@@ -90,7 +89,7 @@ abstract class ActionBroker {
       request: RoutingContext,
       provider: HttpActionProvider<A>,
       timeout: Long = 0,
-      unit: TimeUnit = TimeUnit.SECONDS,
+      unit: TimeUnit = TimeUnit.MILLISECONDS,
       delaySeconds: Int = 0,
       root: Boolean = false
    ): JobAction<RoutingContext, Unit>
@@ -126,7 +125,7 @@ abstract class ActionBroker {
       request: IN,
       provider: WorkerActionProvider<A, IN, OUT>,
       timeout: Long = 0,
-      unit: TimeUnit = TimeUnit.SECONDS,
+      unit: TimeUnit = TimeUnit.MILLISECONDS,
       delaySeconds: Int = 0,
       root: Boolean = false
    ): OUT

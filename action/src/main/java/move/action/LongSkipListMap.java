@@ -58,6 +58,8 @@ package move.action;
 
 import java.util.NoSuchElementException;
 import java.util.Random;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * Modified version of ConcurrentSkipListMap. The "Concurrent" part was removed
@@ -174,6 +176,23 @@ public class LongSkipListMap<V> {
       v = (p = doPut(key, r, true)) == null ? r : p;
     }
     return v;
+  }
+
+  public V compute(long key,
+      KeyMapping<V> mappingFunction,
+      Consumer<V> existingFunction) {
+    V v;
+
+    v = doGet(key);
+
+    if (v == null) {
+      v = mappingFunction.apply(key);
+      doPut(key, v, false);
+      return v;
+    } else {
+      existingFunction.accept(v);
+      return v;
+    }
   }
 
   V findGrandPredecessorReally(long key, CallbackOnFound callback) {
@@ -691,8 +710,8 @@ public class LongSkipListMap<V> {
         return null;
       }
 
-      n.casValue(v, null);
-      n.appendMarker(f);
+//      n.casValue(v, null);
+//      n.appendMarker(f);
       b.casNext(n, f);
 
       clearIndexToFirst();

@@ -18,8 +18,6 @@ package move.action
 
 import io.vertx.circuitbreaker.CircuitBreakerOptions
 import io.vertx.circuitbreaker.CircuitBreakerState
-import io.vertx.core.Context
-import io.vertx.core.Future
 import io.vertx.core.Handler
 import io.vertx.core.Vertx
 import java.util.*
@@ -33,7 +31,7 @@ import java.util.function.Function
 class ActionCircuitBreaker(private val name: String,
                            private val vertx: Vertx,
                            options: CircuitBreakerOptions?,
-                           eventLoopGroup: ActionEventLoopGroup) {
+                           eventLoopGroup: MoveEventLoopGroup) {
    private val options: CircuitBreakerOptions
    private val periodicUpdateTask: Long
    internal val passed = AtomicInteger()

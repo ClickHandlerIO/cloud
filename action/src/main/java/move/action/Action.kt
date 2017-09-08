@@ -5,7 +5,8 @@ import io.vertx.circuitbreaker.CircuitBreakerState
 import io.vertx.core.Vertx
 import io.vertx.ext.web.RoutingContext
 import kotlinx.coroutines.experimental.*
-import kotlinx.coroutines.experimental.channels.*
+import kotlinx.coroutines.experimental.channels.ActorScope
+import kotlinx.coroutines.experimental.channels.Channel
 import kotlinx.coroutines.experimental.rx2.asSingle
 import kotlinx.coroutines.experimental.selects.SelectBuilder
 import kotlinx.coroutines.experimental.selects.SelectInstance
@@ -39,7 +40,7 @@ interface IActionContext {
 //   fun isHead(action: Action<*, *>) = head == action
 }
 
-class EventLoopDispatcher(val eventLoop: ActionEventLoopContext) : CoroutineDispatcher() {
+class EventLoopDispatcher(val eventLoop: MoveEventLoop) : CoroutineDispatcher() {
    override fun dispatch(context: CoroutineContext, block: Runnable) {
       if (Vertx.currentContext() === eventLoop) {
          block.run()
@@ -112,8 +113,7 @@ abstract class AbstractInternalAction<A : Action<IN, OUT>, IN : Any, OUT : Any, 
       this._deadline = deadline
       this.op = breaker.metrics.enqueue()
 
-      if (parent)
-         initParentJob(dispatcher[Job])
+      initParentJob(dispatcher[Job])
 
       block = {
          val breaker = provider.breaker
@@ -392,7 +392,9 @@ abstract class AbstractInternalAction<A : Action<IN, OUT>, IN : Any, OUT : Any, 
     * implements [Delay] interface, otherwise it resumes using a built-in single-threaded scheduled executor service.
     */
    suspend fun delay(time: Long, unit: TimeUnit = TimeUnit.MILLISECONDS) {
-      return kotlinx.coroutines.experimental.delay(time, unit)
+      suspendCancellableCoroutine<Unit> {
+         dispatcher.eventLoop.registerTimer(it, unit.toMillis(time))
+      }
    }
 
    /**
@@ -414,11 +416,10 @@ abstract class AbstractInternalAction<A : Action<IN, OUT>, IN : Any, OUT : Any, 
 
 
    override fun getCompleted(): OUT = getCompletedInternal() as OUT
+
    suspend override fun await(): OUT = awaitInternal() as OUT
    override fun <R> registerSelectAwait(select: SelectInstance<R>, block: suspend (OUT) -> R) =
       registerSelectAwaitInternal(select, block as (suspend (Any?) -> R))
-
-
 
 
    /*******************************************************************
@@ -459,8 +460,6 @@ abstract class AbstractInternalAction<A : Action<IN, OUT>, IN : Any, OUT : Any, 
    override fun afterCompletion(state: Any?, mode: Int) {
       super.afterCompletion(state, mode)
 
-      this.invokeOnCompletion {  }
-
       // Operation finished.
       op.complete()
 
@@ -477,17 +476,29 @@ abstract class AbstractInternalAction<A : Action<IN, OUT>, IN : Any, OUT : Any, 
    }
 }
 
+
 /**
  *
  */
-abstract class InternalAction<IN : Any, OUT : Any> : AbstractInternalAction<InternalAction<IN, OUT>, IN, OUT, InternalActionProvider<InternalAction<IN, OUT>, IN, OUT>>() {
-}
+abstract class InternalAction<IN : Any, OUT : Any> : AbstractInternalAction<InternalAction<IN, OUT>, IN, OUT, InternalActionProvider<InternalAction<IN, OUT>, IN, OUT>>()
+
+/**
+ *
+ */
+abstract class InternalJob<IN : Any> : InternalAction<IN, Unit>()
+
 
 /**
  * A WorkerAction is really just an InternalAction under the covers.
  */
 abstract class WorkerAction<IN : Any, OUT : Any> : AbstractInternalAction<WorkerAction<IN, OUT>, IN, OUT, WorkerActionProvider<WorkerAction<IN, OUT>, IN, OUT>>() {
 }
+
+/**
+ *
+ */
+abstract class WorkerJob<IN : Any> : WorkerAction<IN, Unit>()
+
 
 /**
  *
@@ -504,6 +515,6 @@ abstract class HttpAction : AbstractInternalAction<HttpAction, RoutingContext, U
 }
 
 
-abstract class ActorAction<IN: Any, OUT: Any> : JobSupport(true), Continuation<OUT>, CoroutineScope, CoroutineContext, ActorScope<Any>, Channel<Any> {
+abstract class ActorAction<IN : Any, OUT : Any> : JobSupport(true), Continuation<OUT>, CoroutineScope, CoroutineContext, ActorScope<Any>, Channel<Any> {
 
 }

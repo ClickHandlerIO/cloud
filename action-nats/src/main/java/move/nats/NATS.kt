@@ -6,8 +6,8 @@ import io.vertx.core.buffer.Buffer
 import io.vertx.core.net.NetClientOptions
 import io.vertx.core.net.NetSocket
 import move.NUID
-import move.action.ActionEventLoopContext
-import move.action.ActionEventLoopGroup
+import move.action.MoveEventLoop
+import move.action.MoveEventLoopGroup
 import move.common.WireFormat
 import rx.Single
 import java.nio.ByteBuffer
@@ -35,7 +35,7 @@ class NATSCluster(val vertx: Vertx,
    val context = vertx.orCreateContext
    var running = true
 
-   val eventLoopGroup = ActionEventLoopGroup.get(vertx)
+   val eventLoopGroup = MoveEventLoopGroup.get(vertx)
    val eventLoopCounter = AtomicInteger(0)
 
    var connections: ArrayList<Connection> = ArrayList(16)
@@ -72,7 +72,7 @@ class NATSCluster(val vertx: Vertx,
     * Spread out our I/O across the CPU cores.
     */
    @Synchronized
-   fun nextEventLoop(): ActionEventLoopContext {
+   fun nextEventLoop(): MoveEventLoop {
       val num = eventLoopCounter.getAndIncrement()
       if (eventLoopCounter.get() < 0)
          eventLoopCounter.set(0)
@@ -192,7 +192,7 @@ val PONG = "PONG\r\n".toByteArray()
  */
 class Connection(val cluster: NATSCluster,
                  val server: Server,
-                 val context: ActionEventLoopContext) : NATSParser.Listener {
+                 val context: MoveEventLoop) : NATSParser.Listener {
 
    val counter = AtomicLong(0L)
    val subscriptions = mutableMapOf<Long, Sub>()

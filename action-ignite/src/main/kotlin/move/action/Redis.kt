@@ -31,7 +31,7 @@ object Main {
 
       val vertxImpl: VertxInternal = vertx.delegate as VertxInternal
 
-      val moveEventLoopGroup = ActionEventLoopGroup(vertxImpl)
+      val moveEventLoopGroup = MoveEventLoopGroup(vertxImpl)
 
       val executors = moveEventLoopGroup.executors
 

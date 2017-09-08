@@ -4,6 +4,7 @@ import com.google.auto.service.AutoService;
 import com.squareup.javapoet.AnnotationSpec;
 import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.CodeBlock;
+import com.squareup.javapoet.FieldSpec;
 import com.squareup.javapoet.JavaFile;
 import com.squareup.javapoet.MethodSpec;
 import com.squareup.javapoet.ParameterSpec;
@@ -57,6 +58,7 @@ import javax.tools.Diagnostic.Kind;
 import javax.tools.FileObject;
 import javax.tools.JavaFileObject;
 import javax.tools.StandardLocation;
+import move.action.ActionLocator;
 import move.action.ActionProducer;
 import move.action.ActionProvider;
 import move.action.Actor;
@@ -81,7 +83,9 @@ public class ActionProcessor extends AbstractProcessor {
   static final String LOCATOR_SUFFIX = "_Locator";
   static final String LOCATOR_ROOT_SUFFIX = "_LocatorRoot";
   static final String MODULE_SUFFIX = "_Module";
-  static final String ROOT_MODULE_NAME = "Move_Root_Module";
+  static final String ROOT_MODULE_NAME = "MoveSecondModule";
+  static final String PRODUCER_SUFFIX = "_Producer";
+  static final String PROVIDER_SUFFIX = "_Provider";
   static final ParameterizedTypeName ACTION_PROVIDER_NAME = ParameterizedTypeName.get(
       ClassName.bestGuess("move.action.ActionProvider"),
       WildcardTypeName.subtypeOf(TypeName.OBJECT),
@@ -200,18 +204,12 @@ public class ActionProcessor extends AbstractProcessor {
             messager.printMessage(Diagnostic.Kind.ERROR, e.getMessage());
           }
 
-          messager.printMessage(Kind.WARNING, "IN = " + (requestType == null ? "<Null>"
-              : requestType.varTypeElement.getQualifiedName()));
-
           DeclaredTypeVar responseType = null;
           try {
             responseType = typeParamResolver.resolve(JobAction.class, 1);
           } catch (Throwable e) {
             messager.printMessage(Diagnostic.Kind.ERROR, e.getMessage());
           }
-
-          messager.printMessage(Kind.WARNING, "OUT = " + (responseType == null ? "<Null>"
-              : responseType.varTypeElement.getQualifiedName()));
 
           holder = new ActionHolder(element, requestType, responseType, internal, worker, http,
               actor,
@@ -316,6 +314,16 @@ public class ActionProcessor extends AbstractProcessor {
     return resolver;
   }
 
+  static String packageName(String name) {
+    final String[] parts = name.split("[.]");
+    if (parts.length == 1) {
+      return "";
+    } else {
+      final String lastPart = parts[parts.length - 1];
+      return name.substring(0, name.length() - lastPart.length() - 1);
+    }
+  }
+
   /**
    *
    */
@@ -373,9 +381,9 @@ public class ActionProcessor extends AbstractProcessor {
       this.simpleName = type.getSimpleName().toString();
       final String f = type.getSimpleName().toString();
       this.fieldName = Character.toLowerCase(f.charAt(0)) + f.substring(1);
-      this.moduleName = simpleName + "_Module";
-      this.generatedProviderName = simpleName + "_Provider";
-      this.generatedProducerName = simpleName + "_Producer";
+      this.moduleName = simpleName + MODULE_SUFFIX;
+      this.generatedProviderName = simpleName + PROVIDER_SUFFIX;
+      this.generatedProducerName = simpleName + PRODUCER_SUFFIX;
 
       typeName = ClassName.get(type);
 
@@ -404,14 +412,7 @@ public class ActionProcessor extends AbstractProcessor {
 
       this.hasParameterlessCtor = parameterlessCtor;
       this.hasInjectCtor = hasInjectCtor;
-
-      final String[] parts = name.split("[.]");
-      if (parts.length == 1) {
-        packageName = "";
-      } else {
-        final String lastPart = parts[parts.length - 1];
-        packageName = name.substring(0, name.length() - lastPart.length() - 1);
-      }
+      this.packageName = packageName(name);
 
       generatedProviderClassName = ClassName.bestGuess(packageName + "." + generatedProviderName);
       generatedProducerClassName = ClassName.bestGuess(packageName + "." + generatedProducerName);
@@ -792,10 +793,6 @@ public class ActionProcessor extends AbstractProcessor {
             path,
             moduleSimpleName + ".java"
         );
-
-        messager
-            .printMessage(Kind.WARNING, "FileObject: " + fileObject.getClass().getCanonicalName());
-        messager.printMessage(Kind.WARNING, "FileObject: " + fileObject.toUri());
         return fileObject;
       } catch (Throwable e) {
         return null;
@@ -821,6 +818,10 @@ public class ActionProcessor extends AbstractProcessor {
       final FileObject packageModuleSource = getModuleFile();
       final List<ClassName> classNames = new ArrayList<>();
 
+      if (root) {
+//        classNames.add(ClassName.get(MoveFirstModule.class));
+      }
+
       // Generate a new package module.
       final AnnotationSpec.Builder builder = AnnotationSpec.builder(Module.class);
 
@@ -842,10 +843,9 @@ public class ActionProcessor extends AbstractProcessor {
 
       for (int i = 0; i < classNames.size(); i++) {
         codeBlock.add(i < classNames.size() - 1 ? "$T.class," : "$T.class", classNames.get(i));
-        codeBlock.add("\n");
+        codeBlock.add("");
       }
 
-      codeBlock.add("");
       codeBlock.endControlFlow();
       builder.addMember("includes", codeBlock.build());
 
@@ -864,6 +864,8 @@ public class ActionProcessor extends AbstractProcessor {
         messager.printMessage(Diagnostic.Kind.ERROR,
             "Failed to generate Source File: " + e.getMessage());
       }
+
+      generateLocator();
     }
 
     public void writeTo(JavaFile file, FileObject fileObject, Filer filer) throws IOException {
@@ -1027,22 +1029,159 @@ public class ActionProcessor extends AbstractProcessor {
       }
     }
 
-    void generate0() {
-      if (processed) {
-        return;
+    private void generateLocator() {
+      // Build empty @Inject constructor.
+      final MethodSpec.Builder ctor = MethodSpec.constructorBuilder()
+          .addAnnotation(Inject.class);
+
+      // Init Class.
+      final TypeSpec.Builder type = TypeSpec.classBuilder(getClassName())
+          .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+          .superclass(TypeName.get(ActionLocator.class))
+          .addAnnotation(Singleton.class);
+
+      // Generate SubPackage locators.
+      for (ActionPackage childPackage : children.values()) {
+        // Build type name.
+        final TypeName typeName = ClassName.get(childPackage.path, childPackage.getClassName());
+
+        // Add field.
+        type.addField(
+            FieldSpec.builder(typeName, childPackage.name)
+                .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                .build()
+        );
+
+        ctor.addParameter(
+            ParameterSpec.builder(typeName, childPackage.name, Modifier.FINAL).build()
+        );
+
+        ctor.addStatement("this.$L = $L", childPackage.name, childPackage.name);
+
+        // Add getter method.
+        type.addMethod(
+            MethodSpec.methodBuilder(childPackage.name)
+                .addModifiers(Modifier.PUBLIC)
+                .returns(typeName)
+                .addStatement("return " + childPackage.name)
+                .build()
+        );
       }
 
-      if (root) {
-        if (children.isEmpty()) {
-          return;
+      // Go through all actions.
+      actions.forEach((classPath, action) -> {
+        type.addField(
+            FieldSpec.builder(action.generatedProducerClassName, action.fieldName)
+                .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                .build()
+        );
+        type.addField(
+            FieldSpec.builder(action.generatedProducerClassName, capitalize(action.fieldName))
+                .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                .build()
+        );
+
+        ctor.addParameter(
+            ParameterSpec
+                .builder(action.generatedProducerClassName, action.fieldName, Modifier.FINAL)
+                .build()
+        );
+
+        ctor.addStatement("this.$L = $L", action.fieldName, action.fieldName);
+        ctor.addStatement("this.$L = $L", capitalize(action.fieldName), action.fieldName);
+
+        type.addMethod(
+            MethodSpec.methodBuilder(action.fieldName)
+                .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                .returns(action.generatedProducerClassName)
+                .addStatement("return " + action.fieldName)
+                .build()
+        );
+      });
+
+      if (!actions.isEmpty()) {
+        try {
+          final FileObject fileObject = filer.getResource(
+              StandardLocation.SOURCE_OUTPUT,
+              path,
+              getClassName() + ".java"
+          );
+          final CharSequence content = fileObject.getCharContent(true);
+          final String contents = content.toString();
+
+          if (!contents.isEmpty()) {
+            for (ActionHolder action : actions.values()) {
+              if (!contents.contains(action.providerClassName.simpleName())) {
+                messager.printMessage(
+                    Diagnostic.Kind.ERROR,
+                    "Action: " +
+                        action.name +
+                        " was created. Full Regeneration needed. \"clean\" and \"compile\""
+                );
+                return;
+              }
+            }
+
+            // Generate child packages.
+            for (ActionPackage childPackage : children.values()) {
+              childPackage.generate();
+            }
+
+            return;
+          }
+        } catch (Throwable e) {
+          // Ignore.
         }
-
-        path = children.values().iterator().next().path;
       }
 
-      generateSource();
-      children.values().forEach(ActionPackage::generate);
-      processed = true;
+      if (!children.isEmpty()) {
+        try {
+          final FileObject fileObject = filer.getResource(
+              StandardLocation.SOURCE_OUTPUT,
+              path,
+              getClassName() + ".java"
+          );
+          final CharSequence content = fileObject.getCharContent(true);
+          final String contents = content.toString();
+
+          if (!contents.isEmpty()) {
+            for (ActionPackage child : children.values()) {
+              if (!contents.contains(child.getClassName() + " " + child.name + ";")) {
+                messager.printMessage(
+                    Diagnostic.Kind.ERROR,
+                    "ActionLocator: " +
+                        child.path +
+                        " was created. Full Regeneration needed. \"clean\" and \"compile\""
+                );
+                return;
+              }
+            }
+
+            // Generate child packages.
+            for (ActionPackage childPackage : children.values()) {
+              childPackage.generate();
+            }
+
+            return;
+          }
+        } catch (Throwable e) {
+          // Ignore.
+        }
+      }
+
+      type.addMethod(ctor.build());
+
+      // Build java file.
+      final JavaFile javaFile = JavaFile.builder(path, type.build()).build();
+
+      try {
+        // Write .java source code file.
+        javaFile.writeTo(filer);
+      } catch (Throwable e) {
+        // Ignore.
+        messager.printMessage(Diagnostic.Kind.ERROR,
+            "Failed to generate Source File: " + e.getMessage());
+      }
     }
 
     public void generate() {
@@ -1060,182 +1199,6 @@ public class ActionProcessor extends AbstractProcessor {
 
       generateSource();
       processed = true;
-
-//      // Build empty @Inject constructor.
-//      final MethodSpec.Builder ctor = MethodSpec.constructorBuilder()
-//          .addAnnotation(Inject.class);
-////                .addModifiers(Modifier.PUBLIC, Modifier.FINAL);
-//
-//      // Init Class.
-//      final TypeSpec.Builder type = TypeSpec.classBuilder(getClassName())
-//          .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-//          .superclass(TypeName.get(ActionLocator.class))
-//          .addAnnotation(Singleton.class);
-//
-//      // We generate the code for "initActions()" and "initChildren()" as we process.
-//      final CodeBlock.Builder initActionsCode = CodeBlock.builder();
-//      final CodeBlock.Builder initChildrenCode = CodeBlock.builder();
-//
-//      // Generate SubPackage locators.
-//      for (ActionPackage childPackage : children.values()) {
-//        // Build type name.
-//        final TypeName typeName = ClassName.get(childPackage.path, childPackage.getClassName());
-//
-//        // Add field.
-//        type.addField(
-//            FieldSpec.builder(typeName, childPackage.name)
-//                .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-////                        .addAnnotation(Inject.class)
-//                .build()
-//        );
-//
-//        ctor.addParameter(
-//            ParameterSpec.builder(typeName, childPackage.name, Modifier.FINAL).build()
-//        );
-//
-//        ctor.addStatement("this.$L = $L", childPackage.name, childPackage.name);
-//
-//        // Add code to initChildren() code.
-//        initChildrenCode.addStatement("getChildren().add($L)", childPackage.name);
-//
-//        // Add getter method.
-//        type.addMethod(
-//            MethodSpec.methodBuilder(childPackage.name)
-//                .addModifiers(Modifier.PUBLIC)
-//                .returns(typeName)
-//                .addStatement("return " + childPackage.name)
-//                .build()
-//        );
-//      }
-//
-//      // Go through all actions.
-//      actions.forEach((classPath, action) -> {
-//        type.addField(
-//            FieldSpec.builder(action.generatedProviderClassName, action.fieldName)
-//                .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-//                .build()
-//        );
-//
-//        ctor.addParameter(
-//            ParameterSpec
-//                .builder(action.generatedProviderClassName, action.fieldName, Modifier.FINAL)
-//                .build()
-//        );
-//
-//        ctor.addStatement("this.$L = $L", action.fieldName, action.fieldName);
-//
-//        initActionsCode.addStatement("put($T.class, $L)", action.type, action.fieldName);
-//
-//        type.addMethod(
-//            MethodSpec.methodBuilder(action.fieldName)
-//                .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-//                .returns(action.generatedProviderClassName)
-//                .addStatement("return " + action.fieldName)
-//                .build()
-//        );
-//      });
-//
-//      // Add implemented "initActions()".
-//      type.addMethod(
-//          MethodSpec.methodBuilder("initActions")
-//              .addAnnotation(Override.class)
-//              .addModifiers(Modifier.PROTECTED)
-//              .returns(void.class)
-//              .addCode(initActionsCode.build()).build()
-//      );
-//
-//      // Add implemented "initChildren()".
-//      type.addMethod(
-//          MethodSpec.methodBuilder("initChildren")
-//              .addAnnotation(Override.class)
-//              .addModifiers(Modifier.PROTECTED)
-//              .returns(void.class)
-//              .addCode(initChildrenCode.build()).build()
-//      );
-//
-//      if (!actions.isEmpty()) {
-//        try {
-//          final FileObject fileObject = filer.getResource(
-//              StandardLocation.SOURCE_OUTPUT,
-//              path,
-//              getClassName() + ".java"
-//          );
-//          final CharSequence content = fileObject.getCharContent(true);
-//          final String contents = content.toString();
-//
-//          if (!contents.isEmpty()) {
-//            for (ActionHolder action : actions.values()) {
-//              if (!contents.contains(action.providerClassName.simpleName())) {
-//                messager.printMessage(
-//                    Diagnostic.Kind.ERROR,
-//                    "Action: " +
-//                        action.name +
-//                        " was created. Full Regeneration needed. \"clean\" and \"compile\""
-//                );
-//                return;
-//              }
-//            }
-//
-//            // Generate child packages.
-//            for (ActionPackage childPackage : children.values()) {
-//              childPackage.generate();
-//            }
-//
-//            return;
-//          }
-//        } catch (Throwable e) {
-//          // Ignore.
-//        }
-//      }
-//
-//      if (!children.isEmpty()) {
-//        try {
-//          final FileObject fileObject = filer.getResource(
-//              StandardLocation.SOURCE_OUTPUT,
-//              path,
-//              getClassName() + ".java"
-//          );
-//          final CharSequence content = fileObject.getCharContent(true);
-//          final String contents = content.toString();
-//
-//          if (!contents.isEmpty()) {
-//            for (ActionPackage child : children.values()) {
-//              if (!contents.contains(child.getClassName() + " " + child.name + ";")) {
-//                messager.printMessage(
-//                    Diagnostic.Kind.ERROR,
-//                    "ActionLocator: " +
-//                        child.path +
-//                        " was created. Full Regeneration needed. \"clean\" and \"compile\""
-//                );
-//                return;
-//              }
-//            }
-//
-//            // Generate child packages.
-//            for (ActionPackage childPackage : children.values()) {
-//              childPackage.generate();
-//            }
-//
-//            return;
-//          }
-//        } catch (Throwable e) {
-//          // Ignore.
-//        }
-//      }
-//
-//      type.addMethod(ctor.build());
-//
-//      // Build java file.
-//      final JavaFile javaFile = JavaFile.builder(path, type.build()).build();
-//
-//      try {
-//        // Write .java source code file.
-//        javaFile.writeTo(filer);
-//      } catch (Throwable e) {
-//        // Ignore.
-//        messager.printMessage(Diagnostic.Kind.ERROR,
-//            "Failed to generate Source File: " + e.getMessage());
-//      }
 
       // Generate child packages.
       children.values().forEach(ActionPackage::generate);

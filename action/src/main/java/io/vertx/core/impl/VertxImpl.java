@@ -19,6 +19,7 @@ package io.vertx.core.impl;
 import io.netty.channel.EventLoop;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.nio.NioEventLoopGroupAffinity;
 import io.netty.resolver.AddressResolverGroup;
 import io.netty.util.ResourceLeakDetector;
 import io.netty.util.concurrent.GenericFutureListener;
@@ -121,7 +122,9 @@ public class VertxImpl implements VertxInternal, MetricsProvider {
   private final WorkerPool internalBlockingPool;
   private final ThreadFactory eventLoopThreadFactory;
   private final NioEventLoopGroup eventLoopGroup;
+//  private final NioEventLoopGroupAffinity eventLoopGroup;
   private final NioEventLoopGroup acceptorEventLoopGroup;
+//  private final NioEventLoopGroupAffinity acceptorEventLoopGroup;
   private final BlockedThreadChecker checker;
   private final boolean haEnabled;
   private final AddressResolver addressResolver;
@@ -151,11 +154,13 @@ public class VertxImpl implements VertxInternal, MetricsProvider {
     checker = new BlockedThreadChecker(options.getBlockedThreadCheckInterval(), options.getWarningExceptionTime());
     eventLoopThreadFactory = new VertxThreadFactory("move-eventloop-thread-", checker, false, options.getMaxEventLoopExecuteTime());
     eventLoopGroup = new NioEventLoopGroup(options.getEventLoopPoolSize(), eventLoopThreadFactory);
+//    eventLoopGroup = new NioEventLoopGroupAffinity(options.getEventLoopPoolSize(), eventLoopThreadFactory);
     eventLoopGroup.setIoRatio(NETTY_IO_RATIO);
     ThreadFactory acceptorEventLoopThreadFactory = new VertxThreadFactory("move-acceptor-thread-", checker, false, options.getMaxEventLoopExecuteTime());
     // The acceptor event loop thread needs to be from a different pool otherwise can get lags in accepted connections
     // under a lot of load
     acceptorEventLoopGroup = new NioEventLoopGroup(1, acceptorEventLoopThreadFactory);
+//    acceptorEventLoopGroup = new NioEventLoopGroupAffinity(1, acceptorEventLoopThreadFactory);
     acceptorEventLoopGroup.setIoRatio(100);
 
     metrics = initialiseMetrics(options);

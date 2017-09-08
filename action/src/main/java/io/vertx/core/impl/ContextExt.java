@@ -18,18 +18,9 @@ package io.vertx.core.impl;
 
 import io.netty.channel.EventLoop;
 import io.vertx.core.Handler;
-import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-import move.action.Action;
-import move.action.ActionEventLoopGroup;
-import move.action.LongSkipListMap;
-import move.action.LongTreeMap;
 import org.jetbrains.annotations.NotNull;
 
 /**

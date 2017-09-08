@@ -1,9 +1,7 @@
 package move.action
 
-import com.google.common.base.Preconditions
 import io.vertx.rxjava.core.Vertx
 import kotlinx.coroutines.experimental.CoroutineStart
-import rx.Single
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Provider
@@ -102,7 +100,7 @@ constructor(vertx: Vertx,
       val action = actionProvider.get()
 
       // Get or create ActionContext.
-      val eventLoop: ActionEventLoopContext = eventLoopGroup.next()
+      val eventLoop: MoveEventLoop = eventLoopGroup.next()
       action.init(
          eventLoop.dispatcher,
          self,
@@ -129,7 +127,7 @@ constructor(vertx: Vertx,
       val action = actionProvider.get()
 
       // Get or create ActionContext.
-      val eventLoop: ActionEventLoopContext = eventLoopGroup.next()
+      val eventLoop: MoveEventLoop = eventLoopGroup.next()
       action.init(
          eventLoop.dispatcher,
          self,

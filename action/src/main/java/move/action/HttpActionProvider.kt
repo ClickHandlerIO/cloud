@@ -86,7 +86,7 @@ open class HttpActionProvider<A : HttpAction>
       val action = actionProvider.get()
 
       // Get or create ActionContext.
-      val eventLoop: ActionEventLoopContext = eventLoopGroup.next()
+      val eventLoop: MoveEventLoop = eventLoopGroup.next()
       action.init(
          eventLoop.dispatcher,
          self,
@@ -113,7 +113,7 @@ open class HttpActionProvider<A : HttpAction>
       val action = actionProvider.get()
 
       // Get or create ActionContext.
-      val eventLoop: ActionEventLoopContext = eventLoopGroup.next()
+      val eventLoop: MoveEventLoop = eventLoopGroup.next()
       action.init(
          eventLoop.dispatcher,
          self,

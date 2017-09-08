@@ -39,7 +39,7 @@ constructor(val vertx: Vertx, val actionProvider: Provider<A>) {
    ) as Class<OUT>
 
    val vertxCore: io.vertx.core.Vertx = vertx.delegate
-   val eventLoopGroup = ActionEventLoopGroup.get(vertx)
+   val eventLoopGroup = MoveEventLoopGroup.get(vertx)
 
    open val isInternal = false
    open val isWorker = false
@@ -59,7 +59,7 @@ constructor(val vertx: Vertx, val actionProvider: Provider<A>) {
       eventLoopGroup
    )
 
-   var defaultBroker: ActionBroker by BrokerDelegate()
+   var broker: ActionBroker by BrokerDelegate()
 
    class BrokerDelegate {
       var value = ActionBroker.DEFAULT

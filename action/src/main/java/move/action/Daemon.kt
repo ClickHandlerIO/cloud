@@ -1,6 +1,5 @@
 package move.action
 
-import io.vertx.ext.web.RoutingContext
 import io.vertx.rxjava.core.Vertx
 import kotlinx.coroutines.experimental.yield
 import java.util.concurrent.TimeUnit
@@ -48,4 +47,6 @@ abstract class CronDaemon(
 
 open class DaemonActionProvider<A : DaemonAction>
 @Inject constructor(vertx: Vertx, provider: Provider<A>)
-   : InternalActionProvider<A, Unit, Unit>(vertx, provider)
+   : InternalActionProvider<A, Unit, Unit>(vertx, provider) {
+
+}

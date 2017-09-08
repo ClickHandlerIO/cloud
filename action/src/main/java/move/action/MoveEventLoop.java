@@ -20,7 +20,6 @@ import io.netty.channel.EventLoop;
 import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
 import io.vertx.core.impl.ContextExt;
-import io.vertx.core.impl.ContextImpl;
 import io.vertx.core.impl.EventLoopContext;
 import io.vertx.core.impl.VertxInternal;
 import io.vertx.core.json.JsonObject;
@@ -28,10 +27,14 @@ import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import kotlin.Unit;
+import kotlinx.coroutines.experimental.CancellableContinuation;
 import org.jetbrains.annotations.NotNull;
 import org.quartz.CronScheduleBuilder;
 import org.quartz.CronTrigger;
@@ -43,37 +46,39 @@ import org.quartz.TriggerBuilder;
 
 /**
  * Optimized EvenLoop Context for managing Action lifecycle. Action timeouts are efficiently tracked
- * at the trade-off of less precise expiration. Action timeouts happen in normalized 200ms blocks or
- * up to 5 times / second. Actions aren't intended to be completed in the nanoseconds, but rather
- * microsecond/ms/second.
+ * at the trade-off of less precise expiration. Action timeouts happen in normalized 100ms blocks or
+ * up to 5 times / second. Actions aren't intended to be completed in the nanoseconds
+ * ('even though they can'), but rather microsecond/ms/second since network calls are usually made.
  *
- * Actions are sequenced by the ceiling 200ms block of their calculated unix millisecond epoch
- * deadline. If an Action has no deadline then there is no associated deadline tracking cost. However,
- * every Action is locally tracked.
+ * Actions are sequenced by the ceiling 100ms block of their calculated unix millisecond epoch
+ * deadline. If an Action has no deadline then there is no associated deadline tracking cost.
+ * However, every Action is locally tracked.
  *
  * @author Clay Molocznik
  */
-public class ActionEventLoopContext extends ContextExt {
+public class MoveEventLoop extends ContextExt {
 
   // Sequence is a 24bit integer and epoch is a 40bit integer.
   public static final long SEQUENCE_MASK = (1L << 24L) - 1L;
-  public static final long FREQUENCY_ADJUSTMENT = 200L;
+  public static final long TICK = 100L;
 
-  public static final Logger log = LoggerFactory.getLogger(ActionEventLoopContext.class);
+  public static final Logger log = LoggerFactory.getLogger(MoveEventLoop.class);
 
   public final EventLoop eventLoop;
-  private final AtomicBoolean processingTimeouts = new AtomicBoolean(false);
+  public final EventLoopDispatcher dispatcher = new EventLoopDispatcher(this);
+  private final AtomicBoolean processingTick = new AtomicBoolean(false);
   private final LongSkipListMap<JobAction> actionMap = new LongSkipListMap<>();
   private final LongSkipListMap<AtomicInteger> counterMap = new LongSkipListMap<>();
+  private final LongSkipListMap<Timer> timers = new LongSkipListMap<>();
   private final LongSkipListMap<JobAction> nonTimeoutActionMap = new LongSkipListMap<>();
   private final AtomicLong nonTimeoutCounter = new AtomicLong(0L);
-
   private final LongSkipListMap<JobAction> workerActions = new LongSkipListMap<>();
-
   private final HashMap<String, CronList> cronMap = new HashMap<>();
-  public final EventLoopDispatcher dispatcher = new EventLoopDispatcher(this);
+  private final Timer[] wheelTimers = new Timer[10000];
+  private long tick = 0;
+  private AtomicLong ticks = new AtomicLong(0L);
 
-  public ActionEventLoopContext(
+  public MoveEventLoop(
       @NotNull EventLoopContext eventLoopDefault,
       @NotNull VertxInternal vertxInternal,
       @NotNull JsonObject config,
@@ -82,24 +87,26 @@ public class ActionEventLoopContext extends ContextExt {
     this.eventLoop = eventLoop;
   }
 
-  public static EventLoop getEventLoop(ContextImpl context) {
-    return context.nettyEventLoop();
-  }
-
   public static void main(String[] args) throws InterruptedException {
-    final CronTrigger trigger = TriggerBuilder
-        .newTrigger()
-        .withSchedule(CronScheduleBuilder.cronSchedule("0/25 0/5 * * * *"))
-        .forJob(JobBuilder.newJob().ofType(CronJob.class).build())
-        .startNow()
-        .build();
+    for (int i = 0; i < 100; i++) {
+      System.out.println(pack(i, i));
+//      System.out.println(pack(1, 0));
+    }
 
-    Thread.sleep(100000000);
+
+//    final CronTrigger trigger = TriggerBuilder
+//        .newTrigger()
+//        .withSchedule(CronScheduleBuilder.cronSchedule("0/25 0/5 * * * *"))
+//        .forJob(JobBuilder.newJob().ofType(CronJob.class).build())
+//        .startNow()
+//        .build();
+
+//    Thread.sleep(100000000);
   }
 
   private static void testPerf() {
     final Vertx vertx = Vertx.vertx();
-    final ActionEventLoopGroup eventLoopGroup = ActionEventLoopGroup.Companion.get(vertx);
+    final MoveEventLoopGroup eventLoopGroup = MoveEventLoopGroup.Companion.get(vertx);
 
     System.out.println("EventLoop Threads = " + eventLoopGroup.getExecutors().size());
 //    eventLoopGroup.getExecutors().forEach(t -> System.out.println(t.eventLoop.));
@@ -146,7 +153,7 @@ public class ActionEventLoopContext extends ContextExt {
     System.out.println("Actions Size: " + actionMap.size());
 //
 //    for (; ; ) {
-//      final long ceil = pack(System.currentTimeMillis() / FREQUENCY_ADJUSTMENT, 0);
+//      final long ceil = pack(System.currentTimeMillis() / TICK, 0);
 //      System.out.println("Floor:");
 //      System.out.println(ceil);
 //      System.out.println("\t" + unpackTime(ceil) + " -> " + unpackSequence(ceil));
@@ -159,7 +166,7 @@ public class ActionEventLoopContext extends ContextExt {
 //      }
 //      Thread.sleep(1000);
 //
-//      long time = System.currentTimeMillis() / FREQUENCY_ADJUSTMENT;
+//      long time = System.currentTimeMillis() / TICK;
 //      LongKeyEntry<Long> floor = actionMap.floorEntry(pack(time, 0));
 //      LongKeyEntry<AtomicInteger> floorTimer = timeoutMap.floorEntry(pack(time, 0));
 //
@@ -172,7 +179,7 @@ public class ActionEventLoopContext extends ContextExt {
   }
 
   static long nextId(LongTreeMap<AtomicInteger> timeoutMap) {
-    final long unix = System.currentTimeMillis() / FREQUENCY_ADJUSTMENT;
+    final long unix = System.currentTimeMillis() / TICK;
     AtomicInteger counter = timeoutMap.get(unix);
     if (counter == null) {
       counter = new AtomicInteger(0);
@@ -182,7 +189,7 @@ public class ActionEventLoopContext extends ContextExt {
   }
 
   static long nextId(LongSkipListMap<AtomicInteger> timeoutMap) {
-    final long unix = System.currentTimeMillis() / FREQUENCY_ADJUSTMENT;
+    final long unix = System.currentTimeMillis() / TICK;
     final AtomicInteger counter = timeoutMap.computeIfAbsent(unix, (k) -> new AtomicInteger(0));
     return pack(unix, counter.incrementAndGet());
   }
@@ -221,7 +228,7 @@ public class ActionEventLoopContext extends ContextExt {
    * @return
    */
   public long nextId(long epochMillis) {
-    final long unix = epochMillis / FREQUENCY_ADJUSTMENT + FREQUENCY_ADJUSTMENT;
+    final long unix = epochMillis / TICK + TICK;
     final AtomicInteger counter = counterMap.computeIfAbsent(unix, (k) -> new AtomicInteger(0));
     return pack(unix, counter.incrementAndGet());
   }
@@ -246,6 +253,14 @@ public class ActionEventLoopContext extends ContextExt {
     return nonTimeoutActionMap.remove(actionId) != null;
   }
 
+  TimerHandle registerTimer(CancellableContinuation<Unit> continuation, long delayMillis) {
+    final long key = (System.currentTimeMillis() + delayMillis) / TICK;
+    return new TimerHandle(
+        timers.compute(key, k -> new Timer(continuation),
+            v -> v.continuations.add(continuation)
+        ), continuation);
+  }
+
   /**
    *
    */
@@ -253,29 +268,44 @@ public class ActionEventLoopContext extends ContextExt {
     // Cancels all running Actions and Timers and Rejects new tasks.
   }
 
-  /**
-   *
-   */
-  void processTimeouts() {
+  void tick() {
+    ticks.incrementAndGet();
+
     // Don't overload an already slammed EventLoop thread.
-    if (!processingTimeouts.compareAndSet(false, true)) {
+    if (!processingTick.compareAndSet(false, true)) {
       return;
     }
 
     eventLoop.execute(() -> {
       try {
-        final long now = System.currentTimeMillis();
+        final long currentTick = ticks.get();
+
+        final long tickDiff = currentTick - tick;
+        if (tickDiff <= 0) {
+          return;
+        }
+
+        final long now = System.currentTimeMillis() / TICK;
 
         // Give plenty of buffer so we don't race and duplicate IDs
         evictCounters(
-            now / FREQUENCY_ADJUSTMENT - (FREQUENCY_ADJUSTMENT * 16)
+            now - (TICK * 16)
         );
         // Compute the ceiling deadline ID.
         evictActions(pack(
-            now / FREQUENCY_ADJUSTMENT, 0
+            now, 0
         ));
+
+//        for (long i = tick; i < currentTick; i++) {
+//
+//        }
+        // Evict timers.
+        evictTimers(now);
+
+        // Update tick to the latest tick processed.
+        tick = currentTick;
       } finally {
-        processingTimeouts.compareAndSet(true, false);
+        processingTick.compareAndSet(true, false);
       }
     });
   }
@@ -283,6 +313,8 @@ public class ActionEventLoopContext extends ContextExt {
   private void evictCounters(long counterCeil) {
     LongSkipListMap.Node<AtomicInteger> entry = counterMap.removeFirstIfLessThan(counterCeil);
     while (entry != null) {
+      entry.value = null;
+
       // Next entry.
       entry = counterMap.removeFirstIfLessThan(counterCeil);
     }
@@ -294,23 +326,28 @@ public class ActionEventLoopContext extends ContextExt {
     LongSkipListMap.Node<JobAction> entry = actionMap.removeFirstIfLessThan(timeoutCeil);
     while (entry != null) {
       // Cancel Action and flag as timed out.
-      ((InternalAction) entry.value).cancel(new ActionTimeoutException());
+      ((JobAction) entry.value).cancel(new ActionTimeoutException());
+      entry.value = null;
 
       // Next entry.
       entry = actionMap.removeFirstIfLessThan(timeoutCeil);
     }
   }
 
+  private void evictTimers(long ceil) {
+    LongSkipListMap.Node<Timer> entry = timers.removeFirstIfLessThan(ceil);
+    while (entry != null) {
+      ((Timer) entry.value).close();
+      entry.value = null;
+
+      // Next entry.
+      entry = timers.removeFirstIfLessThan(ceil);
+    }
+  }
+
   public void executeAsync(Handler<Void> task) {
     // No metrics, we are on the event loop.
     eventLoop.execute(wrapTask(task));
-  }
-
-  private class CronList {
-    CronTrigger trigger;
-    CronJob job;
-    String expression;
-    HashSet<Daemon> daemons = new HashSet<>();
   }
 
   private static class CronJob implements Job {
@@ -321,7 +358,57 @@ public class ActionEventLoopContext extends ContextExt {
     }
   }
 
+  static class TimerHandle {
+
+    private final Timer timer;
+    private final CancellableContinuation<Unit> continuation;
+
+    public TimerHandle(Timer timer,
+        CancellableContinuation<Unit> continuation) {
+      this.timer = timer;
+      this.continuation = continuation;
+    }
+
+    public void remove() {
+      timer.continuations.remove(continuation);
+    }
+  }
+
+  private class WheelTimer {
+
+    // Hour wheel.
+    private WheelTimer[] wheel = new WheelTimer[(int) (1000 / TICK * 60 * 60)];
+  }
+
+  private class Timer {
+
+    final List<CancellableContinuation> continuations;
+
+    public Timer(CancellableContinuation<Unit> continuation) {
+      continuations = new LinkedList<>();
+      continuations.add(continuation);
+    }
+
+    public void close() {
+      continuations.forEach(c -> {
+        try {
+          c.resume(Unit.INSTANCE);
+        } catch (Throwable e) {
+        }
+      });
+    }
+  }
+
+  private class CronList {
+
+    CronTrigger trigger;
+    CronJob job;
+    String expression;
+    HashSet<Daemon> daemons = new HashSet<>();
+  }
+
   private class TimerList {
+
     public HashSet<Daemon> daemons = new HashSet<>();
   }
 }
