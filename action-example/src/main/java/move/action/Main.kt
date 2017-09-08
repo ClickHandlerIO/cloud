@@ -1,6 +1,7 @@
 package move.action
 
 import io.reactivex.Single
+import io.vertx.core.VertxOptions
 import kotlinx.coroutines.experimental.async
 import org.slf4j.LoggerFactory
 
@@ -18,9 +19,13 @@ object App : Move<AppComponent>() {
 
    suspend override fun build() = DaggerAppComponent.create()
 
+   suspend override fun vertxOptions(): VertxOptions {
+      return super.vertxOptions().setEventLoopPoolSize(Runtime.getRuntime().availableProcessors() * 2)
+   }
+
    suspend override fun startDaemons() {
       val passes = 20
-      val parallelism = 1
+      val parallelism = 6
       val statsInternval = 1000L
       val invocationsPerPass = 1_000_000
 

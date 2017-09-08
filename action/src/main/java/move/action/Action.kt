@@ -61,7 +61,6 @@ class MoveDispatcher(val eventLoop: MoveEventLoop) : CoroutineDispatcher() {
 
 abstract class AbstractInternalAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : ActionProvider<A, IN, OUT>> : JobAction<IN, OUT>(true), Continuation<OUT>, CoroutineContext, CoroutineScope {
    // Local fields.
-   private var eventLoopActionId = 0L
    private lateinit var op: ActionCircuitBreakerMetrics.Operation
    private lateinit var _request: IN
    private var _deadline: Long = 0L
@@ -128,7 +127,7 @@ abstract class AbstractInternalAction<A : Action<IN, OUT>, IN : Any, OUT : Any, 
          if (deadline > 0L)
             handle = dispatcher.eventLoop.registerJobTimer(this@AbstractInternalAction, deadline)
          else
-            eventLoopActionId = dispatcher.eventLoop.registerAction(this@AbstractInternalAction)
+            handle = dispatcher.eventLoop.registerJob(this@AbstractInternalAction)
 
          try {
             onStart()
@@ -210,8 +209,7 @@ abstract class AbstractInternalAction<A : Action<IN, OUT>, IN : Any, OUT : Any, 
          } finally {
             if (handle != null) {
                handle.remove()
-            } else if (eventLoopActionId > 0L) {
-               dispatcher.eventLoop.removeAction(eventLoopActionId);
+               handle = null
             }
          }
       }
@@ -400,7 +398,7 @@ abstract class AbstractInternalAction<A : Action<IN, OUT>, IN : Any, OUT : Any, 
 
    private fun cancelTimer() {
       if (super.timer != null) {
-         super.timer?.expired()
+         super.timer?.remove()
          super.timer = null
       }
    }
