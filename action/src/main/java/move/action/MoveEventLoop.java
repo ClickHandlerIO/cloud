@@ -24,15 +24,14 @@ import io.vertx.core.impl.VertxInternal;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
-import java.util.HashSet;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import kotlin.Unit;
+import kotlin.jvm.functions.Function0;
 import kotlinx.coroutines.experimental.CancellableContinuation;
+import kotlinx.coroutines.experimental.DisposableHandle;
 import org.jetbrains.annotations.NotNull;
-import org.quartz.CronTrigger;
 import org.quartz.Job;
 import org.quartz.JobExecutionContext;
 import org.quartz.JobExecutionException;
@@ -52,14 +51,27 @@ import org.quartz.JobExecutionException;
 public class MoveEventLoop extends ContextExt {
 
   // Tick duration in milliseconds.
-  public static final long TICK = 100L;
-  public static final int WHEEL = (int) (TimeUnit.MINUTES.toMillis(10) / TICK);
+  public static final long TICK_MS = 100L;
+  // Wheel size. 10 minutes is a good amount of time.
+  // It degrades to a SkipList that's unbounded for timeouts greater than 10 minutes.
+  public static final int WHEEL_LENGTH = (int) (TimeUnit.MINUTES.toMillis(10) / TICK_MS);
+  public static final int MAX_TICKS_BEHIND = (int) (TimeUnit
+      .SECONDS
+      .toMillis(
+          MoveAppKt.getMODE() == Mode.DEV
+              ? 1000
+              : MoveAppKt.getMODE() == Mode.TEST
+                  ? 1000
+                  : 10)
+      / TICK_MS);
+
+  public static final long TICK_PADDING = TICK_MS * 10;
 
   public static final Logger log = LoggerFactory.getLogger(MoveEventLoop.class);
 
   // Netty EventLoop.
-  public final EventLoop eventLoop;
-  // Move kotlinx-coroutines Dispatcher.
+  final EventLoop eventLoop;
+  // MoveApp kotlinx-coroutines Dispatcher.
   public final MoveDispatcher dispatcher = new MoveDispatcher(this);
   // Processing tick flag.
   // This is atomic since it's used outside the context of the EventLoop thread.
@@ -67,14 +79,18 @@ public class MoveEventLoop extends ContextExt {
   // Timer map for Jobs that won't fit on the wheel.
   private final LongSkipListMap<Timer> timers = new LongSkipListMap<>();
   // Wheel timer related.
-  private final Timer[] timerWheel = new Timer[WHEEL];
-
+  private final Timer[] timerWheel = new Timer[WHEEL_LENGTH];
+  long epoch;
+  long epochTick;
   private long tick = 0;
-  private int tickIndex = 0;
-  private long wheelThreshold;
+  private int wheelIndex = 0;
+  private long maxWheelEpoch;
+  private long maxWheelEpochTick;
   private AtomicLong ticks = new AtomicLong(0L);
 
   private Timer nonTimedTimmer = new Timer();
+
+  AbstractJobAction<?, ?, ?, ?> currentJob;
 
   public MoveEventLoop(
       @NotNull EventLoopContext eventLoopDefault,
@@ -83,18 +99,47 @@ public class MoveEventLoop extends ContextExt {
       @NotNull EventLoop eventLoop) {
     super(eventLoopDefault, vertxInternal, config, eventLoop);
     this.eventLoop = eventLoop;
-    this.tickIndex = tickIndex(System.currentTimeMillis());
+    this.wheelIndex = wheelIndexFromEpoch(System.currentTimeMillis());
 
     initWheel();
+
+    epoch = System.currentTimeMillis();
+    epochTick = epoch / TICK_MS;
+    maxWheelEpochTick = epochTick + WHEEL_LENGTH - 1;
+
+    try {
+      nettyEventLoop().submit(() -> {
+        MoveEventLoopGroup.Companion.setLocal(this);
+        setContextOnThread();
+      }).await();
+    } catch (InterruptedException e) {
+      throw new RuntimeException(e);
+    }
   }
 
   public static void main(String[] args) throws InterruptedException {
     for (int tick = 0; tick < 100; tick++) {
-      int tickIndex = (int) ((System.currentTimeMillis() / TICK) % WHEEL);
+      int tickIndex = (int) ((System.currentTimeMillis() / TICK_MS) % WHEEL_LENGTH);
       System.out.println(tickIndex);
 //      System.out.println(pack(1, 0));
       Thread.sleep(100);
     }
+  }
+
+  public static long toTick(long epoch) {
+    return epoch / TICK_MS;
+  }
+
+  public static long countTicks(long time, TimeUnit unit) {
+    return countTicks(unit.toMillis(time));
+  }
+
+  public static long countTicks(long millis) {
+    if (millis < 1L) {
+      return 0L;
+    }
+    final long ticks = millis / TICK_MS;
+    return ticks < 1L ? 0L : ticks;
   }
 
   private void initWheel() {
@@ -103,24 +148,85 @@ public class MoveEventLoop extends ContextExt {
     }
   }
 
-  private int tickIndex(long epoch) {
-    return tick == 0 ? 0 : (int) ((epoch / tick) % WHEEL);
+  /**
+   * Calculate tick index for an epoch.
+   */
+  int wheelIndexFromEpoch(long epoch) {
+    return tick == 0 ? 0 : (int) ((epoch / TICK_MS) % WHEEL_LENGTH);
   }
 
+  /**
+   * Calculate tick index for an epoch.
+   */
+  int wheelIndexFromEpochTick(long epochTick) {
+    final int index = (int) ((epochTick) % WHEEL_LENGTH);
+    return index;
+  }
 
+  long tickFor(long epoch) {
+    if (epoch < 1L || epoch > maxWheelEpoch) {
+      return -1L;
+    }
+
+    return epoch / TICK_MS;
+  }
+
+  /**
+   *
+   * @param action
+   * @return
+   */
   JobTimerHandle registerJob(JobAction action) {
     final JobTimerHandle handle = new JobTimerHandle(action);
     nonTimedTimmer.add(handle);
     return handle;
   }
 
-  JobTimerHandle registerJobTimer(JobAction action, long epochMillis) {
+  /**
+   *
+   * @param action
+   * @param tickEpoch
+   * @return
+   */
+  JobTimerHandle registerJobTimerForTick(JobAction action, long tickEpoch) {
+    if (tickEpoch < epochTick) {
+      return null;
+    }
+
     final JobTimerHandle handle = new JobTimerHandle(action);
 
-    if (epochMillis < wheelThreshold) {
-      timerWheel[tickIndex].add(handle);
+    if (tickEpoch < maxWheelEpochTick) {
+      timerWheel[wheelIndexFromEpochTick(tickEpoch)].add(handle);
     } else {
-      final long key = epochMillis / TICK;
+      Timer timer = timers.get(tickEpoch);
+      if (timer == null) {
+        timer = new Timer(handle);
+        timers.put(tickEpoch, timer);
+      } else {
+        timer.add(handle);
+      }
+    }
+
+    return handle;
+  }
+
+  /**
+   *
+   * @param action
+   * @param epochMillis
+   * @return
+   */
+  JobTimerHandle registerJobTimer(JobAction action, long epochMillis) {
+    if (epochMillis < epoch) {
+      return null;
+    }
+
+    final JobTimerHandle handle = new JobTimerHandle(action);
+
+    if (epochMillis < maxWheelEpoch) {
+      timerWheel[wheelIndexFromEpoch(epochMillis)].add(handle);
+    } else {
+      final long key = epochMillis / TICK_MS;
       Timer timer = timers.get(key);
       if (timer == null) {
         timer = new Timer(handle);
@@ -133,18 +239,28 @@ public class MoveEventLoop extends ContextExt {
     return handle;
   }
 
-  JobDelayHandle createDelayTimer(JobAction deferred, CancellableContinuation<Unit> continuation,
+  /**
+   *
+   * @param continuation
+   * @param delayMillis
+   * @return
+   */
+  DelayHandle scheduleDelay(CancellableContinuation<Unit> continuation,
       long delayMillis) {
-    final long key = (System.currentTimeMillis() + delayMillis) / TICK;
+    final long epochMillis = System.currentTimeMillis() + delayMillis;
+    final DelayHandle handle = new DelayHandle(continuation);
 
-    final JobDelayHandle handle = new JobDelayHandle(deferred, continuation);
-
-    Timer timer = timers.get(key);
-    if (timer == null) {
-      timer = new Timer(handle);
-      timers.put(key, timer);
+    if (epochMillis < maxWheelEpoch) {
+      timerWheel[wheelIndexFromEpoch(epochMillis)].add(handle);
     } else {
-      timer.add(handle);
+      final long key = epochMillis / TICK_MS;
+      Timer timer = timers.get(key);
+      if (timer == null) {
+        timer = new Timer(handle);
+        timers.put(key, timer);
+      } else {
+        timer.add(handle);
+      }
     }
 
     return handle;
@@ -166,6 +282,16 @@ public class MoveEventLoop extends ContextExt {
 
     // Don't overload an already slammed EventLoop thread.
     if (!processingTick.compareAndSet(false, true)) {
+      final long tickDiff = ticks.get() - tick;
+
+      if (tickDiff > MAX_TICKS_BEHIND || tickDiff < 0) {
+        // This is a serious problem.
+        // EventLoop thread was likely blocked.
+        // Or the memory is corrupted.
+        log.error("Extreme Tick lag [" + tickDiff + "] which is " +
+            (TICK_MS * tickDiff) + "ms. EventLoop thread blocked!!!");
+      }
+
       return;
     }
 
@@ -173,32 +299,38 @@ public class MoveEventLoop extends ContextExt {
       try {
         final long lastTick = this.tick;
         final long currentTick = ticks.get();
-
         final long now = System.currentTimeMillis();
-        wheelThreshold = System.currentTimeMillis() + (TICK * WHEEL);
+        final long currentEpochTick = now / TICK_MS;
+        final int newTickIndex = wheelIndexFromEpoch(now);
+        final long ticksToProcess = currentTick - lastTick;
 
-        int newTickIndex = tickIndex(now);
+        try {
+          // Process wheel.
+          if (ticksToProcess > timerWheel.length || ticksToProcess < 0) {
+            // This is a serious problem.
+            // EventLoop thread was likely blocked.
+            // Or the memory is corrupted.
+            log.error("Extreme Tick lag [" + ticksToProcess + "] which is " +
+                (TICK_MS * ticksToProcess) + "ms. EventLoop thread blocked!!!");
+            processFullWheel();
+          } else {
+            processWheel(newTickIndex + 1);
+          }
 
-        final long tickDiff = currentTick - lastTick;
-
-        if (tickDiff > timerWheel.length || tickDiff < 0) {
-          // This is a serious problem.
-          // EventLoop thread was likely blocked.
-          // Or the memory is corrupted.
-          log.error("Extreme Tick lag [" + tickDiff + "] which is " +
-              (TICK * tickDiff) + "ms. EventLoop thread blocked!!!");
-          processFullWheel();
-        } else {
-          processWheel(newTickIndex + 1);
+          // Evict timers.
+          evictTimers(currentEpochTick);
+        } finally {
+          // Update tick to the latest tick processed.
+          tick = currentTick;
+          wheelIndex = newTickIndex;
+          // Update min Epoch
+          epoch = now;
+          // Update epochTick
+          epochTick = currentEpochTick;
+          // Calculate new max wheel epoch tick.
+          maxWheelEpochTick = epochTick + WHEEL_LENGTH - 1;
+          maxWheelEpoch = maxWheelEpochTick * TICK_MS;
         }
-
-        this.tickIndex = newTickIndex;
-
-        // Evict timers.
-        evictTimers(now / TICK);
-
-        // Update tick to the latest tick processed.
-        tick = currentTick;
       } finally {
         processingTick.compareAndSet(true, false);
       }
@@ -212,12 +344,12 @@ public class MoveEventLoop extends ContextExt {
   }
 
   private void processWheel(int toIndex) {
-    if (tickIndex < toIndex) {
-      for (int tick = tickIndex; tick < toIndex; tick++) {
+    if (wheelIndex < toIndex) {
+      for (int tick = wheelIndex; tick < toIndex; tick++) {
         timerWheel[tick].expired();
       }
-    } else if (tickIndex > toIndex) {
-      for (int tick = tickIndex; tick < timerWheel.length; tick++) {
+    } else if (wheelIndex > toIndex) {
+      for (int tick = wheelIndex; tick < timerWheel.length; tick++) {
         timerWheel[tick].expired();
       }
       for (int tick = 0; tick < toIndex; tick++) {
@@ -234,18 +366,17 @@ public class MoveEventLoop extends ContextExt {
     }
   }
 
+  public void execute(Function0<Unit> block) {
+    eventLoop.execute(block::invoke);
+  }
+
+  public void execute(Runnable runnable) {
+    eventLoop.execute(runnable);
+  }
+
   public void executeAsync(Handler<Void> task) {
     // No metrics, we are on the event loop.
     eventLoop.execute(wrapTask(task));
-  }
-
-  public interface ITimerHandle {
-
-    void timerHandleExpired();
-
-    void timerHandleRemove();
-
-    void timerHandleUnlink();
   }
 
   private static class CronJob implements Job {
@@ -259,7 +390,7 @@ public class MoveEventLoop extends ContextExt {
   /**
    *
    */
-  static class TimerHandle {
+  static class TimerHandle implements DisposableHandle {
 
     TimerHandle prev;
     TimerHandle next;
@@ -270,6 +401,16 @@ public class MoveEventLoop extends ContextExt {
 
     void remove() {
       // NOOP
+    }
+
+    @Override
+    public void dispose() {
+
+    }
+
+    @Override
+    public void unregister() {
+      dispose();
     }
 
     void unlink() {
@@ -307,7 +448,7 @@ public class MoveEventLoop extends ContextExt {
 
       try {
         if (action.isActive()) {
-          action.cancel(new TimeoutException());
+          action.cancel(new ActionTimeoutException(action));
         }
       } finally {
         unlink();
@@ -325,47 +466,47 @@ public class MoveEventLoop extends ContextExt {
       // Maybe make it easier for GC.
       action = null;
     }
+
+    @Override
+    public void dispose() {
+      remove();
+    }
   }
 
   /**
    *
    */
-  static class JobDelayHandle extends TimerHandle {
+  static class DelayHandle extends TimerHandle {
 
-    JobAction action;
+    //    JobAction action;
     CancellableContinuation<Unit> continuation;
 
-    public JobDelayHandle(
-        JobAction action,
+    public DelayHandle(
+//        JobAction action,
         CancellableContinuation<Unit> continuation) {
-      this.action = action;
+//      this.action = action;
       this.continuation = continuation;
     }
 
     void expired() {
       if (continuation == null) {
-        action = null;
+        unlink();
         continuation = null;
         return;
       }
 
       if (continuation.isCancelled() || continuation.isCompleted()) {
-        action = null;
+        unlink();
         continuation = null;
         return;
       }
 
       try {
-        if (action == null || action.isCancelled() || action.isCompleted()) {
-          continuation.cancel(null);
-        } else {
-          continuation.resume(Unit.INSTANCE);
-        }
+        continuation.resume(Unit.INSTANCE);
       } catch (Throwable e) {
         // Ignore.
       } finally {
         unlink();
-        action = null;
         continuation = null;
       }
     }
@@ -378,7 +519,6 @@ public class MoveEventLoop extends ContextExt {
 
       if (continuation.isCompleted() || continuation.isCompleted()) {
         unlink();
-        action = null;
         continuation = null;
         return;
       }
@@ -389,26 +529,27 @@ public class MoveEventLoop extends ContextExt {
         // Ignore.
       } finally {
         unlink();
-        action = null;
         continuation = null;
       }
+    }
+
+    @Override
+    public void dispose() {
+      remove();
     }
   }
 
   /**
    * Singly linked list of TimerHandles.
    */
-  private class Timer {
+  private class Timer extends TimerHandle {
 
-    final TimerHandle head = new TimerHandle();
-    int count;
+    final TimerHandle head = this;
 
     public Timer() {
-      count = 0;
     }
 
     public Timer(TimerHandle handle) {
-      count = 1;
       head.next = handle;
       handle.prev = head;
     }
@@ -424,21 +565,11 @@ public class MoveEventLoop extends ContextExt {
     }
 
     void expired() {
-      for (TimerHandle x = head.next; x != null; x = x.next) {
+      TimerHandle x = next;
+      while (x != null) {
         x.expired();
+        x = next;
       }
     }
-  }
-
-
-  /**
-   *
-   */
-  private class CronList {
-
-    CronTrigger trigger;
-    CronJob job;
-    String expression;
-    HashSet<Daemon> daemons = new HashSet<>();
   }
 }

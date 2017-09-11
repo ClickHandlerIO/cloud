@@ -1,6 +1,9 @@
 package move.action
 
+import kotlinx.coroutines.experimental.async
+import kotlinx.coroutines.experimental.selects.SelectClause1
 import javax.inject.Inject
+
 //
 //
 //@Http(
@@ -27,42 +30,85 @@ class Ping : HttpAction() {
       resp.setStatusCode(200).end("PONG")
    }
 }
+
 //
 //
-//@Internal(timeout = 1000)
-//class MyAction : InternalAction<String, String>() {
-////   companion object : MyAction_Factory()
+@Internal(timeout = 0)
+class MyAction : InternalAction<String, String>() {
+
+   //   companion object : MyAction_Factory()
+
+   suspend override fun execute(): String {
+//      println("MyAction Context: $coroutineContext")
+//      println("MyAction Parent Context: ${parentContext}")
+//      delay(1000)
+//      println("MyAction Context: $coroutineContext")
+      // Ask using Factory pattern.
+//      AllocateInventory ask { id = "" }
+//      AllocateInventory.ask("")
 //
-//   suspend override fun execute(): String {
-//      // Ask using Factory pattern.
-////      AllocateInventory ask { id = "" }
-////      AllocateInventory.ask("")
-////
-////      AllocateInventory rxAsk ""
-////      AllocateInventory.rxAsk("")
-////
-////      // Ask with builder.
-////      AllocateInventory ask { id("") }
-////
-////      MyAction ask ""
+//      AllocateInventory rxAsk ""
+//      AllocateInventory.rxAsk("")
 //
-//      return ""
-//   }
-//}
+//      // Ask with builder.
+//      AllocateInventory ask { id("") }
+//
+//      MyAction ask ""
+
+      return "Back"
+   }
+}
 //
 //
 ///**
 // *
 // */
-@Internal(timeout = 1000)
+
+@Internal(timeout = 1000000)
 class Allocate : InternalAction<String, String>() {
-   companion object : Allocate_Producer()
-
-//   companion object : Allocate_Producer()
-
    suspend override fun execute(): String {
+//      delay(100)
 
-//      sleep(5000)
+//      delay(1000)
+      var result = Move.MyAction ask "Hi2"
+//      var result2 = Move.MyAction ask "Hi2"
+//      var result = "Direct"
+
+//      var result = Move.MyAction ask "Hi"
+//      result = Move.MyAction ask "Hi2"
+//      val result = "Hi"
+
+//      val result = tryWhile(Move.MyAction askBlock "Hi") {
+//         it is SQLException
+//      }
+
+//      launch(CommonPool) {
+//         println(Thread.currentThread().name)
+//         delay(1000)
+//         println(Thread.currentThread().name)
+//      }
+//
+//      launch(dispatcher) {
+//         println(Thread.currentThread().name)
+//         delay(1000)
+//         println(Thread.currentThread().name)
+//      }
+//
+//      launch(App.eventLoopGroup.next().dispatcher) {
+//         println(Thread.currentThread().name)
+//         delay(1000)
+//         println(Thread.currentThread().name)
+//      }
+//
+//      launch(context) {
+//         delay(1000)
+//      }
+
+//      println("Allocate Context: $coroutineContext")
+//      delay(1000)
+//      println("Allocate Context: $coroutineContext")
+//
+//      sleep(1000)
 
 //      MyAction ask ""
 //
@@ -81,7 +127,7 @@ class Allocate : InternalAction<String, String>() {
 //
 //      val r = of(AllocateInventory::class)..AllocateInventory.Request(id = "")
 
-      return ""
+      return result
    }
 }
 
@@ -111,11 +157,7 @@ abstract class SomeJobAction<REQUEST : Any> : InternalAction<REQUEST, AllocateIn
 
 @Internal
 class AllocateInventory @Inject constructor() : SomeJobAction<AllocateInventory.Request>() {
-   companion object : AllocateInventory_Producer() {
-      suspend infix fun ask(id: String): Reply {
-         return ask(Request(id))
-      }
-   }
+   companion object : AllocateInventory_Producer()
 
    data class Request(var id: String = "")
 

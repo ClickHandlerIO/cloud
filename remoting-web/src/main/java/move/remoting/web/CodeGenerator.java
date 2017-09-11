@@ -112,7 +112,7 @@ public class CodeGenerator {
     initializerType.addMethod(MethodSpec.constructorBuilder()
         .addAnnotation(Inject.class)
         .addParameter(WsDispatcher.class, "dispatcher")
-        .addStatement("this.dispatcher = dispatcher")
+        .addStatement("this.dispatcher = eventLoop")
         .addStatement("start()")
         .build());
 

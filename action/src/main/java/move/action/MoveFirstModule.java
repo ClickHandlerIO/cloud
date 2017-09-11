@@ -14,6 +14,6 @@ public class MoveFirstModule {
   @Provides
   @Singleton
   Vertx vertx() {
-    return MoveKt.locateVertx();
+    return MoveAppKt.locateVertx();
   }
 }

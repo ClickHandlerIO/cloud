@@ -52,6 +52,11 @@ public class ContextExt extends ContextImpl {
     eventLoop.execute(wrapTask(task));
   }
 
+  protected void setContextOnThread() {
+    VertxThread current = (VertxThread) Thread.currentThread();
+    current.setContext(this);
+  }
+
   protected Runnable wrapTask(Handler<Void> hTask) {
     return () -> {
       Thread th = Thread.currentThread();

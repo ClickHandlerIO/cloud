@@ -68,7 +68,7 @@ http://www.w3.org/2001/XMLSchema-instance ">
     <guava.version>21.0</guava.version>
     <hikaricp.version>2.6.3</hikaricp.version>
     <hystrix.version>1.5.12</hystrix.version>
-    <jackson.version>2.8.9</jackson.version>
+    <jackson.version>2.9.1</jackson.version>
     <javax-mail.version>1.5.5</javax-mail.version>
     <javapoet.version>1.9.0</javapoet.version>
     <javaslang.version>2.0.4</javaslang.version>
@@ -85,11 +85,12 @@ http://www.w3.org/2001/XMLSchema-instance ">
     <selenium.version>3.4.0</selenium.version>
 
     <nats.version>1.0</nats.version>
+    <netty.version>4.1.15.Final</netty.version>
 
     <pdfbox.version>2.0.7</pdfbox.version>
 
     <kotlin.version>1.1.4-3</kotlin.version>
-    <kotlinx-coroutines.version>0.18</kotlinx-coroutines.version>
+    <kotlinx-coroutines.version>0.19-alpha-4</kotlinx-coroutines.version>
     <msgpack.version>0.8.13</msgpack.version>
   </properties>
 
@@ -291,6 +292,12 @@ http://www.w3.org/2001/XMLSchema-instance ">
 
       <!-- External Dependencies -->
       <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-all</artifactId>
+        <version>${netty.version}</version>
+      </dependency>
+
+      <dependency>
         <groupId>com.amazonaws</groupId>
         <artifactId>aws-java-sdk-bom</artifactId>
         <version>${aws.version}</version>
@@ -362,6 +369,12 @@ http://www.w3.org/2001/XMLSchema-instance ">
       <dependency>
         <groupId>com.fasterxml.jackson.datatype</groupId>
         <artifactId>jackson-datatype-jdk8</artifactId>
+        <version>${jackson.version}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>com.fasterxml.jackson.dataformat</groupId>
+        <artifactId>jackson-dataformat-yaml</artifactId>
         <version>${jackson.version}</version>
       </dependency>
 

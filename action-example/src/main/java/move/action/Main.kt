@@ -2,14 +2,15 @@ package move.action
 
 import io.reactivex.Single
 import io.vertx.core.VertxOptions
-import kotlinx.coroutines.experimental.async
 import org.slf4j.LoggerFactory
+import java.util.concurrent.atomic.AtomicInteger
 
 // Global convenience Variable.
-val A = App.component.locator()
+val Move = App.component.locator()
 
 // App
-object App : Move<AppComponent>() {
+object App : MoveApp<AppComponent>() {
+
    val LOG = LoggerFactory.getLogger(App::class.java)
 
    @JvmStatic
@@ -28,6 +29,73 @@ object App : Move<AppComponent>() {
       val parallelism = 6
       val statsInternval = 1000L
       val invocationsPerPass = 1_000_000
+      val actionsPerInvocation = 2
+
+      val dispatcher = eventLoopGroup.executors[0].dispatcher
+
+
+//      async(dispatcher) {
+//         val d = coroutineContext[ContinuationInterceptor.Key]
+//         println("Dispatcher ${d}")
+//         println("CoroutineContext: $coroutineContext")
+//
+//         val child1 = async(coroutineContext + CoroutineName("Child-1")) {
+//            println("Child-1 CoroutineContext: $coroutineContext")
+//            println("Child-1 Dispatcher ${coroutineContext[ContinuationInterceptor.Key]}")
+//            println("Child-1 Delaying: ${Thread.currentThread().name}")
+//            delay(500)
+//            println("Child-1 Dispatcher ${coroutineContext[ContinuationInterceptor.Key]}")
+//            println("Child-1 Returned: ${Thread.currentThread().name}")
+//            println("Child-1 CoroutineContext: $coroutineContext")
+//
+//            val child2 = async(coroutineContext + CoroutineName("Child-2")) {
+//               println("Child-2 CoroutineContext: $coroutineContext")
+//               println("Child-2 Dispatcher ${coroutineContext[ContinuationInterceptor.Key]}")
+//               println("Child-2 Delaying: ${Thread.currentThread().name}")
+//               delay(500)
+//               println("Child-2 Dispatcher ${coroutineContext[ContinuationInterceptor.Key]}")
+//               println("Child-2 Returned: ${Thread.currentThread().name}")
+//               println("Child-2 CoroutineContext: $coroutineContext")
+//            }
+//
+//            child2.await()
+//         }
+//
+//         child1.await()
+//      }.await()
+
+      for (p in 0..10) {
+         val future = Move.Allocate rxAsk "Hi"
+         future.invokeOnCompletion {
+            println(Thread.currentThread().name)
+            println("invokeOnCompletion")
+         }
+         println(Thread.currentThread().name)
+
+         val futureResult = future.await()
+         println("Finished with $futureResult")
+      }
+
+
+//      try {
+
+//      val result = Move.Allocate ask "HI"
+//
+//
+//      val list = mutableListOf<Deferred<String>>()
+//      launch(dispatcher) {
+//         for (i in 1..5) {
+//            list += Move.Allocate rxAsk ""
+//         }
+//      }
+//
+//      val r = list.map { it.await() }.toList()
+//      println("1 Done")
+//      } catch (e: Throwable) {
+//         println("************** CAUGHT")
+//         e.printStackTrace()
+//      }
+
 
 //      val searchStockReply = A.inventory.SearchStock ask ""
 //
@@ -60,18 +128,39 @@ object App : Move<AppComponent>() {
             val single = Single.create<Unit> { subscriber ->
                val eventLoop = eventLoopGroup.executors[t]
                eventLoop.runOnContext {
-                  async(eventLoop.dispatcher) {
-                     try {
-                        for (i in 1..invocationsPerPass) {
+                  val counter = AtomicInteger(0)
+                  try {
+                     for (i in 1..invocationsPerPass) {
 //                        AllocateInventory ask ""
-                           Allocate ask ""
+                        val call = Move.Allocate.rxAsk("HI")
+                        call.invokeOnCompletion {
+                           if (counter.incrementAndGet() == invocationsPerPass) {
+                              subscriber.onSuccess(Unit)
+                           }
                         }
-                     } catch (e: Throwable) {
-                        e.printStackTrace()
                      }
-                     subscriber.onSuccess(Unit)
+                  } catch (e: Throwable) {
+                     e.printStackTrace()
                   }
+
+//                  launch(eventLoop.dispatcher) {
+//                     try {
+//                        for (i in 1..invocationsPerPass) {
+////                        AllocateInventory ask ""
+//                           Move.Allocate ask ""
+//                        }
+//                     } catch (e: Throwable) {
+//                        e.printStackTrace()
+//                     }
+//                     subscriber.onSuccess(Unit)
+//                  }
                }
+
+//               eventLoop.runOnContext {
+//                  launch(Unconfined) {
+//
+//                  }
+//               }
             }
             list.add(single)
          }
@@ -79,7 +168,7 @@ object App : Move<AppComponent>() {
          Single.zip(list) {}.blockingGet()
          val elapsed = System.currentTimeMillis() - start
          val runsPerSecond = 1000.0 / elapsed
-         println("${invocationsPerPass * runsPerSecond * parallelism} / sec")
+         println("${invocationsPerPass * actionsPerInvocation * runsPerSecond * parallelism} / sec")
       }
    }
 }
