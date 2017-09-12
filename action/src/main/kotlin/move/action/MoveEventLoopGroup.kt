@@ -67,7 +67,7 @@ class MoveEventLoopGroup(private val vertxInternal: VertxInternal) {
    companion object {
       val instances = mutableMapOf<Vertx, MoveEventLoopGroup>()
 
-      internal val currentEventLoop get() = local.get()
+      val currentEventLoop get() = local.get()
 
       internal val local = ThreadLocal<MoveEventLoop>()
 

@@ -19,4 +19,6 @@ public abstract class JobAction<IN, OUT>
   }
 
   public abstract Single<OUT> asSingle();
+
+  abstract void doTimeout();
 }

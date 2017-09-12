@@ -1,7 +1,9 @@
 package move.action
 
+import kotlinx.coroutines.experimental.CommonPool
 import kotlinx.coroutines.experimental.async
 import kotlinx.coroutines.experimental.selects.SelectClause1
+import kotlinx.coroutines.experimental.yield
 import javax.inject.Inject
 
 //
@@ -41,7 +43,13 @@ class MyAction : InternalAction<String, String>() {
    suspend override fun execute(): String {
 //      println("MyAction Context: $coroutineContext")
 //      println("MyAction Parent Context: ${parentContext}")
+      val result = request
 //      delay(1000)
+//
+//      val result = async(CommonPool) {
+//         delay(100)
+//         Thread.currentThread().name
+//      }.await()
 //      println("MyAction Context: $coroutineContext")
       // Ask using Factory pattern.
 //      AllocateInventory ask { id = "" }
@@ -55,7 +63,7 @@ class MyAction : InternalAction<String, String>() {
 //
 //      MyAction ask ""
 
-      return "Back"
+      return result
    }
 }
 //
@@ -72,7 +80,12 @@ class Allocate : InternalAction<String, String>() {
 //      delay(1000)
       var result = Move.MyAction ask "Hi2"
 //      var result2 = Move.MyAction ask "Hi2"
-//      var result = "Direct"
+//      var result2 = "Direct"
+//
+//      val result3 = async(this) {
+//         delay(100)
+//         "Returned"
+//      }
 
 //      var result = Move.MyAction ask "Hi"
 //      result = Move.MyAction ask "Hi2"

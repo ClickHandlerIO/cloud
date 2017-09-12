@@ -11,11 +11,6 @@ import com.google.common.collect.Maps;
 import com.google.common.util.concurrent.AbstractExecutionThreadService;
 import com.google.common.util.concurrent.AbstractIdleService;
 import com.google.common.util.concurrent.Service;
-import com.netflix.hystrix.HystrixCommandGroupKey;
-import com.netflix.hystrix.HystrixCommandKey;
-import com.netflix.hystrix.HystrixCommandProperties;
-import com.netflix.hystrix.HystrixObservableCommand;
-import com.netflix.hystrix.exception.HystrixTimeoutException;
 import com.nuodb.jdbc.RemConnection;
 import com.nuodb.jdbc.RemStatement;
 import com.nuodb.jdbc.SQLException;
@@ -54,11 +49,13 @@ import java.util.stream.Stream;
 import javaslang.Tuple2;
 import javaslang.control.Try;
 import javax.sql.DataSource;
-import move.WorkerPool;
-import move.action.Action;
-import move.action.ActionProvider;
-import move.common.Metrics;
+import move.action.AbstractJobAction;
+import move.action.ActionTimeoutException;
+import move.action.MoveEventLoop;
+import move.action.MoveEventLoopGroup;
 import move.common.UID;
+import move.metrics.Metrics;
+import move.threading.WorkerPool;
 import org.h2.server.TcpServer;
 import org.h2.tools.Server;
 import org.jooq.Condition;
@@ -133,13 +130,6 @@ public class SqlDatabase extends AbstractIdleService {
   private final String[] jooqPackageNames;
   private final Map<String, Table> jooqMap = Maps.newHashMap();
   private final Reflections[] entityReflections;
-  //    private final HystrixThreadPoolProperties.Setter writeThreadPoolPropertiesDefaults;
-//    private final HystrixThreadPoolProperties.Setter readThreadPoolPropertiesDefaults;
-  private final HystrixCommandGroupKey groupKey;
-  //    private final HystrixThreadPoolKey readThreadPoolKey;
-//    private final HystrixThreadPoolKey writeThreadPoolKey;
-  private final HystrixCommandKey readCommandKey = HystrixCommandKey.Factory.asKey("READ");
-  private final HystrixCommandKey writeCommandKey = HystrixCommandKey.Factory.asKey("WRITE");
   private final int readTaskTimout;
   private final int writeTaskTimout;
   private final SQLDialect dialect;
@@ -196,10 +186,6 @@ public class SqlDatabase extends AbstractIdleService {
     this.entityPackageNames = entityPackageNames;
     this.jooqPackageNames = jooqPackageNames;
 
-    this.groupKey = HystrixCommandGroupKey.Factory.asKey("SQL-" + config.getName());
-//        this.readThreadPoolKey = HystrixThreadPoolKey.Factory.asKey("SQL-" + config.getName() + "-READ");
-//        this.writeThreadPoolKey = HystrixThreadPoolKey.Factory.asKey("SQL-" + config.getName() + "-WRITE");
-
     this.metricRegistry = Metrics.registry();
 
     this.isNuoDB = config.getUrl().startsWith("jdbc:com.nuodb");
@@ -218,20 +204,6 @@ public class SqlDatabase extends AbstractIdleService {
     } else {
       this.writeTaskTimout = config.getWriteTaskTimeout();
     }
-
-//        this.readThreadPoolPropertiesDefaults = HystrixThreadPoolProperties.Setter()
-//            .withCoreSize(ensureThreads(config.getReadThreads(), config.isProd() ? config.getMaxReadPoolSize() : 0))
-//            .withAllowMaximumSizeToDivergeFromCoreSize(!config.isProd())
-//            .withMaximumSize(ensureThreads(config.getReadThreads(), config.getMaxReadPoolSize()))
-//            .withMaxQueueSize(MAX_QUEUE_CAPACITY)
-//            .withQueueSizeRejectionThreshold(config.getMaxReadTasks() <= 0 ? MAX_READ_TASKS : config.getMaxReadTasks());
-//
-//        this.writeThreadPoolPropertiesDefaults = HystrixThreadPoolProperties.Setter()
-//            .withCoreSize(ensureThreads(config.getWriteThreads(), config.isProd() ? config.getMaxPoolSize() : 0))
-//            .withAllowMaximumSizeToDivergeFromCoreSize(!config.isProd())
-//            .withMaximumSize(ensureThreads(config.getWriteThreads(), config.getMaxPoolSize()))
-//            .withMaxQueueSize(MAX_QUEUE_CAPACITY)
-//            .withQueueSizeRejectionThreshold(config.getMaxWriteTasks() <= 0 ? MAX_WRITE_TASKS : config.getMaxWriteTasks());
 
     final List<Reflections> entityReflections = new ArrayList<>();
     final List<Reflections> jooqReflections = new ArrayList<>();
@@ -772,76 +744,6 @@ public class SqlDatabase extends AbstractIdleService {
     return threads;
   }
 
-  private HystrixObservableCommand.Setter readSetter(int timeoutInMillis, ActionContext context) {
-    int maxTimeout = context != null
-        ? (int) (context.timesOutAt - System.currentTimeMillis())
-        : readTaskTimout;
-
-    if (timeoutInMillis < MINIMUM_TIMEOUT) {
-      timeoutInMillis = MINIMUM_TIMEOUT;
-    }
-
-    if (maxTimeout <= TIMEOUT_THRESHOLD) {
-      throw new PersistTimeoutException();
-    }
-
-    if (timeoutInMillis > maxTimeout) {
-      timeoutInMillis = maxTimeout;
-    }
-
-    final HystrixCommandProperties.Setter setter = HystrixCommandProperties.Setter()
-        .withExecutionIsolationStrategy(
-            HystrixCommandProperties.ExecutionIsolationStrategy.SEMAPHORE)
-        .withCircuitBreakerEnabled(true)
-        .withFallbackEnabled(false)
-        .withExecutionTimeoutEnabled(true)
-        .withExecutionIsolationSemaphoreMaxConcurrentRequests(config.getMaxReadTasks())
-        .withExecutionTimeoutInMilliseconds(timeoutInMillis)
-        .withExecutionIsolationThreadInterruptOnFutureCancel(true);
-
-    return HystrixObservableCommand.Setter
-        .withGroupKey(groupKey)
-//            .andThreadPoolKey(readThreadPoolKey)
-        .andCommandKey(readCommandKey)
-        .andCommandPropertiesDefaults(setter);
-  }
-
-  private HystrixObservableCommand.Setter writeSetter(long timeoutInMillis, ActionContext context) {
-    int maxTimeout = context != null
-        ? (int) (context.timesOutAt - System.currentTimeMillis())
-        : writeTaskTimout;
-
-    if (timeoutInMillis < MINIMUM_TIMEOUT) {
-      timeoutInMillis = MINIMUM_TIMEOUT;
-    }
-
-    if (maxTimeout <= TIMEOUT_THRESHOLD) {
-      throw new PersistTimeoutException();
-    }
-
-    if (timeoutInMillis > maxTimeout) {
-      timeoutInMillis = maxTimeout;
-    }
-
-    final HystrixCommandProperties.Setter setter = HystrixCommandProperties.Setter()
-        .withExecutionIsolationStrategy(
-            HystrixCommandProperties.ExecutionIsolationStrategy.SEMAPHORE)
-        .withCircuitBreakerEnabled(true)
-        .withFallbackEnabled(false)
-        .withExecutionTimeoutEnabled(true)
-        .withExecutionIsolationSemaphoreMaxConcurrentRequests(config.getMaxWriteTasks())
-        .withExecutionTimeoutInMilliseconds((int) timeoutInMillis)
-        .withExecutionIsolationThreadInterruptOnFutureCancel(true);
-
-    return HystrixObservableCommand.Setter
-        .withGroupKey(groupKey)
-//            .andThreadPoolKey(writeThreadPoolKey)
-        .andCommandKey(writeCommandKey)
-        .andCommandPropertiesDefaults(setter);
-//            .andThreadPoolPropertiesDefaults(writeThreadPoolPropertiesDefaults);
-  }
-
-
   protected void shutDown() throws Exception {
     // Completely destroy H2 memory database if necessary.
     if (config.getUrl().startsWith("jdbc:h2:mem")) {
@@ -1033,7 +935,8 @@ public class SqlDatabase extends AbstractIdleService {
     final List<EvolutionChangeEntity> changeEntities = new ArrayList<>();
 
     try {
-      new WriteAction<Object>(writeSetter(100000000, null), null, session -> {
+      final SqlAction action = new SqlAction(null, Long.MAX_VALUE);
+      executeWrite(action, session -> {
         evolution.setStarted(LocalDateTime.now());
 
         boolean failed = false;
@@ -1084,8 +987,8 @@ public class SqlDatabase extends AbstractIdleService {
           changeEntities.forEach(session::insert);
         }
 
-        return SqlResult.success(evolution);
-      }).toObservable().toSingle().toBlocking().toFuture().get();
+        return move.sql.SqlResult.success(evolution);
+      });
     } catch (Throwable e) {
       LOG.error("Failed to insert into EVOLUTION table.", e);
       throw new RuntimeException(e);
@@ -1094,13 +997,14 @@ public class SqlDatabase extends AbstractIdleService {
         // Save if evolution failed since the transaction rolled back.
         if (!evolution.isSuccess()) {
           if (!config.isGenerateSchema()) {
+            final SqlAction action = new SqlAction(null, Long.MAX_VALUE);
             // We need to Insert the Evolution outside of the applier
             // SQL Transaction since it would be rolled back.
-            new WriteAction<Object>(writeSetter(100000000, null), null, sql -> {
+            executeWrite(action, sql -> {
               sql.insert(evolution);
               sql.insert(changeEntities);
-              return SqlResult.success();
-            }).toObservable().toSingle().toBlocking().toFuture().get();
+              return move.sql.SqlResult.success();
+            });
           }
         }
       } catch (Throwable e) {
@@ -1296,7 +1200,7 @@ public class SqlDatabase extends AbstractIdleService {
    * @param <T>
    * @return
    */
-  public <T extends AbstractEntity> Single<SqlResult<int[]>> batch(
+  public <T extends AbstractEntity> Single<move.sql.SqlResult<int[]>> batch(
       Function<SqlBatch, SqlBatch> batch) {
     return write(sql -> batch.apply(sql.batch()).execute());
   }
@@ -1306,7 +1210,7 @@ public class SqlDatabase extends AbstractIdleService {
    * @param <T>
    * @return
    */
-  public <T extends AbstractEntity> Single<SqlResult<int[]>> batch(
+  public <T extends AbstractEntity> Single<move.sql.SqlResult<int[]>> batch(
       Function<SqlBatch, SqlBatch> batch,
       int timeoutSeconds) {
     return write(sql -> batch.apply(sql.batch()).execute(timeoutSeconds));
@@ -1317,7 +1221,7 @@ public class SqlDatabase extends AbstractIdleService {
    * @param <T>
    * @return
    */
-  public <T extends AbstractEntity> Single<SqlResult<int[]>> batchAtomic(
+  public <T extends AbstractEntity> Single<move.sql.SqlResult<int[]>> batchAtomic(
       Function<SqlBatch, SqlBatch> batch) {
     return write(sql -> batch.apply(sql.batch()).executeAtomic());
   }
@@ -1327,7 +1231,7 @@ public class SqlDatabase extends AbstractIdleService {
    * @param <T>
    * @return
    */
-  public <T extends AbstractEntity> Single<SqlResult<int[]>> batchAtomic(
+  public <T extends AbstractEntity> Single<move.sql.SqlResult<int[]>> batchAtomic(
       Function<SqlBatch, SqlBatch> batch,
       int timeoutSeconds) {
     return write(sql -> batch.apply(sql.batch()).executeAtomic(timeoutSeconds));
@@ -1339,7 +1243,7 @@ public class SqlDatabase extends AbstractIdleService {
    * @param <T>
    * @return
    */
-  public <T extends AbstractEntity> Single<SqlResult<int[]>> batch(
+  public <T extends AbstractEntity> Single<move.sql.SqlResult<int[]>> batch(
       Function<SqlBatch, SqlBatch> batch, Logger logger) {
     return write(sql -> batch.apply(sql.batch()).execute(logger));
   }
@@ -1350,7 +1254,7 @@ public class SqlDatabase extends AbstractIdleService {
    * @param <T>
    * @return
    */
-  public <T extends AbstractEntity> Single<SqlResult<int[]>> batch(
+  public <T extends AbstractEntity> Single<move.sql.SqlResult<int[]>> batch(
       Function<SqlBatch, SqlBatch> batch,
       int timeoutSeconds,
       Logger logger) {
@@ -1363,7 +1267,7 @@ public class SqlDatabase extends AbstractIdleService {
    * @param <T>
    * @return
    */
-  public <T extends AbstractEntity> Single<SqlResult<int[]>> batchAtomic(
+  public <T extends AbstractEntity> Single<move.sql.SqlResult<int[]>> batchAtomic(
       Function<SqlBatch, SqlBatch> batch, Logger logger) {
     return write(sql -> batch.apply(sql.batch()).executeAtomic(logger));
   }
@@ -1374,7 +1278,7 @@ public class SqlDatabase extends AbstractIdleService {
    * @param <T>
    * @return
    */
-  public <T extends AbstractEntity> Single<SqlResult<int[]>> batchAtomic(
+  public <T extends AbstractEntity> Single<move.sql.SqlResult<int[]>> batchAtomic(
       Function<SqlBatch, SqlBatch> batch,
       int timeoutSeconds,
       Logger logger) {
@@ -1386,7 +1290,7 @@ public class SqlDatabase extends AbstractIdleService {
    * @param <T>
    * @return
    */
-  public <T extends AbstractEntity> Single<SqlResult<Integer>> insert(T entity) {
+  public <T extends AbstractEntity> Single<move.sql.SqlResult<Integer>> insert(T entity) {
     return write(sql -> sql.insert(entity));
   }
 
@@ -1395,7 +1299,7 @@ public class SqlDatabase extends AbstractIdleService {
    * @param <T>
    * @return
    */
-  public <T extends AbstractEntity> Single<SqlResult<Integer>> insertAtomic(T entity) {
+  public <T extends AbstractEntity> Single<move.sql.SqlResult<Integer>> insertAtomic(T entity) {
     return write(sql -> sql.insertAtomic(entity));
   }
 
@@ -1404,7 +1308,7 @@ public class SqlDatabase extends AbstractIdleService {
    * @param <T>
    * @return
    */
-  public <T extends AbstractEntity> Single<SqlResult<int[]>> insert(List<T> entities) {
+  public <T extends AbstractEntity> Single<move.sql.SqlResult<int[]>> insert(List<T> entities) {
     return write(sql -> sql.insert(entities));
   }
 
@@ -1413,7 +1317,8 @@ public class SqlDatabase extends AbstractIdleService {
    * @param <T>
    * @return
    */
-  public <T extends AbstractEntity> Single<SqlResult<int[]>> insertAtomic(List<T> entities) {
+  public <T extends AbstractEntity> Single<move.sql.SqlResult<int[]>> insertAtomic(
+      List<T> entities) {
     return write(sql -> sql.insertAtomic(entities));
   }
 
@@ -1422,7 +1327,7 @@ public class SqlDatabase extends AbstractIdleService {
    * @param <T>
    * @return
    */
-  public <T extends AbstractEntity> Single<SqlResult<int[]>> insertAtomic(List<T> entities,
+  public <T extends AbstractEntity> Single<move.sql.SqlResult<int[]>> insertAtomic(List<T> entities,
       int timeoutSeconds) {
     return write(sql -> sql.insertAtomic(entities, timeoutSeconds));
   }
@@ -1432,7 +1337,7 @@ public class SqlDatabase extends AbstractIdleService {
    * @param <T>
    * @return
    */
-  public <T extends AbstractEntity> Single<SqlResult<Integer>> update(T entity) {
+  public <T extends AbstractEntity> Single<move.sql.SqlResult<Integer>> update(T entity) {
     return write(sql -> sql.update(entity));
   }
 
@@ -1441,7 +1346,7 @@ public class SqlDatabase extends AbstractIdleService {
    * @param <T>
    * @return
    */
-  public <T extends AbstractEntity> Single<SqlResult<Integer>> updateAtomic(T entity) {
+  public <T extends AbstractEntity> Single<move.sql.SqlResult<Integer>> updateAtomic(T entity) {
     return write(sql -> sql.updateAtomic(entity));
   }
 
@@ -1450,7 +1355,7 @@ public class SqlDatabase extends AbstractIdleService {
    * @param <T>
    * @return
    */
-  public <T extends AbstractEntity> Single<SqlResult<int[]>> update(List<T> entities) {
+  public <T extends AbstractEntity> Single<move.sql.SqlResult<int[]>> update(List<T> entities) {
     return write(sql -> sql.update(entities));
   }
 
@@ -1459,7 +1364,7 @@ public class SqlDatabase extends AbstractIdleService {
    * @param <T>
    * @return
    */
-  public <T extends AbstractEntity> Single<SqlResult<int[]>> update(List<T> entities,
+  public <T extends AbstractEntity> Single<move.sql.SqlResult<int[]>> update(List<T> entities,
       int timeoutSeconds) {
     return write(sql -> sql.update(entities, timeoutSeconds));
   }
@@ -1469,71 +1374,68 @@ public class SqlDatabase extends AbstractIdleService {
    * @param <T>
    * @return
    */
-  public <T extends AbstractEntity> Single<SqlResult<int[]>> updateAtomic(List<T> entities) {
+  public <T extends AbstractEntity> Single<move.sql.SqlResult<int[]>> updateAtomic(
+      List<T> entities) {
     return write(sql -> sql.updateAtomic(entities));
   }
 
-  public <T> Single<SqlResult<T>> write(SqlCallable<T> task) {
+  public <T> Single<move.sql.SqlResult<T>> write(SqlCallable<T> task) {
     return rxWrite(task);
   }
 
-  public <T> Single<SqlResult<T>> write(SqlCallable<T> task, int timeoutMillis) {
+  public <T> Single<move.sql.SqlResult<T>> write(SqlCallable<T> task, int timeoutMillis) {
     return rxWrite(task, timeoutMillis);
   }
 
-  public <T> Single<SqlResult<T>> rxWrite(SqlCallable<T> task) {
+  public <T> Single<move.sql.SqlResult<T>> rxWrite(SqlCallable<T> task) {
     return rxWrite(task, writeTaskTimout);
   }
 
-  public <T> Single<SqlResult<T>> rxWrite(SqlCallable<T> task, int timeoutMillis) {
-    final ActionContext actionContext = ActionProvider.Companion.current();
-    final io.vertx.rxjava.core.Context context = vertx.getOrCreateContext();
+  public <T> Single<move.sql.SqlResult<T>> rxWrite(SqlCallable<T> task, int timeoutMillis) {
+    final io.vertx.rxjava.core.Context context = vertx.currentContext();
+    final MoveEventLoop eventLoop = MoveEventLoopGroup.Companion.getCurrentEventLoop();
 
-    return Single.create(subscriber -> {
-      if (subscriber.isUnsubscribed()) {
-        return;
-      }
+    final SqlAction action = new SqlAction(eventLoop, timeoutMillis);
 
-      new WriteAction<T>(writeSetter(timeoutMillis, actionContext), actionContext, task).observe()
-          .subscribe(
-              r -> {
-                context.runOnContext(a -> {
-                  if (subscriber.isUnsubscribed()) {
-                    return;
-                  }
-
-                  if (actionContext != null) {
-                    Action.Companion.getContextLocal().set(actionContext);
-                    try {
-                      subscriber.onSuccess(r);
-                    } finally {
-                      Action.Companion.getContextLocal().remove();
-                    }
-                  } else {
-                    subscriber.onSuccess(r);
-                  }
-                });
-              },
-              e -> {
-                context.runOnContext(a -> {
-                  if (subscriber.isUnsubscribed()) {
-                    return;
-                  }
-
-                  if (actionContext != null) {
-                    Action.Companion.getContextLocal().set(actionContext);
-                    try {
-                      subscriber.onError(e);
-                    } finally {
-                      Action.Companion.getContextLocal().remove();
-                    }
-                  } else {
-                    subscriber.onError(e);
-                  }
-                });
+    return writeExecutor
+        .rxExecuteBlocking(new Handler<io.vertx.rxjava.core.Future<SqlResult<T>>>() {
+          @Override
+          public void handle(io.vertx.rxjava.core.Future<SqlResult<T>> event) {
+            try {
+              final SqlResult<T> value = executeWrite(action, task);
+              if (eventLoop != null) {
+                eventLoop.execute(() -> event.complete(value));
+              } else if (context != null) {
+                context.runOnContext(a -> event.complete(value));
+              } else {
+                vertx.getOrCreateContext().runOnContext(a -> event.complete(value));
               }
-          );
-    });
+            } catch (Exception e) {
+              try {
+                final Throwable cause = Throwables.getRootCause(e);
+                final Statement statement = action.currentStatement;
+                if (statement != null) {
+                  rogueStatementQueue
+                      .add(new Tuple2<>(statement, Boolean.FALSE));
+                }
+                if (cause instanceof ActionTimeoutException
+                    || cause instanceof InterruptedException) {
+                  writeTimeoutsCounter.inc();
+                } else {
+                  writeExceptionsCounter.inc();
+                }
+              } finally {
+                if (eventLoop != null) {
+                  eventLoop.execute(() -> event.fail(e));
+                } else if (context != null) {
+                  context.runOnContext(a -> event.fail(e));
+                } else {
+                  vertx.getOrCreateContext().runOnContext(a -> event.fail(e));
+                }
+              }
+            }
+          }
+        });
   }
 
   /**
@@ -1541,7 +1443,7 @@ public class SqlDatabase extends AbstractIdleService {
    * @param handler
    * @param <T>
    */
-  public <T> void write(SqlCallable<T> task, Handler<AsyncResult<SqlResult<T>>> handler) {
+  public <T> void write(SqlCallable<T> task, Handler<AsyncResult<move.sql.SqlResult<T>>> handler) {
     final io.vertx.rxjava.core.Context context = vertx.getOrCreateContext();
 
     rxWrite(task).subscribe(
@@ -1567,53 +1469,42 @@ public class SqlDatabase extends AbstractIdleService {
   }
 
   public <T> Single<T> rxSingle(SqlReadCallable<T> task, int timeoutMillis) {
-    final ActionContext actionContext = ActionProvider.Companion.current();
     final io.vertx.rxjava.core.Context context = vertx.getOrCreateContext();
+    final MoveEventLoop eventLoop = MoveEventLoopGroup.Companion.getCurrentEventLoop();
 
-    return Single.create(subscriber -> {
-      if (subscriber.isUnsubscribed()) {
-        return;
+    final SqlAction action = new SqlAction(eventLoop, timeoutMillis);
+
+    return readExecutor.rxExecuteBlocking(new Handler<io.vertx.rxjava.core.Future<T>>() {
+      @Override
+      public void handle(io.vertx.rxjava.core.Future<T> event) {
+        try {
+          final T value = executeRead(action, task);
+          if (eventLoop != null) {
+            eventLoop.execute(() -> event.complete(value));
+          } else if (context != null) {
+            context.runOnContext(a -> event.complete(value));
+          } else {
+            vertx.getOrCreateContext().runOnContext(a -> event.complete(value));
+          }
+        } catch (Exception e) {
+          try {
+            final Throwable cause = Throwables.getRootCause(e);
+            final Statement statement = action.currentStatement;
+            if (statement != null) {
+              rogueStatementQueue
+                  .add(new Tuple2<>(statement, Boolean.FALSE));
+            }
+            if (cause instanceof ActionTimeoutException
+                || cause instanceof InterruptedException) {
+              readTimeoutsCounter.inc();
+            } else {
+              readExceptionsCounter.inc();
+            }
+          } finally {
+            event.fail(e);
+          }
+        }
       }
-
-      new ReadAction<T>(readSetter(timeoutMillis, actionContext), actionContext, task).observe()
-          .subscribe(
-              r -> {
-                context.runOnContext(a -> {
-                  if (subscriber.isUnsubscribed()) {
-                    return;
-                  }
-
-                  if (actionContext != null) {
-                    Action.Companion.getContextLocal().set(actionContext);
-                    try {
-                      subscriber.onSuccess(r);
-                    } finally {
-                      Action.Companion.getContextLocal().remove();
-                    }
-                  } else {
-                    subscriber.onSuccess(r);
-                  }
-                });
-              },
-              e -> {
-                context.runOnContext(a -> {
-                  if (subscriber.isUnsubscribed()) {
-                    return;
-                  }
-
-                  if (actionContext != null) {
-                    Action.Companion.getContextLocal().set(actionContext);
-                    try {
-                      subscriber.onError(e);
-                    } finally {
-                      Action.Companion.getContextLocal().remove();
-                    }
-                  } else {
-                    subscriber.onError(e);
-                  }
-                });
-              }
-          );
     });
   }
 
@@ -1636,7 +1527,7 @@ public class SqlDatabase extends AbstractIdleService {
   }
 
   public <T> T readBlocking(SqlReadCallable<T> task) {
-    return readBlocking(task, readTaskTimout);
+    return rxSingle(task).toBlocking().value();
   }
 
   /**
@@ -1646,17 +1537,37 @@ public class SqlDatabase extends AbstractIdleService {
    * @throws InterruptedException
    */
   public <T> T readBlocking(SqlReadCallable<T> task, int timeoutMillis) {
-    final ActionContext actionContext = ActionProvider.Companion.current();
-    try {
-      return new ReadAction<T>(readSetter(timeoutMillis, actionContext), actionContext, task)
-          .toObservable().toSingle().toBlocking().toFuture().get();
-    } catch (Throwable e) {
-      Throwables.throwIfUnchecked(e);
-      throw new RuntimeException(e);
-    }
+    final SqlAction action = new SqlAction(null, timeoutMillis);
+
+    return readExecutor.rxExecuteBlocking(new Handler<io.vertx.rxjava.core.Future<T>>() {
+      @Override
+      public void handle(io.vertx.rxjava.core.Future<T> event) {
+        try {
+          final T value = executeRead(action, task);
+          event.complete(value);
+        } catch (Exception e) {
+          try {
+            final Throwable cause = Throwables.getRootCause(e);
+            final Statement statement = action.currentStatement;
+            if (statement != null) {
+              rogueStatementQueue
+                  .add(new Tuple2<>(statement, Boolean.FALSE));
+            }
+            if (cause instanceof ActionTimeoutException
+                || cause instanceof InterruptedException) {
+              readTimeoutsCounter.inc();
+            } else {
+              readExceptionsCounter.inc();
+            }
+          } finally {
+            event.fail(e);
+          }
+        }
+      }
+    }).toBlocking().value();
   }
 
-  public <T> SqlResult<T> writeBlocking(SqlCallable<T> task) {
+  public <T> move.sql.SqlResult<T> writeBlocking(SqlCallable<T> task) {
     return writeBlocking(task, writeTaskTimout);
   }
 
@@ -1666,23 +1577,42 @@ public class SqlDatabase extends AbstractIdleService {
    * @throws ExecutionException
    * @throws InterruptedException
    */
-  public <T> SqlResult<T> writeBlocking(SqlCallable<T> task, int timeoutMillis) {
-    final ActionContext actionContext = ActionProvider.Companion.current();
-    try {
-      return new WriteAction<T>(writeSetter(timeoutMillis, actionContext), actionContext, task)
-          .toObservable().toSingle().toBlocking().toFuture().get();
-    } catch (Throwable e) {
-      Throwables.throwIfUnchecked(e);
-      throw new RuntimeException(e);
-    }
+  public <T> move.sql.SqlResult<T> writeBlocking(SqlCallable<T> task, int timeoutMillis) {
+    final SqlAction action = new SqlAction(null, timeoutMillis);
+
+    return writeExecutor
+        .rxExecuteBlocking(new Handler<io.vertx.rxjava.core.Future<SqlResult<T>>>() {
+          @Override
+          public void handle(io.vertx.rxjava.core.Future<SqlResult<T>> event) {
+            try {
+              final SqlResult<T> value = executeWrite(action, task);
+              event.complete(value);
+            } catch (Exception e) {
+              try {
+                final Throwable cause = Throwables.getRootCause(e);
+                final Statement statement = action.currentStatement;
+                if (statement != null) {
+                  rogueStatementQueue
+                      .add(new Tuple2<>(statement, Boolean.FALSE));
+                }
+                if (cause instanceof ActionTimeoutException
+                    || cause instanceof InterruptedException) {
+                  writeTimeoutsCounter.inc();
+                } else {
+                  writeExceptionsCounter.inc();
+                }
+              } finally {
+                event.fail(e);
+              }
+            }
+          }
+        }).toBlocking().value();
   }
 
-  private Timer getReadTimerFor(ActionContext context) {
-    if (context == null || context.entry == null) {
+  private Timer getReadTimerFor(String name) {
+    if (name == null || name.isEmpty()) {
       return null;
     }
-
-    final String name = context.entry.getActionClass().getCanonicalName();
 
     Timer timer = readTimerMap.get(name);
 
@@ -1708,12 +1638,10 @@ public class SqlDatabase extends AbstractIdleService {
     return timer;
   }
 
-  private Timer getWriteTimerFor(ActionContext context) {
-    if (context == null || context.entry == null) {
+  private Timer getWriteTimerFor(String name) {
+    if (name == null || name.isEmpty()) {
       return null;
     }
-
-    final String name = context.entry.getActionClass().getCanonicalName();
 
     Timer timer = writeTimerMap.get(name);
 
@@ -1744,11 +1672,10 @@ public class SqlDatabase extends AbstractIdleService {
    * @param <T>
    * @return
    */
-  protected <T> T executeRead(ReadAction<T> action) {
+  protected <T> T executeRead(SqlAction action, SqlReadCallable<T> task) {
     final Connection connection;
-    final ActionContext context = action.context;
 
-    final Timer contextTimer = getReadTimerFor(context);
+    final Timer contextTimer = getReadTimerFor(action.callingActionName);
     final Timer.Context contextTimerContext = contextTimer != null
         ? contextTimer.time()
         : null;
@@ -1767,7 +1694,7 @@ public class SqlDatabase extends AbstractIdleService {
       final ConnectionProvider connectionProvider = new DefaultConnectionProvider(connection);
       final Configuration configuration = readConfiguration.derive(connectionProvider);
 
-      if (context != null) {
+      if (action != null) {
         configuration.data(ACTION_KEY, action);
       }
 
@@ -1775,14 +1702,14 @@ public class SqlDatabase extends AbstractIdleService {
         final T result = DSL.using(configuration).connectionResult(new ConnectionCallable<T>() {
 
           public T run(Connection connection) throws Exception {
-            return action.callback
+            return task
                 .call(new SqlSession(SqlDatabase.this, configuration, connection));
           }
         });
 
         return result;
       } finally {
-        if (context != null) {
+        if (action != null) {
           configuration.data().remove(ACTION_KEY);
         }
       }
@@ -1804,13 +1731,11 @@ public class SqlDatabase extends AbstractIdleService {
    * @param <T>
    * @return
    */
-  protected <T> SqlResult<T> executeWrite(WriteAction<T> action) {
-    final AtomicReference<SqlResult<T>> r = new AtomicReference<>();
+  protected <T> move.sql.SqlResult<T> executeWrite(SqlAction action, SqlCallable<T> task) {
+    final AtomicReference<move.sql.SqlResult<T>> r = new AtomicReference<>();
     final Connection connection;
 
-    final ActionContext context = action.context;
-
-    final Timer contextTimer = getWriteTimerFor(context);
+    final Timer contextTimer = getWriteTimerFor(action.callingActionName);
     final Timer.Context contextTimerContext = contextTimer != null
         ? contextTimer.time()
         : null;
@@ -1831,7 +1756,7 @@ public class SqlDatabase extends AbstractIdleService {
       final Configuration configuration = this.configuration.derive(connectionProvider);
       configuration.set(new ThreadLocalTransactionProvider(connectionProvider));
 
-      if (context != null) {
+      if (action != null) {
         configuration.data(ACTION_KEY, action);
       }
 
@@ -1843,16 +1768,16 @@ public class SqlDatabase extends AbstractIdleService {
 
           try {
             // Execute the code.
-            SqlResult<T> result = null;
+            move.sql.SqlResult<T> result = null;
 
             try {
-              result = action.callback.call(session);
+              result = task.call(session);
 
               if (result == null) {
-                result = SqlResult.commit();
+                result = move.sql.SqlResult.commit();
               }
             } catch (Throwable e) {
-              result = SqlResult.rollback(null, e);
+              result = move.sql.SqlResult.rollback(null, e);
             }
 
             r.set(result);
@@ -1868,7 +1793,7 @@ public class SqlDatabase extends AbstractIdleService {
           }
         });
       } finally {
-        if (context != null && configuration.data() != null) {
+        if (action != null && configuration.data() != null) {
           configuration.data().remove(ACTION_KEY);
         }
       }
@@ -2166,94 +2091,65 @@ public class SqlDatabase extends AbstractIdleService {
     }
   }
 
-  /**
-   * @param <T>
-   */
-  private abstract class SqlAction<T> extends HystrixObservableCommand<T> {
+  public static class ReadRequest<T> {
 
-    private final ActionContext context;
-    protected volatile Statement currentStatement;
+    public final SqlDatabase database;
+    public final SqlReadCallable<T> lambda;
 
-    public SqlAction(Setter setter, ActionContext context) {
-      super(setter);
-      this.context = context;
+    public ReadRequest(SqlDatabase database, SqlReadCallable<T> lambda) {
+      this.database = database;
+      this.lambda = lambda;
     }
   }
 
-  /**
-   * @param <T>
-   */
-  private final class ReadAction<T> extends SqlAction<T> {
+  public static class WriteRequest<T> {
 
-    private final SqlReadCallable<T> callback;
-    private final ActionContext context;
+    public final SqlDatabase database;
+    public final SqlCallable<T> lambda;
 
-    public ReadAction(Setter setter, ActionContext context, SqlReadCallable<T> callback) {
-      super(setter, context);
-      this.callback = callback;
-      this.context = context;
+    public WriteRequest(SqlDatabase database, SqlCallable<T> lambda) {
+      this.database = database;
+      this.lambda = lambda;
     }
+  }
 
+  public static final class SqlReply<T> {
 
-    protected Observable<T> construct() {
-      return readExecutor.rxExecuteBlocking(new Handler<io.vertx.rxjava.core.Future<T>>() {
+    public final T value;
 
-        public void handle(io.vertx.rxjava.core.Future<T> future) {
-          try {
-            future.complete(executeRead(ReadAction.this));
-          } catch (Exception e) {
-            final Statement statement = currentStatement;
-            if (statement != null) {
-              rogueStatementQueue.add(new Tuple2<>(statement, Boolean.FALSE));
-            }
-            if (e instanceof HystrixTimeoutException || e instanceof InterruptedException) {
-              readTimeoutsCounter.inc();
-            } else {
-              readExceptionsCounter.inc();
-            }
-            future.fail(e);
+    public SqlReply(T value) {
+      this.value = value;
+    }
+  }
+
+  public static class SqlAction {
+
+    MoveEventLoop eventLoop;
+    String callingActionName = "";
+    Statement currentStatement;
+    AbstractJobAction job;
+    long timeoutMillis;
+    long deadline;
+
+    public SqlAction(MoveEventLoop eventLoop, long timeoutMillis) {
+      this.eventLoop = eventLoop;
+
+      if (eventLoop != null) {
+        this.job = eventLoop.getJob();
+        if (job != null) {
+          callingActionName = job.getProvider().getActionClass().getCanonicalName();
+
+          if (job.getDeadline() > 0L) {
+            timeoutMillis = Math.min(
+                (job.getDeadline() * MoveEventLoop.TICK_MS) - System.currentTimeMillis(),
+                timeoutMillis
+            );
           }
         }
-      }).toObservable();
-    }
-  }
+      }
 
-  /**
-   * @param <T>
-   */
-  private final class WriteAction<T> extends SqlAction<SqlResult<T>> {
-
-    private final SqlCallable<T> callback;
-    private final ActionContext context;
-
-    public WriteAction(Setter setter, ActionContext context, SqlCallable<T> callback) {
-      super(setter, context);
-      this.callback = callback;
-      this.context = context;
-    }
-
-
-    protected Observable<SqlResult<T>> construct() {
-      return writeExecutor
-          .rxExecuteBlocking(new Handler<io.vertx.rxjava.core.Future<SqlResult<T>>>() {
-
-            public void handle(io.vertx.rxjava.core.Future<SqlResult<T>> future) {
-              try {
-                future.complete(executeWrite(WriteAction.this));
-              } catch (Exception e) {
-                final Statement statement = currentStatement;
-                if (statement != null) {
-                  rogueStatementQueue.add(new Tuple2<>(statement, Boolean.TRUE));
-                }
-                if (e instanceof HystrixTimeoutException || e instanceof InterruptedException) {
-                  writeTimeoutsCounter.inc();
-                } else {
-                  writeExceptionsCounter.inc();
-                }
-                future.fail(e);
-              }
-            }
-          }).toObservable();
+      this.timeoutMillis = timeoutMillis;
+      this.deadline = System.currentTimeMillis() + timeoutMillis;
     }
   }
 
@@ -2292,13 +2188,12 @@ public class SqlDatabase extends AbstractIdleService {
           int queryTimeout = ctx.statement().getQueryTimeout();
           final Object actionObj = ctx.configuration().data(ACTION_KEY);
 
-          if (actionObj != null && actionObj instanceof SqlAction) {
+          if (actionObj != null && actionObj instanceof AbstractJobAction) {
             final SqlAction action = (SqlAction) actionObj;
             action.currentStatement = ctx.statement();
-            final ActionContext actionContext = action.context;
 
-            if (actionContext != null) {
-              int timeLeft = (int) (actionContext.timesOutAt - System.currentTimeMillis());
+            if (action.deadline > 0) {
+              int timeLeft = (int) (action.deadline - System.currentTimeMillis());
 
               if (timeLeft <= 1000) {
                 queryTimeout = 1;
@@ -2364,8 +2259,8 @@ public class SqlDatabase extends AbstractIdleService {
   }
 
   /**
-   * Cleans rogue NuoDB JDBC Statements.
-   * Calls the SQL "KILL STATEMENT connid ? handle ? count -1" as used by
+   * Cleans rogue NuoDB JDBC Statements. Calls the SQL "KILL STATEMENT connid ? handle ? count -1"
+   * as used by
    */
   private final class NuoDBStatementCleaner extends AbstractExecutionThreadService {
 

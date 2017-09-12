@@ -9,9 +9,12 @@ import kotlinx.coroutines.experimental.channels.ActorScope
 import kotlinx.coroutines.experimental.channels.Channel
 import kotlinx.coroutines.experimental.rx2.asSingle
 import kotlinx.coroutines.experimental.selects.SelectClause1
+import move.threading.WorkerPool
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
+import java.util.function.Consumer
+import java.util.function.Supplier
 import kotlin.coroutines.experimental.AbstractCoroutineContextElement
 import kotlin.coroutines.experimental.Continuation
 import kotlin.coroutines.experimental.ContinuationInterceptor
@@ -28,23 +31,6 @@ class ActionTimeoutException(val action: JobAction<*, *>) : CancellationExceptio
    override fun toString(): String {
       return "ActionTimeout [${action.javaClass.canonicalName}]"
    }
-}
-
-interface IActionContext {
-   //   val head: Action<*, *>
-//   val startedAt: Long
-   val deadline: Long
-//   val startedBy: Action<*, *>
-//   val current: Action<*, *>
-//   val currentStartedAt: Long
-//   val currentDeadline: Long
-//
-//   val tokenValue: String
-//
-//   /**
-//    *
-//    */
-//   fun isHead(action: Action<*, *>) = head == action
 }
 
 /**
@@ -78,6 +64,10 @@ object EmptyJobAction : JobAction<Unit, Unit>(false) {
    }
 
    override fun getCompleted() {
+
+   }
+
+   override fun doTimeout() {
 
    }
 
@@ -209,6 +199,7 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
    override val hasCancellingState: Boolean get() = true
 
    var starting = false
+   var currentContinuation: Continuation<*>? = null
 
    /**
     * Launches action as the root coroutine.
@@ -233,7 +224,7 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
          starting = true
          CoroutineStart.DEFAULT({ internalExecute() }, this, this)
       } else {
-         val parent = eventLoop.currentJob
+         val parent = eventLoop.job
 
          if (parent == null) {
             starting = true
@@ -295,7 +286,7 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
          // Ignore the current job in the event loop.
          return wrapInternalExecute()
       } else {
-         val parent = eventLoop.currentJob
+         val parent = eventLoop.job
 
          if (parent == null) {
             return wrapInternalExecute()
@@ -311,15 +302,28 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
             }
 
             this.parent = parent
-//            _parent = WeakReference(parent)
-
             return wrapInternalExecute()
          }
       }
    }
 
-   internal fun doTimeout() {
-      cancel(ActionTimeoutException(this))
+   override fun doTimeout() {
+      val exception = ActionTimeoutException(this)
+      try {
+         cancel(exception)
+      } finally {
+         currentContinuation?.resumeWithException(exception)
+      }
+   }
+
+   suspend fun <T> suspendAction(supplier: java.util.function.Function<CancellableContinuation<T>, T>): T {
+      return suspendCancellableCoroutine { cont ->
+         try {
+            cont.resume(supplier.apply(cont))
+         } catch (e: Throwable) {
+            cont.resumeWithException(e)
+         }
+      }
    }
 
    /**
@@ -335,30 +339,46 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
 
          if (MoveEventLoopGroup.currentEventLoop !== eventLoop) {
             eventLoop.execute {
-               eventLoop.currentJob = job
+               //               val previousJob = job
                try {
+                  eventLoop.job = job
                   continuation.resume(value)
                } finally {
-                  eventLoop.currentJob = job.parent
+//                  eventLoop.job = previousJob
                }
             }
          } else {
-            eventLoop.currentJob = job
+//            val previousJob = eventLoop.job
             try {
+               eventLoop.job = job
                continuation.resume(value)
             } finally {
-               eventLoop.currentJob = job.parent
+//               eventLoop.job = previousJob
             }
          }
       }
 
       override fun resumeWithException(exception: Throwable) {
+         val job = action ?: this@AbstractJobAction
+
          if (Vertx.currentContext() !== eventLoop) {
             eventLoop.execute {
-               continuation.resumeWithException(exception)
+               //               val previousJob = eventLoop.job
+               try {
+                  eventLoop.job = job
+                  continuation.resumeWithException(exception)
+               } finally {
+//                  eventLoop.job = previousJob
+               }
             }
          } else {
-            continuation.resumeWithException(exception)
+//            val previousJob = eventLoop.job
+            try {
+               eventLoop.job = job
+               continuation.resumeWithException(exception)
+            } finally {
+//               eventLoop.job = previousJob
+            }
          }
       }
    }
@@ -371,7 +391,19 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
          starting = false
          return continuation
       }
-      return ActionContinuation(eventLoop.currentJob, continuation)
+
+//      val job = if (continuation.context is AbstractJobAction<*, *, *, *>) {
+//         continuation.context as AbstractJobAction<*, *, *, *>
+//      } else {
+//         eventLoop.job
+//      }
+
+      val job = eventLoop.job
+
+      val actionContinuation = ActionContinuation(job, continuation)
+      job?.currentContinuation = actionContinuation
+
+      return actionContinuation
    }
 
    /**
@@ -380,16 +412,10 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
    internal suspend fun wrapInternalExecute(): OUT {
       try {
          val res = internalExecute()
-//         afterInternalCompletion(null)
-//         parent = null
-         tryUpdateState(state!!, res)
-         afterCompletion(state!!, 0)
-//         updateState(state!!, res, MODE_ATOMIC_DEFAULT)
+         updateState(state!!, res, MODE_ATOMIC_DEFAULT)
          return res
       } catch (e: Throwable) {
-//         parent = null
          updateState(state!!, CompletedExceptionally(e), MODE_ATOMIC_DEFAULT)
-//         afterInternalCompletion(e)
          throw e
       }
    }
@@ -401,9 +427,8 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
       var rep: OUT? = null
       var state = provider.state()
 
-      val previousJob = eventLoop.currentJob
       // Set current job.
-      eventLoop.currentJob = this
+      eventLoop.job = this
 
       try {
          metrics?.begin = System.currentTimeMillis()
@@ -423,7 +448,6 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
       } catch (e: Throwable) {
          handle?.dispose()
          handle = null
-         eventLoop.currentJob = previousJob
          throw e
       }
 
@@ -439,16 +463,16 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
 
                rep = execute()
                provider.reset()
+               eventLoop.job = this
                rep = interceptReply(rep)
-               eventLoop.currentJob = previousJob
-               rep
+               eventLoop.job = this
             }
             else -> {
                // Execute.
                rep = execute()
+               eventLoop.job = this
                rep = interceptReply(rep)
-               eventLoop.currentJob = previousJob
-               rep
+               eventLoop.job = this
             }
          }
       } catch (e: Throwable) {
@@ -466,26 +490,25 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
                      metrics?.fallbackSucceed = true
                      handle?.dispose()
                      handle = null
-                     eventLoop.currentJob = previousJob
-                     rep
+                     eventLoop.job = this
                   } else {
                      metrics?.fallbackFailed = true
                      handle?.dispose()
                      handle = null
-                     eventLoop.currentJob = previousJob
+                     eventLoop.job = this
                      throw e
                   }
                } catch (e2: Throwable) {
                   provider.incrementFailures()
                   handle?.dispose()
                   handle = null
-                  eventLoop.currentJob = previousJob
+                  eventLoop.job = this
                   throw e2
                }
             } else if (e is ActionTimeoutException || cause is ActionTimeoutException) {
                handle?.dispose()
                handle = null
-               eventLoop.currentJob = previousJob
+               eventLoop.job = this
                throw e
             } else {
                // Ensure fallback is enabled.
@@ -508,7 +531,7 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
                      } else {
                         handle?.dispose()
                         handle = null
-                        eventLoop.currentJob = previousJob
+                        eventLoop.job = this
                         throw e
                      }
 
@@ -517,7 +540,7 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
 
                   // Ensure Reply is not null
                   if (rep == null) {
-                     eventLoop.currentJob = previousJob
+                     eventLoop.job = this
                      throw NullPointerException("Reply cannot be null")
                   } else {
                      return interceptReply(rep)
@@ -525,14 +548,14 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
                } else {
                   handle?.dispose()
                   handle = null
-                  eventLoop.currentJob = previousJob
+                  eventLoop.job = this
                   throw e
                }
             }
          } catch (e: Throwable) {
             handle?.dispose()
             handle = null
-            eventLoop.currentJob = previousJob
+            eventLoop.job = this
             throw e
          }
       }
@@ -566,7 +589,7 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
    /**
     *
     */
-   protected suspend open fun shouldFallback(caught: Throwable, cause: Throwable): Boolean {
+   protected open fun shouldFallback(caught: Throwable, cause: Throwable): Boolean {
       return when (cause) {
          is TimeoutException -> false
          else -> false
@@ -596,28 +619,47 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
     */
    protected suspend fun <T> blocking(block: suspend () -> T): T =
       suspendCancellableCoroutine { cont ->
-         provider.vertx.executeBlocking<T>(
-            {
-               metrics?.blockingBegin = System.currentTimeMillis()
-               try {
-                  val result = runBlocking { block.invoke() }
-                  if (metrics != null)
-                     metrics!!.blocking += (System.currentTimeMillis() - metrics!!.blockingBegin)
-                  it.complete(result)
-               } catch (e: Throwable) {
-                  if (metrics != null)
-                     metrics!!.blocking += (System.currentTimeMillis() - metrics!!.blockingBegin)
-                  it.fail(e)
-               }
-            },
-            {
-               if (it.failed()) {
-                  cont.resumeWithException(it.cause())
-               } else {
-                  cont.resume(it.result())
-               }
+         provider.vertx.executeBlocking<T>({
+            metrics?.blockingBegin()
+            try {
+               val result = runBlocking { block.invoke() }
+               metrics?.blockingEnd()
+               eventLoop.execute { it.complete(result) }
+            } catch (e: Throwable) {
+               metrics?.blockingEnd()
+               eventLoop.execute { it.fail(e) }
             }
-         )
+         }, {
+            if (it.failed()) {
+               eventLoop.execute { cont.resumeWithException(it.cause()) }
+            } else {
+               eventLoop.execute { cont.resume(it.result()) }
+            }
+         })
+      }
+
+   /**
+    *
+    */
+   protected suspend fun <T> javaBlocking(block: Supplier<T>): T =
+      suspendCancellableCoroutine { cont ->
+         provider.vertx.executeBlocking<T>({
+            metrics?.blockingBegin()
+            try {
+               val result = runBlocking { block.get() }
+               metrics?.blockingEnd()
+               eventLoop.execute { it.complete(result) }
+            } catch (e: Throwable) {
+               metrics?.blockingEnd()
+               eventLoop.execute { it.fail(e) }
+            }
+         }, {
+            if (it.failed()) {
+               eventLoop.execute { cont.resumeWithException(it.cause()) }
+            } else {
+               eventLoop.execute { cont.resume(it.result()) }
+            }
+         })
       }
 
    /**
@@ -635,7 +677,7 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
       suspendCancellableCoroutine { cont ->
          try {
             executor.execute {
-               metrics?.blockingBegin = System.currentTimeMillis()
+               metrics?.blockingBegin()
                try {
                   val result = runBlocking {
                      try {
@@ -644,14 +686,47 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
                         throw e
                      }
                   }
-                  if (metrics != null)
-                     metrics!!.blocking += (System.currentTimeMillis() - metrics!!.blockingBegin)
-
-                  result
+                  metrics?.blockingEnd()
+                  eventLoop.execute {
+                     cont.resume(result)
+                  }
                } catch (e: Throwable) {
-                  if (metrics != null)
-                     metrics!!.blocking += (System.currentTimeMillis() - metrics!!.blockingBegin)
-                  cont.resumeWithException(e)
+                  metrics?.blockingEnd()
+                  eventLoop.execute {
+                     cont.resumeWithException(e)
+                  }
+               }
+            }
+         } catch (e: Throwable) {
+            cont.resumeWithException(e)
+         }
+      }
+
+   /**
+    *
+    */
+   protected suspend fun <T> javaBlocking(executor: ExecutorService, block: Supplier<T>): T =
+      suspendCancellableCoroutine { cont ->
+         try {
+            executor.execute {
+               metrics?.blockingBegin()
+               try {
+                  val result = runBlocking {
+                     try {
+                        block.get()
+                     } catch (e: Throwable) {
+                        throw e
+                     }
+                  }
+                  metrics?.blockingEnd()
+                  eventLoop.execute {
+                     cont.resume(result)
+                  }
+               } catch (e: Throwable) {
+                  metrics?.blockingEnd()
+                  eventLoop.execute {
+                     cont.resumeWithException(e)
+                  }
                }
             }
          } catch (e: Throwable) {
@@ -660,8 +735,56 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
       }
 
    protected suspend fun <T> rxBlocking(executor: ExecutorService, block: suspend () -> T): Deferred<T> =
-      async(coroutineContext) {
+      async(context) {
          blocking(executor, block)
+      }
+
+   /**
+    *
+    */
+   protected suspend fun <T> blocking(pool: WorkerPool, block: suspend () -> T): T =
+      suspendCancellableCoroutine { cont ->
+         pool.executeBlocking<T>({
+            metrics?.blockingBegin()
+            try {
+               val result = runBlocking { block.invoke() }
+               metrics?.blockingEnd()
+               eventLoop.execute { it.complete(result) }
+            } catch (e: Throwable) {
+               metrics?.blockingEnd()
+               eventLoop.execute { it.fail(e) }
+            }
+         }, {
+            if (it.failed()) {
+               eventLoop.execute { cont.resumeWithException(it.cause()) }
+            } else {
+               eventLoop.execute { cont.resume(it.result()) }
+            }
+         })
+      }
+
+   /**
+    *
+    */
+   protected suspend fun <T> javaBlocking(pool: WorkerPool, block: Supplier<T>): T =
+      suspendCancellableCoroutine { cont ->
+         pool.executeBlocking<T>({
+            metrics?.blockingBegin()
+            try {
+               val result = runBlocking { block.get() }
+               metrics?.blockingEnd()
+               eventLoop.execute { it.complete(result) }
+            } catch (e: Throwable) {
+               metrics?.blockingEnd()
+               eventLoop.execute { it.fail(e) }
+            }
+         }, {
+            if (it.failed()) {
+               eventLoop.execute { cont.resumeWithException(it.cause()) }
+            } else {
+               eventLoop.execute { cont.resume(it.result()) }
+            }
+         })
       }
 
    suspend fun <T> tryWhile(deferred: suspend () -> T, block: (Throwable) -> Boolean): T {
@@ -740,6 +863,14 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
       get() = this as SelectClause1<OUT>
 
 
+   override fun onCancellation() {
+      super.onCancellation()
+   }
+
+   override fun onParentCancellation(cause: Throwable?) {
+      super.onParentCancellation(cause)
+   }
+
    /*******************************************************************
     * Lifted FROM AbstractCoroutine!!!
     *******************************************************************/
@@ -801,21 +932,20 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
 //   }
 
    override fun afterCompletion(state: Any?, mode: Int) {
+      // !!! Important !!! Ensure we clean up reference to Parent
+      eventLoop.job = parent
+      parent = null
+
       if (handle != null) {
          handle?.dispose()
          handle = null
       }
 
-      // !!! Important !!! Ensure we clean up reference to Parent
-      parent = null
-
       if (metrics != null) {
          // Capture end tick.
-         metrics?.endTick = eventLoop.epochTick
-
-         val duration = System.currentTimeMillis() - metrics!!.begin
-         if (duration > 0)
-            provider.durationMs.add(duration)
+         val end = metrics?.end() ?: 0
+         if (metrics?.tick == false)
+            provider.durationMs.add(end)
       }
 
       if (state is CompletedExceptionally) {
@@ -831,7 +961,8 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
       }
    }
 
-   class ActionMetrics {
+   inner class ActionMetrics {
+      var tick: Boolean = true
       // Metrics.
       var begin: Long = 0
       var beginTick: Long = 0
@@ -848,6 +979,23 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
       var fallbackSucceed = false
       var fallbackFailed = false
       var failed = false
+
+      fun begin() {
+         begin = if (tick) eventLoop.epochTick else System.currentTimeMillis()
+      }
+
+      fun end() = if (tick) eventLoop.epochTick - begin else System.currentTimeMillis() - begin
+
+      fun blockingBegin() {
+         blockingBegin = if (tick) eventLoop.epochTick else System.currentTimeMillis()
+      }
+
+      fun blockingEnd() {
+         blocking += if (tick)
+            eventLoop.epochTick - blockingBegin
+         else
+            System.currentTimeMillis() - blockingBegin
+      }
    }
 }
 

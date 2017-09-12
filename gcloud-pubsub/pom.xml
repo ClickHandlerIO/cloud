@@ -26,7 +26,7 @@
     <!--</dependency>-->
     <dependency>
       <groupId>io.clickhandler</groupId>
-      <artifactId>common</artifactId>
+      <artifactId>action</artifactId>
     </dependency>
 
     <dependency>

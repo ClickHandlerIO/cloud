@@ -1,7 +1,6 @@
 package move.sql
 
 import kotlinx.coroutines.experimental.rx1.await
-import move.rx.await
 import org.jooq.Record
 import rx.Single
 
@@ -207,38 +206,32 @@ class SqlAdapter(val sql: SqlDatabase) {
 
    suspend fun <T1, T2> read(block1: (SqlSession) -> T1,
                              block2: (SqlSession) -> T2): STuple2<T1, T2> {
-      return await(
-         safeRead(block1),
-         safeRead(block2)
-      ).let {
-         STuple2(it._1.value, it._2.value)
-      }
+      return STuple2(
+         safeRead(block1).await().value,
+         safeRead(block2).await().value
+      )
    }
 
    suspend fun <T1, T2, T3> read(block1: (SqlSession) -> T1,
                                  block2: (SqlSession) -> T2,
                                  block3: (SqlSession) -> T3): STuple3<T1, T2, T3> {
-      return await(
-         safeRead(block1),
-         safeRead(block2),
-         safeRead(block3)
-      ).let {
-         STuple3(it._1.value, it._2.value, it._3.value)
-      }
+      return STuple3(
+         safeRead(block1).await().value,
+         safeRead(block2).await().value,
+         safeRead(block3).await().value
+      )
    }
 
    suspend fun <T1, T2, T3, T4> read(block1: (SqlSession) -> T1,
                                      block2: (SqlSession) -> T2,
                                      block3: (SqlSession) -> T3,
                                      block4: (SqlSession) -> T4): STuple4<T1, T2, T3, T4> {
-      return await(
-         safeRead(block1),
-         safeRead(block2),
-         safeRead(block3),
-         safeRead(block4)
-      ).let {
-         STuple4(it._1.value, it._2.value, it._3.value, it._4.value)
-      }
+      return STuple4(
+         safeRead(block1).await().value,
+         safeRead(block2).await().value,
+         safeRead(block3).await().value,
+         safeRead(block4).await().value
+      )
    }
 
    suspend fun <T1, T2, T3, T4, T5> read(block1: (SqlSession) -> T1,
@@ -246,15 +239,13 @@ class SqlAdapter(val sql: SqlDatabase) {
                                          block3: (SqlSession) -> T3,
                                          block4: (SqlSession) -> T4,
                                          block5: (SqlSession) -> T5): STuple5<T1, T2, T3, T4, T5> {
-      return await(
-         safeRead(block1),
-         safeRead(block2),
-         safeRead(block3),
-         safeRead(block4),
-         safeRead(block5)
-      ).let {
-         STuple5(it._1.value, it._2.value, it._3.value, it._4.value, it._5.value)
-      }
+      return STuple5(
+         safeRead(block1).await().value,
+         safeRead(block2).await().value,
+         safeRead(block3).await().value,
+         safeRead(block4).await().value,
+         safeRead(block5).await().value
+      )
    }
 
    suspend fun <T1, T2, T3, T4, T5, T6> read(block1: (SqlSession) -> T1,
@@ -263,16 +254,14 @@ class SqlAdapter(val sql: SqlDatabase) {
                                              block4: (SqlSession) -> T4,
                                              block5: (SqlSession) -> T5,
                                              block6: (SqlSession) -> T6): STuple6<T1, T2, T3, T4, T5, T6> {
-      return await(
-         safeRead(block1),
-         safeRead(block2),
-         safeRead(block3),
-         safeRead(block4),
-         safeRead(block5),
-         safeRead(block6)
-      ).let {
-         STuple6(it._1.value, it._2.value, it._3.value, it._4.value, it._5.value, it._6.value)
-      }
+      return STuple6(
+         safeRead(block1).await().value,
+         safeRead(block2).await().value,
+         safeRead(block3).await().value,
+         safeRead(block4).await().value,
+         safeRead(block5).await().value,
+         safeRead(block6).await().value
+      )
    }
 
    suspend fun <T1, T2, T3, T4, T5, T6, T7> read(block1: (SqlSession) -> T1,
@@ -282,17 +271,15 @@ class SqlAdapter(val sql: SqlDatabase) {
                                                  block5: (SqlSession) -> T5,
                                                  block6: (SqlSession) -> T6,
                                                  block7: (SqlSession) -> T7): STuple7<T1, T2, T3, T4, T5, T6, T7> {
-      return await(
-         safeRead(block1),
-         safeRead(block2),
-         safeRead(block3),
-         safeRead(block4),
-         safeRead(block5),
-         safeRead(block6),
-         safeRead(block7)
-      ).let {
-         STuple7(it._1.value, it._2.value, it._3.value, it._4.value, it._5.value, it._6.value, it._7.value)
-      }
+      return STuple7(
+         safeRead(block1).await().value,
+         safeRead(block2).await().value,
+         safeRead(block3).await().value,
+         safeRead(block4).await().value,
+         safeRead(block5).await().value,
+         safeRead(block6).await().value,
+         safeRead(block7).await().value
+      )
    }
 
    suspend fun <T1, T2, T3, T4, T5, T6, T7, T8> read(block1: (SqlSession) -> T1,
@@ -303,18 +290,16 @@ class SqlAdapter(val sql: SqlDatabase) {
                                                      block6: (SqlSession) -> T6,
                                                      block7: (SqlSession) -> T7,
                                                      block8: (SqlSession) -> T8): STuple8<T1, T2, T3, T4, T5, T6, T7, T8> {
-      return await(
-         safeRead(block1),
-         safeRead(block2),
-         safeRead(block3),
-         safeRead(block4),
-         safeRead(block5),
-         safeRead(block6),
-         safeRead(block7),
-         safeRead(block8)
-      ).let {
-         STuple8(it._1.value, it._2.value, it._3.value, it._4.value, it._5.value, it._6.value, it._7.value, it._8.value)
-      }
+      return STuple8(
+         safeRead(block1).await().value,
+         safeRead(block2).await().value,
+         safeRead(block3).await().value,
+         safeRead(block4).await().value,
+         safeRead(block5).await().value,
+         safeRead(block6).await().value,
+         safeRead(block7).await().value,
+         safeRead(block8).await().value
+      )
    }
 
    suspend fun <T1, T2, T3, T4, T5, T6, T7, T8, T9> read(block1: (SqlSession) -> T1,
@@ -326,19 +311,17 @@ class SqlAdapter(val sql: SqlDatabase) {
                                                          block7: (SqlSession) -> T7,
                                                          block8: (SqlSession) -> T8,
                                                          block9: (SqlSession) -> T9): STuple9<T1, T2, T3, T4, T5, T6, T7, T8, T9> {
-      return await(
-         safeRead(block1),
-         safeRead(block2),
-         safeRead(block3),
-         safeRead(block4),
-         safeRead(block5),
-         safeRead(block6),
-         safeRead(block7),
-         safeRead(block8),
-         safeRead(block9)
-      ).let {
-         STuple9(it._1.value, it._2.value, it._3.value, it._4.value, it._5.value, it._6.value, it._7.value, it._8.value, it._9.value)
-      }
+      return STuple9(
+         safeRead(block1).await().value,
+         safeRead(block2).await().value,
+         safeRead(block3).await().value,
+         safeRead(block4).await().value,
+         safeRead(block5).await().value,
+         safeRead(block6).await().value,
+         safeRead(block7).await().value,
+         safeRead(block8).await().value,
+         safeRead(block9).await().value
+      )
    }
 
    suspend fun <T> write(block: (SqlSession) -> SqlResult<T>): SqlResult<T> {

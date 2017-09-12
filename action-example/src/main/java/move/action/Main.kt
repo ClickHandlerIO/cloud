@@ -25,8 +25,8 @@ object App : MoveApp<AppComponent>() {
    }
 
    suspend override fun startDaemons() {
-      val passes = 20
-      val parallelism = 6
+      val passes = 100
+      val parallelism = Runtime.getRuntime().availableProcessors() * 2
       val statsInternval = 1000L
       val invocationsPerPass = 1_000_000
       val actionsPerInvocation = 2
@@ -124,7 +124,7 @@ object App : MoveApp<AppComponent>() {
       for (c in 1..passes) {
          var list = mutableListOf<Single<Unit>>()
          val start = System.currentTimeMillis()
-         for (t in 1..parallelism) {
+         for (t in 0..parallelism-1) {
             val single = Single.create<Unit> { subscriber ->
                val eventLoop = eventLoopGroup.executors[t]
                eventLoop.runOnContext {

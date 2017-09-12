@@ -16,6 +16,9 @@ interface MoveComponent {
 
 internal var _MOVE: MoveApp<MoveComponent>? = null
 
+val NATIVE_TRANSPORT
+   get() = _MOVE?.nativeTransport ?: true
+
 val MOVE
    get () = _MOVE!!
 
@@ -26,13 +29,13 @@ val ROLE
    get() = MOVE.role
 
 val ROLE_WORKER
-   get() = when(MOVE.role) {
+   get() = when (MOVE.role) {
       NodeRole.WORKER, NodeRole.ALL -> true
       else -> false
    }
 
 val ROLE_REMOTE
-   get() = when(MOVE.role) {
+   get() = when (MOVE.role) {
       NodeRole.REMOTE, NodeRole.ALL -> true
       else -> false
    }
@@ -91,6 +94,13 @@ abstract class MoveApp<G : MoveComponent> {
       .setRequired(false)
       .setDefaultValue(NUID.nextGlobal())
 
+   open val OPTION_NATIVE_TRANSPORT = Option()
+      .setLongName("native")
+      .setShortName("n")
+      .setDescription("Use Native transport 'epoll' or 'kqueue' if available")
+      .setRequired(false)
+      .setDefaultValue(NUID.nextGlobal())
+
    var nodeId: String = NUID.nextGlobal()
       get
       private set
@@ -110,6 +120,10 @@ abstract class MoveApp<G : MoveComponent> {
          NodeRole.WORKER
       else
          NodeRole.REMOTE
+
+   var nativeTransport: Boolean = true
+      get
+      private set
 
 
    lateinit var cli: CLI
@@ -278,12 +292,15 @@ abstract class MoveApp<G : MoveComponent> {
          if (mode == Mode.TEST) {
             options.eventLoopPoolSize = 1
             options.workerPoolSize = 1
-         } else
+         } else {
             options.eventLoopPoolSize =
                if (Runtime.getRuntime().availableProcessors() > 1)
                   2
                else
                   1
+
+            options.workerPoolSize = options.eventLoopPoolSize
+         }
 
          options.internalBlockingPoolSize = 1
          options.maxEventLoopExecuteTime = Long.MAX_VALUE

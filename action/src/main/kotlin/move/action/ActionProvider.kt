@@ -75,7 +75,6 @@ constructor(val vertx: Vertx, val actionProvider: Provider<A>) {
       }
    }
 
-
    init {
       init()
    }

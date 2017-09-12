@@ -131,16 +131,16 @@ http://www.w3.org/2001/XMLSchema-instance ">
 
   <modules>
     <module>action</module>
-    <module>action-sqs</module>
-    <module>action-pubsub</module>
+    <!--<module>action-sqs</module>-->
+    <!--<module>action-pubsub</module>-->
     <module>action-compiler</module>
-    <module>action-ignite</module>
+    <!--<module>action-ignite</module>-->
     <module>action-nats</module>
-    <module>gcloud-pubsub</module>
-    <module>gcloud-datastore</module>
+    <!--<module>gcloud-pubsub</module>-->
+    <!--<module>gcloud-datastore</module>-->
     <module>common</module>
     <module>remoting</module>
-    <module>remoting-web</module>
+    <!--<module>remoting-web</module>-->
     <module>sql</module>
     <module>action-example</module>
   </modules>
@@ -176,23 +176,23 @@ http://www.w3.org/2001/XMLSchema-instance ">
         <version>${project.version}</version>
       </dependency>
 
-      <dependency>
-        <groupId>io.clickhandler</groupId>
-        <artifactId>action-sqs</artifactId>
-        <version>${project.version}</version>
-      </dependency>
+      <!--<dependency>-->
+        <!--<groupId>io.clickhandler</groupId>-->
+        <!--<artifactId>action-sqs</artifactId>-->
+        <!--<version>${project.version}</version>-->
+      <!--</dependency>-->
 
-      <dependency>
-        <groupId>io.clickhandler</groupId>
-        <artifactId>action-pubsub</artifactId>
-        <version>${project.version}</version>
-      </dependency>
+      <!--<dependency>-->
+        <!--<groupId>io.clickhandler</groupId>-->
+        <!--<artifactId>action-pubsub</artifactId>-->
+        <!--<version>${project.version}</version>-->
+      <!--</dependency>-->
 
-      <dependency>
-        <groupId>io.clickhandler</groupId>
-        <artifactId>action-ignite</artifactId>
-        <version>${project.version}</version>
-      </dependency>
+      <!--<dependency>-->
+        <!--<groupId>io.clickhandler</groupId>-->
+        <!--<artifactId>action-ignite</artifactId>-->
+        <!--<version>${project.version}</version>-->
+      <!--</dependency>-->
 
       <dependency>
         <groupId>io.clickhandler</groupId>
@@ -200,17 +200,17 @@ http://www.w3.org/2001/XMLSchema-instance ">
         <version>${project.version}</version>
       </dependency>
 
-      <dependency>
-        <groupId>io.clickhandler</groupId>
-        <artifactId>gcloud-pubsub</artifactId>
-        <version>${project.version}</version>
-      </dependency>
+      <!--<dependency>-->
+        <!--<groupId>io.clickhandler</groupId>-->
+        <!--<artifactId>gcloud-pubsub</artifactId>-->
+        <!--<version>${project.version}</version>-->
+      <!--</dependency>-->
 
-      <dependency>
-        <groupId>io.clickhandler</groupId>
-        <artifactId>gcloud-datastore</artifactId>
-        <version>${project.version}</version>
-      </dependency>
+      <!--<dependency>-->
+        <!--<groupId>io.clickhandler</groupId>-->
+        <!--<artifactId>gcloud-datastore</artifactId>-->
+        <!--<version>${project.version}</version>-->
+      <!--</dependency>-->
 
       <dependency>
         <groupId>io.clickhandler</groupId>

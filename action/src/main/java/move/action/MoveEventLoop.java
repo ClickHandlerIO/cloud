@@ -90,7 +90,35 @@ public class MoveEventLoop extends ContextExt {
 
   private Timer nonTimedTimmer = new Timer();
 
-  AbstractJobAction<?, ?, ?, ?> currentJob;
+  AbstractJobAction<?, ?, ?, ?> job;
+
+  public long getEpoch() {
+    return epoch;
+  }
+
+  public long getEpochTick() {
+    return epochTick;
+  }
+
+  public long getTick() {
+    return tick;
+  }
+
+  public int getWheelIndex() {
+    return wheelIndex;
+  }
+
+  public long getMaxWheelEpoch() {
+    return maxWheelEpoch;
+  }
+
+  public long getMaxWheelEpochTick() {
+    return maxWheelEpochTick;
+  }
+
+  public AbstractJobAction<?, ?, ?, ?> getJob() {
+    return job;
+  }
 
   public MoveEventLoop(
       @NotNull EventLoopContext eventLoopDefault,
@@ -448,7 +476,7 @@ public class MoveEventLoop extends ContextExt {
 
       try {
         if (action.isActive()) {
-          action.cancel(new ActionTimeoutException(action));
+          action.doTimeout();
         }
       } finally {
         unlink();
@@ -540,7 +568,7 @@ public class MoveEventLoop extends ContextExt {
   }
 
   /**
-   * Singly linked list of TimerHandles.
+   * Doubly linked list of TimerHandles.
    */
   private class Timer extends TimerHandle {
 

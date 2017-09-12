@@ -18,6 +18,11 @@ package io.vertx.core.impl;
 
 import io.netty.channel.EventLoop;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.MultithreadEventLoopGroup;
+import io.netty.channel.epoll.Epoll;
+import io.netty.channel.epoll.EpollEventLoopGroup;
+import io.netty.channel.kqueue.KQueue;
+import io.netty.channel.kqueue.KQueueEventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.resolver.AddressResolverGroup;
 import io.netty.util.ResourceLeakDetector;
@@ -85,7 +90,6 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -124,10 +128,8 @@ public class VertxImpl implements VertxInternal, MetricsProvider {
   private final WorkerPool workerPool;
   private final WorkerPool internalBlockingPool;
   private final ThreadFactory eventLoopThreadFactory;
-  private final NioEventLoopGroup eventLoopGroup;
-  //  private final NioEventLoopGroupAffinity eventLoopGroup;
-  private final NioEventLoopGroup acceptorEventLoopGroup;
-  //  private final NioEventLoopGroupAffinity acceptorEventLoopGroup;
+  private final MultithreadEventLoopGroup eventLoopGroup;
+  private final MultithreadEventLoopGroup acceptorEventLoopGroup;
   private final BlockedThreadChecker checker;
   private final boolean haEnabled;
   private final AddressResolver addressResolver;
@@ -154,21 +156,52 @@ public class VertxImpl implements VertxInternal, MetricsProvider {
       log.warn(
           "You're already on a Vert.x context, are you sure you want to create a new Vertx instance?");
     }
+
     closeHooks = new CloseHooks(log);
     checker = new BlockedThreadChecker(options.getBlockedThreadCheckInterval(),
         options.getWarningExceptionTime());
+
     eventLoopThreadFactory = new VertxThreadFactory("move-eventloop-thread-", checker, false,
         options.getMaxEventLoopExecuteTime());
-    eventLoopGroup = new NioEventLoopGroup(options.getEventLoopPoolSize(), eventLoopThreadFactory);
-//    eventLoopGroup = new NioEventLoopGroupAffinity(options.getEventLoopPoolSize(), eventLoopThreadFactory);
-    eventLoopGroup.setIoRatio(NETTY_IO_RATIO);
     ThreadFactory acceptorEventLoopThreadFactory = new VertxThreadFactory("move-acceptor-thread-",
         checker, false, options.getMaxEventLoopExecuteTime());
-    // The acceptor event loop thread needs to be from a different pool otherwise can get lags in accepted connections
-    // under a lot of load
-    acceptorEventLoopGroup = new NioEventLoopGroup(1, acceptorEventLoopThreadFactory);
-//    acceptorEventLoopGroup = new NioEventLoopGroupAffinity(1, acceptorEventLoopThreadFactory);
-    acceptorEventLoopGroup.setIoRatio(100);
+
+    if (MoveAppKt.getNATIVE_TRANSPORT() && Epoll.isAvailable()) {
+      EpollEventLoopGroup epoll = new EpollEventLoopGroup(options.getEventLoopPoolSize(),
+          eventLoopThreadFactory);
+      epoll.setIoRatio(NETTY_IO_RATIO);
+      eventLoopGroup = epoll;
+
+      // The acceptor event loop thread needs to be from a different pool otherwise can get lags in accepted connections
+      // under a lot of load
+      final EpollEventLoopGroup acceptor = new EpollEventLoopGroup(1,
+          acceptorEventLoopThreadFactory);
+      acceptor.setIoRatio(100);
+      acceptorEventLoopGroup = acceptor;
+    } else if (MoveAppKt.getNATIVE_TRANSPORT() && KQueue.isAvailable()) {
+      KQueueEventLoopGroup kqueue = new KQueueEventLoopGroup(options.getEventLoopPoolSize(),
+          eventLoopThreadFactory);
+      kqueue.setIoRatio(NETTY_IO_RATIO);
+      eventLoopGroup = kqueue;
+
+      // The acceptor event loop thread needs to be from a different pool otherwise can get lags in accepted connections
+      // under a lot of load
+      final KQueueEventLoopGroup acceptor = new KQueueEventLoopGroup(1,
+          acceptorEventLoopThreadFactory);
+      acceptor.setIoRatio(100);
+      acceptorEventLoopGroup = acceptor;
+    } else {
+      final NioEventLoopGroup nio = new NioEventLoopGroup(options.getEventLoopPoolSize(),
+          eventLoopThreadFactory);
+      nio.setIoRatio(NETTY_IO_RATIO);
+      eventLoopGroup = nio;
+
+      // The acceptor event loop thread needs to be from a different pool otherwise can get lags in accepted connections
+      // under a lot of load
+      final NioEventLoopGroup acceptor = new NioEventLoopGroup(1, acceptorEventLoopThreadFactory);
+      acceptor.setIoRatio(100);
+      acceptorEventLoopGroup = acceptor;
+    }
 
     metrics = initialiseMetrics(options);
 
@@ -184,7 +217,8 @@ public class VertxImpl implements VertxInternal, MetricsProvider {
                 options.getMaxWorkerExecuteTime())
         );
 
-        internalBlockingExec = new ThreadPoolExecutor(0, options.getWorkerPoolSize(), 5L, TimeUnit.SECONDS,
+        internalBlockingExec = new ThreadPoolExecutor(0, options.getWorkerPoolSize(), 5L,
+            TimeUnit.SECONDS,
             new LinkedBlockingQueue<>(),
             new VertxThreadFactory("move-internal-blocking-", checker, true,
                 options.getMaxWorkerExecuteTime())
