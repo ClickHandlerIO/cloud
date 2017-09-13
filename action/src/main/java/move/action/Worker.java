@@ -47,6 +47,18 @@ public @interface Worker {
    *
    * @return
    */
+  boolean guarded() default true;
+
+  /**
+   *
+   * @return
+   */
+  String path() default "";
+
+  /**
+   *
+   * @return
+   */
   ActionVisibility visibility() default ActionVisibility.PUBLIC;
 
   /**

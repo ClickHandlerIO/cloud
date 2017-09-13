@@ -1,5 +1,11 @@
 package move.action
 
+import io.netty.bootstrap.ServerBootstrap
+import io.netty.channel.epoll.Epoll
+import io.netty.channel.epoll.EpollServerSocketChannel
+import io.netty.channel.kqueue.KQueue
+import io.netty.channel.kqueue.KQueueServerSocketChannel
+import io.netty.channel.socket.nio.NioServerSocketChannel
 import io.vertx.core.VertxOptions
 import io.vertx.core.cli.Argument
 import io.vertx.core.cli.Option
@@ -18,6 +24,16 @@ internal var _MOVE: MoveApp<MoveComponent>? = null
 
 val NATIVE_TRANSPORT
    get() = _MOVE?.nativeTransport ?: true
+
+fun setupNettyTransport(bootstrap: ServerBootstrap) {
+   if (NATIVE_TRANSPORT && Epoll.isAvailable()) {
+      bootstrap.channel(EpollServerSocketChannel::class.java)
+   } else if (NATIVE_TRANSPORT && KQueue.isAvailable()) {
+      bootstrap.channel(KQueueServerSocketChannel::class.java)
+   } else {
+      bootstrap.channel(NioServerSocketChannel::class.java)
+   }
+}
 
 val MOVE
    get () = _MOVE!!

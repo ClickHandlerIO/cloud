@@ -1,19 +1,18 @@
 package move.action
 
 import com.google.common.base.Throwables
-import io.reactivex.Single
 import io.vertx.core.Vertx
 import io.vertx.ext.web.RoutingContext
 import kotlinx.coroutines.experimental.*
 import kotlinx.coroutines.experimental.channels.ActorScope
 import kotlinx.coroutines.experimental.channels.Channel
-import kotlinx.coroutines.experimental.rx2.asSingle
+import kotlinx.coroutines.experimental.rx1.asSingle
 import kotlinx.coroutines.experimental.selects.SelectClause1
 import move.threading.WorkerPool
+import rx.Single
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
-import java.util.function.Consumer
 import java.util.function.Supplier
 import kotlin.coroutines.experimental.AbstractCoroutineContextElement
 import kotlin.coroutines.experimental.Continuation
@@ -25,6 +24,10 @@ enum class CircuitBreakerState {
    CLOSED,
    HALF_OPEN,
    OPEN,
+}
+
+interface DeferredAction<T> : Deferred<T> {
+   fun asSingle(): Single<T>
 }
 
 class ActionTimeoutException(val action: JobAction<*, *>) : CancellationException() {
@@ -847,7 +850,7 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
    /**
     *
     */
-   override fun asSingle(): io.reactivex.Single<OUT> {
+   override fun asSingle(): rx.Single<OUT> {
       return asSingle(this)
    }
 

@@ -50,8 +50,7 @@ abstract class CronDaemon(
    abstract suspend fun next()
 }
 
-open class DaemonActionProvider<A : DaemonAction>
-@Inject constructor(vertx: Vertx, provider: Provider<A>)
+abstract class DaemonActionProvider<A : DaemonAction>
+constructor(vertx: Vertx, provider: Provider<A>)
    : InternalActionProvider<A, Unit, Unit>(vertx, provider) {
-
 }

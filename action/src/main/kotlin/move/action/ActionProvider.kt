@@ -7,7 +7,6 @@ import io.vertx.rxjava.core.Vertx
 import org.HdrHistogram.ActionHistogram
 import org.HdrHistogram.Histogram
 import java.util.*
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.LongAdder
@@ -21,33 +20,37 @@ import kotlin.reflect.KProperty
 
  * @author Clay Molocznik
  */
-abstract class ActionProvider<A : Action<RoutingContext, OUT>, RoutingContext : Any, OUT : Any>
+abstract class ActionProvider<A : Action<IN, OUT>, IN : Any, OUT : Any>
 constructor(val vertx: Vertx, val actionProvider: Provider<A>) {
-   val actionProviderClass = TypeResolver
-      .resolveRawClass(
-         ActionProvider::class.java,
-         javaClass
-      )
+   abstract val actionClass: Class<A>
+   abstract val requestClass: Class<IN>
+   abstract val replyClass: Class<OUT>
 
-   @Suppress("UNCHECKED_CAST")
-   val actionClass = TypeResolver
-      .resolveRawArgument(
-         actionProviderClass.typeParameters[0],
-         javaClass
-      ) as Class<A>
-
-   @Suppress("UNCHECKED_CAST")
-   val requestClass = TypeResolver
-      .resolveRawArgument(
-         actionProviderClass.typeParameters[1],
-         javaClass
-      ) as Class<RoutingContext>
-
-   @Suppress("UNCHECKED_CAST")
-   val replyClass = TypeResolver.resolveRawArgument(
-      actionProviderClass.typeParameters[2],
-      javaClass
-   ) as Class<OUT>
+//   val actionProviderClass = TypeResolver
+//      .resolveRawClass(
+//         ActionProvider::class.java,
+//         javaClass
+//      )
+//
+//   @Suppress("UNCHECKED_CAST")
+//   val actionClass = TypeResolver
+//      .resolveRawArgument(
+//         actionProviderClass.typeParameters[0],
+//         javaClass
+//      ) as Class<A>
+//
+//   @Suppress("UNCHECKED_CAST")
+//   val requestClass = TypeResolver
+//      .resolveRawArgument(
+//         actionProviderClass.typeParameters[1],
+//         javaClass
+//      ) as Class<IN>
+//
+//   @Suppress("UNCHECKED_CAST")
+//   val replyClass = TypeResolver.resolveRawArgument(
+//      actionProviderClass.typeParameters[2],
+//      javaClass
+//   ) as Class<OUT>
 
    val vertxCore: io.vertx.core.Vertx = vertx.delegate
    val eventLoopGroup = MoveEventLoopGroup.get(vertx)
@@ -56,6 +59,16 @@ constructor(val vertx: Vertx, val actionProvider: Provider<A>) {
    open val isWorker = false
    open val isHttp = false
    open val isDaemon = false
+
+   var executionTimeoutEnabled: Boolean = false
+   abstract internal var timeoutMillis: Int
+   internal var timeoutMillisLong = timeoutMillis.toLong()
+
+   // Calculate the default number of Ticks to constitute a timeout.
+   open internal var timeoutTicks = if (timeoutMillisLong > 0)
+      (timeoutMillisLong / MoveEventLoop.TICK_MS).let { if (it < 1) 1 else it }
+   else
+      0
 
    var name: String = findName("")
       get
@@ -95,8 +108,6 @@ constructor(val vertx: Vertx, val actionProvider: Provider<A>) {
 
    companion object {
       private val NOOP: Handler<Void> = Handler { }
-      internal val MRoutingContext_TIMEOUT_MILLIS = 200
-      internal val MILLIS_TO_SECONDS_THRESHOLD = 500
       val CIRCUIT_BREAKER_RESET_TIMEOUT = 2000L
    }
 
@@ -219,47 +230,47 @@ constructor(val vertx: Vertx, val actionProvider: Provider<A>) {
    @Volatile private var currentWindow = RollingWindow()
 
 //   internal fun complete(operation: Operation) {
-      //    final RollingWindow window = this.currentWindow;
+   //    final RollingWindow window = this.currentWindow;
 
-      //    final long durationInMs = operation.durationInNanos();
-      //    this.durationMs.add(durationInMs);
+   //    final long durationInMs = operation.durationInNanos();
+   //    this.durationMs.add(durationInMs);
 
-      // Compute global statistics
-      //    statistics.recordValue(operation.durationInNanos());
+   // Compute global statistics
+   //    statistics.recordValue(operation.durationInNanos());
 
-      //    cpuTime.add(operation.cpu);
-      //    window.cpuTime.add(operation.cpu);
+   //    cpuTime.add(operation.cpu);
+   //    window.cpuTime.add(operation.cpu);
 
-      //    if (operation.blocking > 0L) {
-      //      blocking.add(operation.blocking);
-      ////      window.blocking.add(operation.blocking);
-      //    }
+   //    if (operation.blocking > 0L) {
+   //      blocking.add(operation.blocking);
+   ////      window.blocking.add(operation.blocking);
+   //    }
 
-      //    window.operationDurationMs.add(durationInMs);
-      //    window.stats.recordValue(durationInMs);
-      //    if (operation.exception) {
-      //      exceptions.increment();
-      ////      window.exception.increment();
-      //    } else if (operation.complete) {
-      //      success.increment();
-      ////      window.success.increment();
-      //    } else if (operation.timeout) {
-      //      timeout.increment();
-      ////      window.timeout.increment();
-      //    } else if (operation.failed) {
-      //      failures.increment();
-      ////      window.failure.increment();
-      //    }
-      //
-      //    if (operation.fallbackSucceed) {
-      ////      window.fallbackSuccess.increment();
-      //    } else if (operation.fallbackFailed) {
-      ////      window.fallbackFailure.increment();
-      //    }
-      //
-      //    if (operation.shortCircuited) {
-      ////      window.shortCircuited.increment();
-      //    }
+   //    window.operationDurationMs.add(durationInMs);
+   //    window.stats.recordValue(durationInMs);
+   //    if (operation.exception) {
+   //      exceptions.increment();
+   ////      window.exception.increment();
+   //    } else if (operation.complete) {
+   //      success.increment();
+   ////      window.success.increment();
+   //    } else if (operation.timeout) {
+   //      timeout.increment();
+   ////      window.timeout.increment();
+   //    } else if (operation.failed) {
+   //      failures.increment();
+   ////      window.failure.increment();
+   //    }
+   //
+   //    if (operation.fallbackSucceed) {
+   ////      window.fallbackSuccess.increment();
+   //    } else if (operation.fallbackFailed) {
+   ////      window.fallbackFailure.increment();
+   //    }
+   //
+   //    if (operation.shortCircuited) {
+   ////      window.shortCircuited.increment();
+   //    }
 //   }
 
 //   @Synchronized
@@ -473,168 +484,46 @@ constructor(val vertx: Vertx, val actionProvider: Provider<A>) {
 class CircuitOpenException : RuntimeException()
 
 
-
-
-
-
-
-
 /**
 
  */
-open class InternalActionProvider<A : InternalAction<RoutingContext, OUT>, RoutingContext : Any, OUT : Any> @Inject
+abstract class InternalActionProvider<A : InternalAction<IN, OUT>, IN : Any, OUT : Any>
 constructor(vertx: Vertx,
-            actionProvider: Provider<A>) : ActionProvider<A, RoutingContext, OUT>(
+            actionProvider: Provider<A>) : ActionProvider<A, IN, OUT>(
    vertx, actionProvider
 ) {
+   @Suppress("UNCHECKED_CAST")
+   val self = this as InternalActionProvider<InternalAction<IN, OUT>, IN, OUT>
+
    override val isInternal = true
 
    val annotation: Internal? = actionClass.getAnnotation(Internal::class.java)
 
-   @Suppress("UNCHECKED_CAST")
-   val self = this as InternalActionProvider<InternalAction<RoutingContext, OUT>, RoutingContext, OUT>
-
    val annotationTimeout: Int
       get() = annotation?.timeout ?: 0
 
-   private var executionTimeoutEnabled: Boolean = false
-   internal var timeoutMillis: Int = annotationTimeout
-   internal var timeoutMillisLong = timeoutMillis.toLong()
-
-   // Calculate the default number of Ticks to constitute a timeout.
-   internal var timeoutTicks = if (timeoutMillisLong > 0)
-      (timeoutMillisLong / MoveEventLoop.TICK_MS).let { if (it < 1) 1 else it}
-   else
-      0
-
-   var maxConcurrentRequests: Int = 0
-      internal set
-
-   var isExecutionTimeoutEnabled: Boolean
-      get() = executionTimeoutEnabled
-      set(enabled) {
-      }
-
-
-   override fun init() {
-   }
-
-
-//   protected open fun calcTimeout(timeoutMillis: Long, context: IActionContext): Long {
-//      if (timeoutMillis < 1) {
-//         return context.deadline
-//      }
-//
-//      // Calculate max execution millis.
-//      val deadline = System.currentTimeMillis() + timeoutMillis
-//      if (deadline > context.deadline) {
-//         return context.deadline
-//      }
-//
-//      return deadline
-//   }
-
-   protected open fun deadline(timeoutMillis: Long): Long {
-      // Force No-Timeout.
-      if (timeoutMillis < 0)
-         return 0L
-
-      // Use default timeout.
-      if (timeoutMillis == 0L) {
-         return if (timeoutMillisLong > 0L)
-            System.currentTimeMillis() + timeoutMillisLong
-         else
-            0
-      }
-
-      // Calculate deadline.
-      return System.currentTimeMillis() + timeoutMillis
-   }
+   override var timeoutMillis: Int = annotationTimeout
 }
-
-
-
 
 
 /**
 
  */
-open class WorkerActionProvider<A : WorkerAction<RoutingContext, OUT>, RoutingContext : Any, OUT : Any> @Inject
+abstract class WorkerActionProvider<A : WorkerAction<IN, OUT>, IN: Any, OUT : Any>
 constructor(vertx: Vertx,
-            actionProvider: Provider<A>) : ActionProvider<A, RoutingContext, OUT>(vertx, actionProvider) {
+            actionProvider: Provider<A>) : ActionProvider<A, IN, OUT>(vertx, actionProvider) {
+   @Suppress("UNCHECKED_CAST")
+   val self = this as WorkerActionProvider<WorkerAction<IN, OUT>, IN, OUT>
 
    override val isWorker = true
 
    val annotation: Worker? = actionClass.getAnnotation(Worker::class.java)
    val annotationTimeout = annotation?.timeout ?: 0
 
-   @Suppress("UNCHECKED_CAST")
-   val self = this as WorkerActionProvider<WorkerAction<RoutingContext, OUT>, RoutingContext, OUT>
-
    val visibility: ActionVisibility
       get() = annotation?.visibility ?: ActionVisibility.PRIVATE
 
-   private var executionTimeoutEnabled: Boolean = false
-   internal var timeoutMillis: Int = annotationTimeout
-   internal var timeoutMillisLong = timeoutMillis.toLong()
-
-   var maxConcurrentRequests: Int = 0
-      internal set
-
-   var isExecutionTimeoutEnabled: Boolean
-      get() = executionTimeoutEnabled
-      set(enabled) {
-      }
-
-   private var queueGroup: String = ""
-
-   val isFifo = annotation?.fifo ?: false
-   val queueName = name?.replace(".", "-")?.replace("action-worker", "") + if (isFifo) ".fifo" else ""
-
-   internal var producer: WorkerProducer? = null
-
-   override fun init() {
-      name = findName(annotation?.value)
-      queueGroup = name
-
-      // Timeout milliseconds.
-      var timeoutMillis = 0
-      if (this.timeoutMillis > 0L) {
-         timeoutMillis = this.timeoutMillis
-      }
-
-      this.timeoutMillis = timeoutMillis
-
-      // Enable deadline?
-      if (timeoutMillis > 0) {
-         if (timeoutMillis < MILLIS_TO_SECONDS_THRESHOLD) {
-            // Looks like somebody decided to put seconds instead of milliseconds.
-            timeoutMillis = timeoutMillis * 1000
-         } else if (timeoutMillis < 1000) {
-            timeoutMillis = 1000
-         }
-
-         this.timeoutMillis = timeoutMillis
-         executionTimeoutEnabled = true
-      }
-   }
-
-   protected open fun deadline(timeoutMillis: Long): Long {
-      // Force No-Timeout.
-      if (timeoutMillis < 0)
-         return 0L
-
-      // Use default timeout.
-      if (timeoutMillis == 0L) {
-         return if (timeoutMillisLong > 0L)
-            System.currentTimeMillis() + timeoutMillisLong
-         else
-            0
-      }
-
-      // Calculate deadline.
-      return System.currentTimeMillis() + timeoutMillis
-   }
+   override var timeoutMillis: Int = annotationTimeout
 }
 
 /**
@@ -644,6 +533,7 @@ class WorkerReceipt @Inject constructor() {
    var mD5OfMessageBody: String? = null
    var mD5OfMessageAttributes: String? = null
    var messageId: String? = null
+
    /**
     * <p>
     * This parameter applies only to FIFO (first-in-first-out) queues.
@@ -666,70 +556,24 @@ class WorkerReceipt @Inject constructor() {
 }
 
 
-
-
-
-open class HttpActionProvider<A : HttpAction>
-@Inject constructor(vertx: Vertx, provider: Provider<A>)
+abstract class HttpActionProvider<A : HttpAction>
+constructor(vertx: Vertx, provider: Provider<A>)
    : ActionProvider<A, RoutingContext, Unit>(vertx, provider) {
+   @Suppress("UNCHECKED_CAST")
+   val self = this as HttpActionProvider<HttpAction>
+
+   override val requestClass: Class<RoutingContext>
+      get() = RoutingContext::class.java
+   override val replyClass: Class<Unit>
+      get() = Unit::class.java
+
    override val isHttp = true
 
    val annotation: Http? = actionClass.getAnnotation(Http::class.java)
    val visibility: ActionVisibility = annotation?.visibility ?: ActionVisibility.PUBLIC
 
-   @Suppress("UNCHECKED_CAST")
-   val self = this as HttpActionProvider<HttpAction>
-
    val annotationTimeout: Int
       get() = annotation?.timeout ?: 0
 
-   private var executionTimeoutEnabled: Boolean = false
-   internal var timeoutMillis: Int = annotationTimeout
-   internal var timeoutMillisLong = timeoutMillis.toLong()
-
-   var isExecutionTimeoutEnabled: Boolean
-      get() = executionTimeoutEnabled
-      set(enabled) {
-      }
-
-   override fun init() {
-      // Timeout milliseconds.
-      var timeoutMillis = 0
-      if (this.timeoutMillis > 0L) {
-         timeoutMillis = this.timeoutMillis
-      }
-
-      this.timeoutMillis = timeoutMillis
-
-      // Enable deadline?
-      if (timeoutMillis > 0) {
-         if (timeoutMillis < MILLIS_TO_SECONDS_THRESHOLD) {
-            // Looks like somebody decided to put seconds instead of milliseconds.
-            timeoutMillis = timeoutMillis * 1000
-         } else if (timeoutMillis < 1000) {
-            timeoutMillis = 1000
-         }
-
-         this.timeoutMillis = timeoutMillis
-         executionTimeoutEnabled = true
-      }
-   }
-
-
-   protected open fun deadline(timeoutMillis: Long): Long {
-      // Force No-Timeout.
-      if (timeoutMillis < 0)
-         return 0L
-
-      // Use default timeout.
-      if (timeoutMillis == 0L) {
-         return if (timeoutMillisLong > 0L)
-            System.currentTimeMillis() + timeoutMillisLong
-         else
-            0
-      }
-
-      // Calculate deadline.
-      return System.currentTimeMillis() + timeoutMillis
-   }
+   override var timeoutMillis: Int = annotationTimeout
 }

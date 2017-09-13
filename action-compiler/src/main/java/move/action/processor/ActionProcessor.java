@@ -64,13 +64,18 @@ import move.action.ActionProvider;
 import move.action.Actor;
 import move.action.Daemon;
 import move.action.Http;
+import move.action.HttpActionProducer;
+import move.action.HttpActionProvider;
 import move.action.Internal;
 import move.action.InternalActionProducer;
+import move.action.InternalActionProducerWithBuilder;
 import move.action.InternalActionProvider;
 import move.action.JobAction;
 import move.action.Worker;
 import move.action.WorkerActionProducer;
+import move.action.WorkerActionProducerWithBuilder;
 import move.action.WorkerActionProvider;
+import org.jetbrains.annotations.NotNull;
 
 /**
  * Action annotation processor.
@@ -109,6 +114,16 @@ public class ActionProcessor extends AbstractProcessor {
   Elements elementUtils;
   Filer filer;
   Messager messager;
+
+  static String packageName(String name) {
+    final String[] parts = name.split("[.]");
+    if (parts.length == 1) {
+      return "";
+    } else {
+      final String lastPart = parts[parts.length - 1];
+      return name.substring(0, name.length() - lastPart.length() - 1);
+    }
+  }
 
   @Override
   public synchronized void init(ProcessingEnvironment processingEnv) {
@@ -314,16 +329,6 @@ public class ActionProcessor extends AbstractProcessor {
     return resolver;
   }
 
-  static String packageName(String name) {
-    final String[] parts = name.split("[.]");
-    if (parts.length == 1) {
-      return "";
-    } else {
-      final String lastPart = parts[parts.length - 1];
-      return name.substring(0, name.length() - lastPart.length() - 1);
-    }
-  }
-
   /**
    *
    */
@@ -348,16 +353,17 @@ public class ActionProcessor extends AbstractProcessor {
     final String generatedProviderName;
     final ClassName generatedProviderClassName;
     final DeclaredTypeVar requestType;
+    final ClassName requestTypeName;
     final DeclaredTypeVar replyType;
+    final ClassName replyTypeName;
     final boolean hasParameterlessCtor;
     final boolean hasInjectCtor;
     final boolean hasFieldsInject;
-
     final ClassName producerClassName;
     final ParameterizedTypeName producerTypeName;
     final String generatedProducerName;
     final ClassName generatedProducerClassName;
-
+    boolean requestParameterlessCtor;
     boolean generated;
 
     public ActionHolder(TypeElement type,
@@ -401,7 +407,7 @@ public class ActionProcessor extends AbstractProcessor {
 
       for (ExecutableElement cons :
           ElementFilter.constructorsIn(type.getEnclosedElements())) {
-        if (cons.getParameters().isEmpty()) {
+        if (cons.getParameters() == null || cons.getParameters().isEmpty()) {
           parameterlessCtor = true;
         }
 
@@ -410,45 +416,110 @@ public class ActionProcessor extends AbstractProcessor {
         }
       }
 
+      for (ExecutableElement cons :
+          ElementFilter.constructorsIn(requestType.getResolvedElement().getEnclosedElements())) {
+        if (cons.getParameters() == null || cons.getParameters().isEmpty()) {
+          requestParameterlessCtor = true;
+        }
+      }
+
       this.hasParameterlessCtor = parameterlessCtor;
       this.hasInjectCtor = hasInjectCtor;
       this.packageName = packageName(name);
+
+      // Get Action IN resolved name.
+      this.requestTypeName = ClassName.get(requestType.getResolvedElement());
+      // Get Action OUT resolved name.
+      this.replyTypeName = ClassName.get(replyType.getResolvedElement());
 
       generatedProviderClassName = ClassName.bestGuess(packageName + "." + generatedProviderName);
       generatedProducerClassName = ClassName.bestGuess(packageName + "." + generatedProducerName);
 
       if (isInternal()) {
         providerClassName = ClassName.get(InternalActionProvider.class);
-        producerClassName = ClassName.get(InternalActionProducer.class);
+        if (requestParameterlessCtor) {
+          producerClassName = ClassName.get(InternalActionProducerWithBuilder.class);
+        } else {
+          producerClassName = ClassName.get(InternalActionProducer.class);
+        }
+
+        // Provider Type.
+        providerTypeName = ParameterizedTypeName.get(
+            providerClassName,
+            className,
+            requestTypeName,
+            replyTypeName
+        );
+
+        // Producer Type.
+        producerTypeName = ParameterizedTypeName.get(
+            producerClassName,
+            className,
+            requestTypeName,
+            replyTypeName,
+            generatedProviderClassName
+        );
       } else if (isWorker()) {
         providerClassName = ClassName.get(WorkerActionProvider.class);
-        producerClassName = ClassName.get(WorkerActionProducer.class);
+        if (requestParameterlessCtor) {
+          producerClassName = ClassName.get(WorkerActionProducerWithBuilder.class);
+        } else {
+          producerClassName = ClassName.get(WorkerActionProducer.class);
+        }
+
+        // Provider Type.
+        providerTypeName = ParameterizedTypeName.get(
+            providerClassName,
+            className,
+            requestTypeName,
+            replyTypeName
+        );
+
+        // Producer Type.
+        producerTypeName = ParameterizedTypeName.get(
+            producerClassName,
+            className,
+            requestTypeName,
+            replyTypeName,
+            generatedProviderClassName
+        );
+      } else if (isHttp()) {
+        providerClassName = ClassName.get(HttpActionProvider.class);
+        producerClassName = ClassName.get(HttpActionProducer.class);
+
+        // Provider Type.
+        providerTypeName = ParameterizedTypeName.get(
+            providerClassName,
+            className
+        );
+
+        // Producer Type.
+        producerTypeName = ParameterizedTypeName.get(
+            producerClassName,
+            className,
+            generatedProviderClassName
+        );
       } else {
         providerClassName = ClassName.get(ActionProvider.class);
         producerClassName = ClassName.get(ActionProducer.class);
+
+        // Provider Type.
+        providerTypeName = ParameterizedTypeName.get(
+            providerClassName,
+            className,
+            requestTypeName,
+            replyTypeName
+        );
+
+        // Producer Type.
+        producerTypeName = ParameterizedTypeName.get(
+            producerClassName,
+            className,
+            requestTypeName,
+            replyTypeName,
+            generatedProviderClassName
+        );
       }
-
-      // Get Action IN resolved name.
-      ClassName inName = ClassName.get(requestType.getResolvedElement());
-      // Get Action OUT resolved name.
-      ClassName outName = ClassName.get(replyType.getResolvedElement());
-
-      // Provider Type.
-      providerTypeName = ParameterizedTypeName.get(
-          providerClassName,
-          className,
-          inName,
-          outName
-      );
-
-      // Producer Type.
-      producerTypeName = ParameterizedTypeName.get(
-          producerClassName,
-          className,
-          inName,
-          outName,
-          generatedProviderClassName
-      );
     }
 
     boolean isInternal() {
@@ -924,6 +995,32 @@ public class ActionProcessor extends AbstractProcessor {
 
       providerType.addMethod(providerCtor.build());
 
+      providerType.addMethod(MethodSpec.methodBuilder("getActionClass")
+          .addAnnotation(NotNull.class)
+          .addAnnotation(Override.class)
+          .addModifiers(Modifier.PUBLIC)
+          .returns(ParameterizedTypeName.get(ClassName.get(Class.class), action.className))
+          .addStatement("return $T.class", action.className)
+          .build());
+
+      if (action.isInternal() || action.isWorker()) {
+        providerType.addMethod(MethodSpec.methodBuilder("getRequestClass")
+            .addAnnotation(NotNull.class)
+            .addAnnotation(Override.class)
+            .addModifiers(Modifier.PUBLIC)
+            .returns(ParameterizedTypeName.get(ClassName.get(Class.class), action.requestTypeName))
+            .addStatement("return $T.class", action.requestTypeName)
+            .build());
+
+        providerType.addMethod(MethodSpec.methodBuilder("getReplyClass")
+            .addAnnotation(NotNull.class)
+            .addAnnotation(Override.class)
+            .addModifiers(Modifier.PUBLIC)
+            .returns(ParameterizedTypeName.get(ClassName.get(Class.class), action.replyTypeName))
+            .addStatement("return $T.class", action.replyTypeName)
+            .build());
+      }
+
       // Build java file.
       final JavaFile providerJavaFile = JavaFile.builder(path, providerType.build()).build();
 
@@ -949,6 +1046,24 @@ public class ActionProcessor extends AbstractProcessor {
           .addAnnotation(Singleton.class);
 
       producerType.addMethod(providerCtor.build());
+
+      producerType.addMethod(MethodSpec.methodBuilder("getActionClass")
+          .addAnnotation(NotNull.class)
+          .addAnnotation(Override.class)
+          .addModifiers(Modifier.PUBLIC)
+          .returns(ParameterizedTypeName.get(ClassName.get(Class.class), action.className))
+          .addStatement("return $T.class", action.className)
+          .build());
+
+      if (action.requestParameterlessCtor) {
+        producerType.addMethod(MethodSpec.methodBuilder("createRequest")
+            .addAnnotation(NotNull.class)
+            .addAnnotation(Override.class)
+            .addModifiers(Modifier.PUBLIC)
+            .returns(action.requestTypeName)
+            .addStatement("return new $T()", action.requestTypeName)
+            .build());
+      }
 
       // Build java file.
       final JavaFile providerJavaFile = JavaFile.builder(path, producerType.build()).build();
