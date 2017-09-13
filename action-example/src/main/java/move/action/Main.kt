@@ -33,7 +33,9 @@ object App : MoveApp<AppComponent>() {
 
       val dispatcher = eventLoopGroup.executors[0].dispatcher
 
+      Move.AllocateInventory ask { id = "" }
 
+      Move.AllocateInventory.rxAsk { id = "" }.asSingle()
 
 
 //      async(dispatcher) {

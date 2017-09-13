@@ -7,7 +7,8 @@ import java.util.function.Consumer
 import javax.inject.Inject
 
 /**
- *
+ * Action Producers are in charge of dispatching an action request through
+ * an Action Broker.
  */
 abstract class ActionProducer<A : Action<IN, OUT>, IN : Any, OUT : Any, P : ActionProvider<A, IN, OUT>> {
    private val entry: ProducerEntry<A, IN, OUT, P>
@@ -17,6 +18,7 @@ abstract class ActionProducer<A : Action<IN, OUT>, IN : Any, OUT : Any, P : Acti
       private set
 
    constructor() {
+      @Suppress("LeakingThis")
       entry = register(actionClass, this)
    }
 
@@ -28,7 +30,13 @@ abstract class ActionProducer<A : Action<IN, OUT>, IN : Any, OUT : Any, P : Acti
       entry.injectProvider(provider)
    }
 
-   private class ProducerEntry<A : Action<IN, OUT>, IN : Any, OUT : Any, P : ActionProvider<A, IN, OUT>>(first: ActionProducer<A, IN, OUT, P>) {
+   private class ProducerEntry
+   <A : Action<IN, OUT>,
+      IN : Any,
+      OUT : Any,
+      P
+      : ActionProvider<A, IN, OUT>>(first: ActionProducer<A, IN, OUT, P>) {
+
       val list = mutableListOf<ActionProducer<A, IN, OUT, P>>(first)
       var provider: P? = null
 
@@ -44,13 +52,13 @@ abstract class ActionProducer<A : Action<IN, OUT>, IN : Any, OUT : Any, P : Acti
       private val registry: MutableMap<Class<*>, ProducerEntry<*, *, *, *>> = mutableMapOf()
 
       @Synchronized
-      private fun <
-         PRODUCER : ActionProducer<A, IN, OUT, P>,
-         A : Action<IN, OUT>,
-         IN : Any,
-         OUT : Any,
-         P : ActionProvider<A, IN, OUT>> register(actionClass: Class<A>,
-                                                  producer: PRODUCER): ProducerEntry<A, IN, OUT, P> {
+      private fun
+         <PRODUCER : ActionProducer<A, IN, OUT, P>,
+            A : Action<IN, OUT>,
+            IN : Any,
+            OUT : Any,
+            P : ActionProvider<A, IN, OUT>> register(actionClass: Class<A>,
+                                                     producer: PRODUCER): ProducerEntry<A, IN, OUT, P> {
          if (registry.containsKey(actionClass)) {
             @Suppress("UNCHECKED_CAST")
             val entry = registry[actionClass] as ProducerEntry<A, IN, OUT, P>
@@ -71,8 +79,10 @@ abstract class ActionProducer<A : Action<IN, OUT>, IN : Any, OUT : Any, P : Acti
 /**
  *
  */
-abstract class InternalActionProducer<A : InternalAction<IN, OUT>, IN : Any, OUT : Any, P : InternalActionProvider<A, IN, OUT>> : ActionProducer<A, IN, OUT, P>() {
-   val provider0: InternalActionProvider<InternalAction<IN, OUT>, IN, OUT> get() = provider.self
+abstract class InternalActionProducer
+<A : JobAction<IN, OUT>, IN : Any, OUT : Any, P : InternalActionProvider<A, IN, OUT>>
+   : ActionProducer<A, IN, OUT, P>() {
+   val provider0: InternalActionProvider<JobAction<IN, OUT>, IN, OUT> get() = provider.self
 
    /**
     * Waits for response.
@@ -88,11 +98,13 @@ abstract class InternalActionProducer<A : InternalAction<IN, OUT>, IN : Any, OUT
       )
    }
 
-   suspend open fun ask(request: IN, timeout: Long = 0, unit: TimeUnit = TimeUnit.MILLISECONDS): OUT {
+   suspend open fun ask(request: IN,
+                        timeout: Long = 0,
+                        unit: TimeUnit = TimeUnit.MILLISECONDS): OUT {
       return provider.broker.ask(
          request = request,
          provider = provider0,
-         timeoutTicks = MoveEventLoop.countTicks(timeout, unit)
+         timeoutTicks = MoveEventLoop.calculateTicks(timeout, unit)
       )
    }
 
@@ -117,16 +129,20 @@ abstract class InternalActionProducer<A : InternalAction<IN, OUT>, IN : Any, OUT
       )
    }
 
-   open fun launch(request: IN, timeout: Long, unit: TimeUnit = TimeUnit.MILLISECONDS): DeferredAction<OUT> {
+   open fun launch(request: IN,
+                   timeout: Long,
+                   unit: TimeUnit = TimeUnit.MILLISECONDS): DeferredAction<OUT> {
       return provider.broker.launch(
          request = request,
          provider = provider0,
-         timeoutTicks = MoveEventLoop.countTicks(timeout, unit)
+         timeoutTicks = MoveEventLoop.calculateTicks(timeout, unit)
       )
    }
 }
 
-abstract class InternalActionProducerWithBuilder<A : InternalAction<IN, OUT>, IN : Any, OUT : Any, P : InternalActionProvider<A, IN, OUT>> : InternalActionProducer<A, IN, OUT, P>() {
+abstract class InternalActionProducerWithBuilder
+<A : JobAction<IN, OUT>, IN : Any, OUT : Any, P : InternalActionProvider<A, IN, OUT>>
+   : InternalActionProducer<A, IN, OUT, P>() {
    abstract fun createRequest(): IN
 
    infix suspend open fun ask(block: IN.() -> Unit): OUT {
@@ -150,8 +166,10 @@ abstract class InternalActionProducerWithBuilder<A : InternalAction<IN, OUT>, IN
 }
 
 
-abstract class WorkerActionProducer<A : WorkerAction<IN, OUT>, IN : Any, OUT : Any, P : WorkerActionProvider<A, IN, OUT>> : ActionProducer<A, IN, OUT, P>() {
-   val provider0: WorkerActionProvider<WorkerAction<IN, OUT>, IN, OUT> get() = provider0.self
+abstract class WorkerActionProducer
+<A : JobAction<IN, OUT>, IN : Any, OUT : Any, P : WorkerActionProvider<A, IN, OUT>>
+   : ActionProducer<A, IN, OUT, P>() {
+   val provider0: WorkerActionProvider<JobAction<IN, OUT>, IN, OUT> get() = provider0.self
 
    /**
     * Waits for response.
@@ -167,11 +185,13 @@ abstract class WorkerActionProducer<A : WorkerAction<IN, OUT>, IN : Any, OUT : A
       )
    }
 
-   suspend open fun ask(request: IN, timeout: Long = 0, unit: TimeUnit = TimeUnit.MILLISECONDS): OUT {
+   suspend open fun ask(request: IN,
+                        timeout: Long = 0,
+                        unit: TimeUnit = TimeUnit.MILLISECONDS): OUT {
       return provider.broker.ask(
          request = request,
          provider = provider0,
-         timeoutTicks = MoveEventLoop.countTicks(timeout, unit)
+         timeoutTicks = MoveEventLoop.calculateTicks(timeout, unit)
       )
    }
 
@@ -196,11 +216,13 @@ abstract class WorkerActionProducer<A : WorkerAction<IN, OUT>, IN : Any, OUT : A
       )
    }
 
-   fun launch(request: IN, timeout: Long, unit: TimeUnit = TimeUnit.MILLISECONDS): DeferredAction<OUT> {
+   fun launch(request: IN,
+              timeout: Long,
+              unit: TimeUnit = TimeUnit.MILLISECONDS): DeferredAction<OUT> {
       return provider.broker.launch(
          request = request,
          provider = provider0,
-         timeoutTicks = MoveEventLoop.countTicks(timeout, unit)
+         timeoutTicks = MoveEventLoop.calculateTicks(timeout, unit)
       )
    }
 
@@ -279,7 +301,9 @@ abstract class WorkerActionProducer<A : WorkerAction<IN, OUT>, IN : Any, OUT : A
 //   }
 }
 
-abstract class WorkerActionProducerWithBuilder<A : WorkerAction<IN, OUT>, IN : Any, OUT : Any, P : WorkerActionProvider<A, IN, OUT>> : WorkerActionProducer<A, IN, OUT, P>() {
+abstract class WorkerActionProducerWithBuilder
+<A : JobAction<IN, OUT>, IN : Any, OUT : Any, P : WorkerActionProvider<A, IN, OUT>>
+   : WorkerActionProducer<A, IN, OUT, P>() {
    abstract fun createRequest(): IN
 
    suspend infix open fun ask(block: IN.() -> Unit): OUT {
@@ -303,7 +327,10 @@ abstract class WorkerActionProducerWithBuilder<A : WorkerAction<IN, OUT>, IN : A
 }
 
 
-abstract class HttpActionProducer<A : HttpAction, P : HttpActionProvider<A>> : ActionProducer<A, RoutingContext, Unit, P>() {
+abstract class HttpActionProducer
+<A : HttpAction, P : HttpActionProvider<A>>
+   : ActionProducer<A, RoutingContext, Unit, P>() {
+
    fun visibleTo(visibility: ActionVisibility) = provider.visibility == visibility
 
    val provider0: HttpActionProvider<HttpAction> get() = provider.self
@@ -322,11 +349,13 @@ abstract class HttpActionProducer<A : HttpAction, P : HttpActionProvider<A>> : A
       )
    }
 
-   suspend open fun ask(request: RoutingContext, timeout: Long = 0, unit: TimeUnit = TimeUnit.MILLISECONDS) {
+   suspend open fun ask(request: RoutingContext,
+                        timeout: Long = 0,
+                        unit: TimeUnit = TimeUnit.MILLISECONDS) {
       return provider.broker.ask(
          request = request,
          provider = provider0,
-         timeoutTicks = MoveEventLoop.countTicks(timeout, unit)
+         timeoutTicks = MoveEventLoop.calculateTicks(timeout, unit)
       )
    }
 
@@ -351,11 +380,13 @@ abstract class HttpActionProducer<A : HttpAction, P : HttpActionProvider<A>> : A
       )
    }
 
-   fun launch(request: RoutingContext, timeout: Long, unit: TimeUnit = TimeUnit.MILLISECONDS): DeferredAction<Unit> {
+   fun launch(request: RoutingContext,
+              timeout: Long,
+              unit: TimeUnit = TimeUnit.MILLISECONDS): DeferredAction<Unit> {
       return provider.broker.launch(
          request = request,
          provider = provider0,
-         timeoutTicks = MoveEventLoop.countTicks(timeout, unit)
+         timeoutTicks = MoveEventLoop.calculateTicks(timeout, unit)
       )
    }
 }

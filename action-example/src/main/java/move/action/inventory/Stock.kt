@@ -2,7 +2,6 @@ package move.action.inventory
 
 import move.action.Internal
 import move.action.InternalAction
-import move.action.InternalJob
 
 /**
  *
@@ -18,7 +17,7 @@ class SearchStock : InternalAction<String, String>() {
  *
  */
 @Internal
-class SearchJob : InternalJob<String>() {
+class SearchJob : InternalAction<String, Unit>() {
    suspend override fun execute() {
    }
 }

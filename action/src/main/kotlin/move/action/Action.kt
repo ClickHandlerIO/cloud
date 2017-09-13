@@ -4,8 +4,6 @@ import com.google.common.base.Throwables
 import io.vertx.core.Vertx
 import io.vertx.ext.web.RoutingContext
 import kotlinx.coroutines.experimental.*
-import kotlinx.coroutines.experimental.channels.ActorScope
-import kotlinx.coroutines.experimental.channels.Channel
 import kotlinx.coroutines.experimental.rx1.asSingle
 import kotlinx.coroutines.experimental.selects.SelectClause1
 import move.threading.WorkerPool
@@ -30,7 +28,7 @@ interface DeferredAction<T> : Deferred<T> {
    fun asSingle(): Single<T>
 }
 
-class ActionTimeoutException(val action: JobAction<*, *>) : CancellationException() {
+class ActionTimeoutException(val action: IJobAction<*, *>) : CancellationException() {
    override fun toString(): String {
       return "ActionTimeout [${action.javaClass.canonicalName}]"
    }
@@ -44,7 +42,7 @@ data class ActionParent(
    /**
     * User-defined coroutine name.
     */
-   val action: JobAction<*, *>
+   val action: IJobAction<*, *>
 ) : AbstractCoroutineContextElement(ActionParent) {
    /**
     * Key for [CoroutineName] instance in the coroutine context.
@@ -57,49 +55,15 @@ data class ActionParent(
    override fun toString(): String = "CoroutineName($action)"
 }
 
-object EmptyJobAction : JobAction<Unit, Unit>(false) {
-   override fun asSingle(): Single<Unit> {
-      return Single.just(Unit)
-   }
-
-   suspend override fun await() {
-
-   }
-
-   override fun getCompleted() {
-
-   }
-
-   override fun doTimeout() {
-
-   }
-
-   override val onAwait: SelectClause1<Unit>
-      get() = this as SelectClause1<Unit>
-}
-
-val EmptyActionParent = ActionParent(EmptyJobAction)
-
 
 class MoveDispatcher(val eventLoop: MoveEventLoop) : CoroutineDispatcher(), Delay {
-   var currentJob: Job? = null
-//   var currentAction: AbstractJobAction<*, *, *, *>? = null
-
-   fun currentAction(): AbstractJobAction<*, *, *, *>? {
-      val job = (currentJob ?: return null) as? AbstractJobAction<*, *, *, *> ?: return null
-
-      return job
-   }
-
    fun execute(task: () -> Unit) = eventLoop.execute(task)
 
    override fun dispatch(context: CoroutineContext, block: Runnable) {
       if (Vertx.currentContext() === eventLoop) {
-         currentJob = context[Job]
          block.run()
       } else {
          execute {
-            currentJob = context[Job]
             block.run()
          }
       }
@@ -152,8 +116,8 @@ data class Reply<T>(val value: T?, val cause: Throwable?)
 @PublishedApi internal const val MODE_DIRECT = 2         // when the context is right just invoke the delegate continuation direct
 @PublishedApi internal const val MODE_UNDISPATCHED = 3   // when the thread is right, but need to mark it with current coroutine
 
-abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : ActionProvider<A, IN, OUT>> :
-   JobAction<IN, OUT>(true),
+abstract class JobAction<IN : Any, OUT : Any> :
+   IJobAction<IN, OUT>(true),
    Continuation<OUT>,
    CoroutineContext,
    CoroutineScope,
@@ -166,7 +130,7 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
    private lateinit var _request: IN
    private var _deadline: Long = 0L
    // Provider
-   lateinit var provider: P
+   lateinit var provider: ActionProvider<*, IN, OUT>
       get
       private set
    lateinit var eventLoop: MoveEventLoop
@@ -189,7 +153,7 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
       get() = false
 
    var metrics: ActionMetrics? = null
-   var parent: AbstractJobAction<*, *, *, *>? = null
+   var parent: JobAction<*, *>? = null
 
 //   @Suppress("LeakingThis")
 //   var _context: CoroutineContext = this
@@ -208,7 +172,7 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
     * Launches action as the root coroutine.
     */
    internal open fun launch(eventLoop: MoveEventLoop,
-                            provider: P,
+                            provider: ActionProvider<*, IN, OUT>,
                             request: IN,
                             timeoutTicks: Long = 0,
                             root: Boolean = false) {
@@ -257,7 +221,7 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
     * Executes action "Inline".
     */
    internal open suspend fun execute1(eventLoop: MoveEventLoop,
-                                      provider: P,
+                                      provider: ActionProvider<*, IN, OUT>,
                                       request: IN,
                                       timeoutTicks: Long = 0,
                                       root: Boolean = false): OUT {
@@ -269,7 +233,7 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
     * Executes action "Inline".
     */
    internal open suspend fun execute0(eventLoop: MoveEventLoop,
-                                      provider: P,
+                                      provider: ActionProvider<*, IN, OUT>,
                                       request: IN,
                                       timeoutTicks: Long = 0,
                                       root: Boolean = false): OUT {
@@ -332,13 +296,13 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
    /**
     *
     */
-   inner class ActionContinuation<T>(val action: AbstractJobAction<*, *, *, *>?,
+   inner class ActionContinuation<T>(val action: JobAction<*, *>?,
                                      val continuation: Continuation<T>) : Continuation<T> {
       override val context: CoroutineContext
          get() = continuation.context
 
       override fun resume(value: T) {
-         val job = action ?: this@AbstractJobAction
+         val job = action ?: this@JobAction
 
          if (MoveEventLoopGroup.currentEventLoop !== eventLoop) {
             eventLoop.execute {
@@ -362,7 +326,7 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
       }
 
       override fun resumeWithException(exception: Throwable) {
-         val job = action ?: this@AbstractJobAction
+         val job = action ?: this@JobAction
 
          if (Vertx.currentContext() !== eventLoop) {
             eventLoop.execute {
@@ -395,8 +359,8 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
          return continuation
       }
 
-//      val job = if (continuation.context is AbstractJobAction<*, *, *, *>) {
-//         continuation.context as AbstractJobAction<*, *, *, *>
+//      val job = if (continuation.context is JobAction<*, *, *, *>) {
+//         continuation.context as JobAction<*, *, *, *>
 //      } else {
 //         eventLoop.job
 //      }
@@ -570,7 +534,7 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
    /**
     * @param request
     */
-   abstract suspend fun execute(): OUT
+   abstract suspend protected fun execute(): OUT
 
    /**
     *
@@ -1002,34 +966,15 @@ abstract class AbstractJobAction<A : Action<IN, OUT>, IN : Any, OUT : Any, P : A
    }
 }
 
+abstract class InternalAction<IN : Any, OUT : Any> : JobAction<IN, OUT>()
 
-/**
- *
- */
-abstract class InternalAction<IN : Any, OUT : Any> : AbstractJobAction<InternalAction<IN, OUT>, IN, OUT, InternalActionProvider<InternalAction<IN, OUT>, IN, OUT>>()
-
-/**
- *
- */
-abstract class InternalJob<IN : Any> : InternalAction<IN, Unit>()
-
-
-/**
- * A WorkerAction is really just an InternalAction under the covers.
- */
-abstract class WorkerAction<IN : Any, OUT : Any> : AbstractJobAction<WorkerAction<IN, OUT>, IN, OUT, WorkerActionProvider<WorkerAction<IN, OUT>, IN, OUT>>() {
-}
-
-/**
- *
- */
-abstract class WorkerJob<IN : Any> : WorkerAction<IN, Unit>()
+abstract class WorkerAction<IN : Any, OUT : Any> : JobAction<IN, OUT>()
 
 
 /**
  *
  */
-abstract class HttpAction : AbstractJobAction<HttpAction, RoutingContext, Unit, HttpActionProvider<HttpAction>>() {
+abstract class HttpAction : JobAction<RoutingContext, Unit>() {
    val req
       get() = request.request()
 
@@ -1038,11 +983,6 @@ abstract class HttpAction : AbstractJobAction<HttpAction, RoutingContext, Unit, 
 
    protected fun param(name: String) =
       req.getParam(name)
-}
-
-
-abstract class ActorAction<IN : Any, OUT : Any> : JobSupport(true), Continuation<OUT>, CoroutineScope, CoroutineContext, ActorScope<Any>, Channel<Any> {
-
 }
 
 

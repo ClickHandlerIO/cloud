@@ -66,11 +66,11 @@ import move.action.Daemon;
 import move.action.Http;
 import move.action.HttpActionProducer;
 import move.action.HttpActionProvider;
+import move.action.IJobAction;
 import move.action.Internal;
 import move.action.InternalActionProducer;
 import move.action.InternalActionProducerWithBuilder;
 import move.action.InternalActionProvider;
-import move.action.JobAction;
 import move.action.Worker;
 import move.action.WorkerActionProducer;
 import move.action.WorkerActionProducerWithBuilder;
@@ -214,14 +214,14 @@ public class ActionProcessor extends AbstractProcessor {
 
           DeclaredTypeVar requestType = null;
           try {
-            requestType = typeParamResolver.resolve(JobAction.class, 0);
+            requestType = typeParamResolver.resolve(IJobAction.class, 0);
           } catch (Throwable e) {
             messager.printMessage(Diagnostic.Kind.ERROR, e.getMessage());
           }
 
           DeclaredTypeVar responseType = null;
           try {
-            responseType = typeParamResolver.resolve(JobAction.class, 1);
+            responseType = typeParamResolver.resolve(IJobAction.class, 1);
           } catch (Throwable e) {
             messager.printMessage(Diagnostic.Kind.ERROR, e.getMessage());
           }

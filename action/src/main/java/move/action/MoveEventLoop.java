@@ -39,12 +39,20 @@ import org.quartz.JobExecutionException;
 /**
  * Optimized EvenLoop Context for managing Action lifecycle. Action timeouts are efficiently tracked
  * at the trade-off of less precise expiration. Action timeouts happen in normalized 100ms blocks or
- * up to 5 times / second. Actions aren't intended to be completed in the nanoseconds ('even though
- * they can'), but rather microsecond/ms/second since network calls are usually made.
+ * up to 10 times / second. If more precise timeouts are needed, then use LockSupport.
+ *
+ * Every MoveEventLoop processes network I/O and user tasks in the same thread.
+ * Network I/O is handled by "epoll" if on Linux. "kqueue" if on BSD. "NIO" is the fallback.
+ * Native transport is preferable especially in regards to garbage collection since most
+ * buffers point to native memory. This is ideal for Move's goal of "real-time" or
+ * very low latency and is preferred over maximum throughput.
  *
  * Actions are sequenced by the ceiling 100ms block of their calculated unix millisecond epoch
  * deadline. If an Action has no deadline then there is no associated deadline tracking cost.
- * However, every Action is locally tracked.
+ * However, every Action has a strong reference stored on the MoveEventLoop to ensure it's not
+ * collected by the GC.
+ *
+ * An entire Action's lifecycle happens within a single MoveEventLoop.
  *
  * @author Clay Molocznik
  */
@@ -65,14 +73,11 @@ public class MoveEventLoop extends ContextExt {
                   : 10)
       / TICK_MS);
 
-  public static final long TICK_PADDING = TICK_MS * 10;
-
   public static final Logger log = LoggerFactory.getLogger(MoveEventLoop.class);
-
-  // Netty EventLoop.
-  final EventLoop eventLoop;
   // MoveApp kotlinx-coroutines Dispatcher.
   public final MoveDispatcher dispatcher = new MoveDispatcher(this);
+  // Netty EventLoop.
+  final EventLoop eventLoop;
   // Processing tick flag.
   // This is atomic since it's used outside the context of the EventLoop thread.
   private final AtomicBoolean processingTick = new AtomicBoolean(false);
@@ -82,43 +87,13 @@ public class MoveEventLoop extends ContextExt {
   private final Timer[] timerWheel = new Timer[WHEEL_LENGTH];
   long epoch;
   long epochTick;
+  JobAction<?, ?> job;
   private long tick = 0;
   private int wheelIndex = 0;
   private long maxWheelEpoch;
   private long maxWheelEpochTick;
   private AtomicLong ticks = new AtomicLong(0L);
-
   private Timer nonTimedTimmer = new Timer();
-
-  AbstractJobAction<?, ?, ?, ?> job;
-
-  public long getEpoch() {
-    return epoch;
-  }
-
-  public long getEpochTick() {
-    return epochTick;
-  }
-
-  public long getTick() {
-    return tick;
-  }
-
-  public int getWheelIndex() {
-    return wheelIndex;
-  }
-
-  public long getMaxWheelEpoch() {
-    return maxWheelEpoch;
-  }
-
-  public long getMaxWheelEpochTick() {
-    return maxWheelEpochTick;
-  }
-
-  public AbstractJobAction<?, ?, ?, ?> getJob() {
-    return job;
-  }
 
   public MoveEventLoop(
       @NotNull EventLoopContext eventLoopDefault,
@@ -158,7 +133,7 @@ public class MoveEventLoop extends ContextExt {
     return epoch / TICK_MS;
   }
 
-  public static long countTicks(long time, TimeUnit unit) {
+  public static long calculateTicks(long time, TimeUnit unit) {
     return countTicks(unit.toMillis(time));
   }
 
@@ -168,6 +143,34 @@ public class MoveEventLoop extends ContextExt {
     }
     final long ticks = millis / TICK_MS;
     return ticks < 1L ? 0L : ticks;
+  }
+
+  public long getEpoch() {
+    return epoch;
+  }
+
+  public long getEpochTick() {
+    return epochTick;
+  }
+
+  public long getTick() {
+    return tick;
+  }
+
+  public int getWheelIndex() {
+    return wheelIndex;
+  }
+
+  public long getMaxWheelEpoch() {
+    return maxWheelEpoch;
+  }
+
+  public long getMaxWheelEpochTick() {
+    return maxWheelEpochTick;
+  }
+
+  public JobAction<?, ?> getJob() {
+    return job;
   }
 
   private void initWheel() {
@@ -204,7 +207,7 @@ public class MoveEventLoop extends ContextExt {
    * @param action
    * @return
    */
-  JobTimerHandle registerJob(JobAction action) {
+  JobTimerHandle registerJob(IJobAction action) {
     final JobTimerHandle handle = new JobTimerHandle(action);
     nonTimedTimmer.add(handle);
     return handle;
@@ -216,7 +219,7 @@ public class MoveEventLoop extends ContextExt {
    * @param tickEpoch
    * @return
    */
-  JobTimerHandle registerJobTimerForTick(JobAction action, long tickEpoch) {
+  JobTimerHandle registerJobTimerForTick(IJobAction action, long tickEpoch) {
     if (tickEpoch < epochTick) {
       return null;
     }
@@ -244,7 +247,7 @@ public class MoveEventLoop extends ContextExt {
    * @param epochMillis
    * @return
    */
-  JobTimerHandle registerJobTimer(JobAction action, long epochMillis) {
+  JobTimerHandle registerJobTimer(IJobAction action, long epochMillis) {
     if (epochMillis < epoch) {
       return null;
     }
@@ -463,9 +466,9 @@ public class MoveEventLoop extends ContextExt {
    */
   static class JobTimerHandle extends TimerHandle {
 
-    JobAction action;
+    IJobAction action;
 
-    public JobTimerHandle(JobAction action) {
+    public JobTimerHandle(IJobAction action) {
       this.action = action;
     }
 
@@ -506,11 +509,11 @@ public class MoveEventLoop extends ContextExt {
    */
   static class DelayHandle extends TimerHandle {
 
-    //    JobAction action;
+    //    IJobAction action;
     CancellableContinuation<Unit> continuation;
 
     public DelayHandle(
-//        JobAction action,
+//        IJobAction action,
         CancellableContinuation<Unit> continuation) {
 //      this.action = action;
       this.continuation = continuation;

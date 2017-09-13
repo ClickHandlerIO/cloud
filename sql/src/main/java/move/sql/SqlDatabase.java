@@ -49,7 +49,7 @@ import java.util.stream.Stream;
 import javaslang.Tuple2;
 import javaslang.control.Try;
 import javax.sql.DataSource;
-import move.action.AbstractJobAction;
+import move.action.JobAction;
 import move.action.ActionTimeoutException;
 import move.action.MoveEventLoop;
 import move.action.MoveEventLoopGroup;
@@ -2127,7 +2127,7 @@ public class SqlDatabase extends AbstractIdleService {
     MoveEventLoop eventLoop;
     String callingActionName = "";
     Statement currentStatement;
-    AbstractJobAction job;
+    JobAction job;
     long timeoutMillis;
     long deadline;
 
@@ -2188,7 +2188,7 @@ public class SqlDatabase extends AbstractIdleService {
           int queryTimeout = ctx.statement().getQueryTimeout();
           final Object actionObj = ctx.configuration().data(ACTION_KEY);
 
-          if (actionObj != null && actionObj instanceof AbstractJobAction) {
+          if (actionObj != null && actionObj instanceof JobAction) {
             final SqlAction action = (SqlAction) actionObj;
             action.currentStatement = ctx.statement();
 

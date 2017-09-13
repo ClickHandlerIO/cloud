@@ -6,13 +6,13 @@ import move.action.MoveEventLoop.JobTimerHandle;
 /**
  *
  */
-public abstract class JobAction<IN, OUT>
+public abstract class IJobAction<IN, OUT>
     extends JobSupport
     implements Action<IN, OUT>, DeferredAction<OUT> {
 
   JobTimerHandle handle;
 
-  public JobAction(boolean active) {
+  public IJobAction(boolean active) {
     super(active);
   }
 

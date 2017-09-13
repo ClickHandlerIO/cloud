@@ -5,6 +5,7 @@ import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
 import io.vertx.rxjava.core.Vertx
 import org.HdrHistogram.ActionHistogram
+import org.HdrHistogram.ConcurrentHistogram
 import org.HdrHistogram.Histogram
 import java.util.*
 import java.util.concurrent.atomic.AtomicInteger
@@ -16,51 +17,32 @@ import javax.inject.Provider
 import kotlin.reflect.KProperty
 
 /**
+ *
+ */
+class CircuitOpenException : RuntimeException()
+
+/**
  * Builds and invokes a single type of Action.
 
  * @author Clay Molocznik
  */
 abstract class ActionProvider<A : Action<IN, OUT>, IN : Any, OUT : Any>
 constructor(val vertx: Vertx, val actionProvider: Provider<A>) {
+
    abstract val actionClass: Class<A>
    abstract val requestClass: Class<IN>
    abstract val replyClass: Class<OUT>
-
-//   val actionProviderClass = TypeResolver
-//      .resolveRawClass(
-//         ActionProvider::class.java,
-//         javaClass
-//      )
-//
-//   @Suppress("UNCHECKED_CAST")
-//   val actionClass = TypeResolver
-//      .resolveRawArgument(
-//         actionProviderClass.typeParameters[0],
-//         javaClass
-//      ) as Class<A>
-//
-//   @Suppress("UNCHECKED_CAST")
-//   val requestClass = TypeResolver
-//      .resolveRawArgument(
-//         actionProviderClass.typeParameters[1],
-//         javaClass
-//      ) as Class<IN>
-//
-//   @Suppress("UNCHECKED_CAST")
-//   val replyClass = TypeResolver.resolveRawArgument(
-//      actionProviderClass.typeParameters[2],
-//      javaClass
-//   ) as Class<OUT>
-
-   val vertxCore: io.vertx.core.Vertx = vertx.delegate
-   val eventLoopGroup = MoveEventLoopGroup.get(vertx)
 
    open val isInternal = false
    open val isWorker = false
    open val isHttp = false
    open val isDaemon = false
 
+   val vertxCore: io.vertx.core.Vertx = vertx.delegate
+   val eventLoopGroup = MoveEventLoopGroup.get(vertx)
    var executionTimeoutEnabled: Boolean = false
+
+   // Timeout
    abstract internal var timeoutMillis: Int
    internal var timeoutMillisLong = timeoutMillis.toLong()
 
@@ -70,11 +52,13 @@ constructor(val vertx: Vertx, val actionProvider: Provider<A>) {
    else
       0
 
+   // Name
    var name: String = findName("")
       get
       internal set
 
-   var broker: ActionBroker by BrokerDelegate()
+   // Broker
+   var broker: ActionBroker = ActionBroker.DEFAULT
 
    class BrokerDelegate {
       var value = ActionBroker.DEFAULT
@@ -109,9 +93,11 @@ constructor(val vertx: Vertx, val actionProvider: Provider<A>) {
    companion object {
       private val NOOP: Handler<Void> = Handler { }
       val CIRCUIT_BREAKER_RESET_TIMEOUT = 2000L
+      val FAST_HISTOGRAM_MILLIS = 60000L
+      val HISTOGRAM_SIGNIFICANT_DIGITS = 3
    }
 
-
+   // Circuit Breaker
    internal var maxFailures: Long = Long.MAX_VALUE
    internal val passed = AtomicInteger()
    private var openHandler: Handler<Void> = NOOP
@@ -220,13 +206,15 @@ constructor(val vertx: Vertx, val actionProvider: Provider<A>) {
    internal val success = LongAdder()
    internal val timeout = LongAdder()
    internal val exceptions = LongAdder()
-   //  private Histogram statistics = new ConcurrentHistogram(3);
-   //  private Histogram statistics = new ConcurrentHistogram(3);
-   internal val statistics = ActionHistogram(60000, 3)
+
+   // High Performance Histogram for actions taking less than 60 seconds.
+   internal val statistics = ActionHistogram(FAST_HISTOGRAM_MILLIS, HISTOGRAM_SIGNIFICANT_DIGITS)
+   // Histogram with no bounds for actions taking over 60 seconds.
+   internal val statisticsLong = ConcurrentHistogram(HISTOGRAM_SIGNIFICANT_DIGITS);
    //  private Histogram cachedRolling1 = new ConcurrentHistogram(3);
-   internal val cachedRolling1 = ActionHistogram(60000, 3)
+   internal val cachedRolling1 = ActionHistogram(FAST_HISTOGRAM_MILLIS, HISTOGRAM_SIGNIFICANT_DIGITS)
    //  private Histogram cachedRolling2 = new ConcurrentHistogram(3);
-   internal val cachedRolling2 = ActionHistogram(60000, 3)
+   internal val cachedRolling2 = ActionHistogram(FAST_HISTOGRAM_MILLIS, HISTOGRAM_SIGNIFICANT_DIGITS)
    @Volatile private var currentWindow = RollingWindow()
 
 //   internal fun complete(operation: Operation) {
@@ -478,22 +466,17 @@ constructor(val vertx: Vertx, val actionProvider: Provider<A>) {
 //   }
 }
 
+
 /**
  *
  */
-class CircuitOpenException : RuntimeException()
-
-
-/**
-
- */
-abstract class InternalActionProvider<A : InternalAction<IN, OUT>, IN : Any, OUT : Any>
+abstract class InternalActionProvider<A : JobAction<IN, OUT>, IN : Any, OUT : Any>
 constructor(vertx: Vertx,
             actionProvider: Provider<A>) : ActionProvider<A, IN, OUT>(
    vertx, actionProvider
 ) {
    @Suppress("UNCHECKED_CAST")
-   val self = this as InternalActionProvider<InternalAction<IN, OUT>, IN, OUT>
+   val self = this as InternalActionProvider<JobAction<IN, OUT>, IN, OUT>
 
    override val isInternal = true
 
@@ -507,13 +490,13 @@ constructor(vertx: Vertx,
 
 
 /**
-
+ *
  */
-abstract class WorkerActionProvider<A : WorkerAction<IN, OUT>, IN: Any, OUT : Any>
+abstract class WorkerActionProvider<A : JobAction<IN, OUT>, IN : Any, OUT : Any>
 constructor(vertx: Vertx,
             actionProvider: Provider<A>) : ActionProvider<A, IN, OUT>(vertx, actionProvider) {
    @Suppress("UNCHECKED_CAST")
-   val self = this as WorkerActionProvider<WorkerAction<IN, OUT>, IN, OUT>
+   val self = this as WorkerActionProvider<JobAction<IN, OUT>, IN, OUT>
 
    override val isWorker = true
 
@@ -556,10 +539,13 @@ class WorkerReceipt @Inject constructor() {
 }
 
 
+/**
+ *
+ */
 abstract class HttpActionProvider<A : HttpAction>
 constructor(vertx: Vertx, provider: Provider<A>)
    : ActionProvider<A, RoutingContext, Unit>(vertx, provider) {
-   @Suppress("UNCHECKED_CAST")
+   @Suppress("LeakingThis", "UNCHECKED_CAST")
    val self = this as HttpActionProvider<HttpAction>
 
    override val requestClass: Class<RoutingContext>

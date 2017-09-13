@@ -11,7 +11,7 @@ val Actions
 
 /**
  * Central repository of all actions.
-
+ *
  * @author Clay Molocznik
  */
 @Singleton
@@ -37,10 +37,5 @@ internal constructor(val vertx: Vertx,
 
       private val LOG = LoggerFactory.getLogger(ActionManager::class.java)
       private var brokers: Map<Class<*>, ActionBroker> = mapOf()
-
-      private var nodeId: String = NUID.nextGlobal()
-
-      val NODE_ID
-         get() = nodeId
    }
 }
