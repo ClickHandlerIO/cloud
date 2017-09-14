@@ -1,0 +1,9 @@
+
+description = 'Remoting'
+dependencies {
+  compile project(':action')
+    compile group: 'com.squareup', name: 'javapoet', version:'1.9.0'
+    compile group: 'io.javaslang', name: 'javaslang', version:'2.0.4'
+    compile group: 'com.fasterxml.jackson.core', name: 'jackson-annotations', version:'2.9.1'
+    compile group: 'com.hazelcast', name: 'hazelcast-all', version:'3.8.3'
+}

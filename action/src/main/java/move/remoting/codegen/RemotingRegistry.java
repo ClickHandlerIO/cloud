@@ -24,7 +24,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import javaslang.control.Try;
 import move.action.Action;
-import move.action.WorkerActionProvider;
+import move.action.WorkerActionProducer;
 import move.remoting.Push;
 import move.remoting.RemotingType;
 import org.reflections.Reflections;
@@ -34,7 +34,7 @@ import org.reflections.Reflections;
  */
 public class RemotingRegistry {
 
-  public final Map<Object, WorkerActionProvider<?, ?, ?>> providerMap;
+  public final List<WorkerActionProducer<?, ?, ?, ?>> providerMap;
   final StandardType OBJECT_TYPE = new PrimitiveType(Object.class, DataType.WILDCARD, true);
   private final Map<Type, StandardType> types = new HashMap<>();
   private final Map<Class, ActionSpec> actionSpecs = new HashMap<>();
@@ -50,7 +50,7 @@ public class RemotingRegistry {
    * @param providerMap
    * @param prefixMap
    */
-  public RemotingRegistry(Map<Object, WorkerActionProvider<?, ?, ?>> providerMap,
+  public RemotingRegistry(List<WorkerActionProducer<?, ?, ?, ?>> providerMap,
       TreeMap<String, String> prefixMap) {
     this.providerMap = providerMap;
     this.prefixMap = prefixMap == null ? new TreeMap<>() : prefixMap;
@@ -130,12 +130,12 @@ public class RemotingRegistry {
     }
 
     // Build ActionSpecs
-    providerMap.forEach((key, value) -> {
+    providerMap.forEach(value -> {
       if (value != null) {
         actionSpecs.put(value.getActionClass(), new ActionSpec()
-            .provider(value)
-            .inSpec(buildType(value.getRequestClass()))
-            .outSpec(buildType(value.getReplyClass())));
+            .provider(value.getProvider())
+            .inSpec(buildType(value.getProvider().getRequestClass()))
+            .outSpec(buildType(value.getProvider().getReplyClass())));
       }
     });
 

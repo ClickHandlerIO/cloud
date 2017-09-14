@@ -382,11 +382,34 @@ abstract class WorkerActionProducer
       )
    }
 
-   open fun launchFromJson(requestJson: String,
+   open fun launchFromJson(requestJson: String): DeferredAction<OUT> {
+      val request = Wire.parse(provider.requestClass, requestJson)
+
+      return provider.broker.launch(
+         request = request,
+         provider = provider,
+         token = NoToken,
+         timeoutTicks = provider.timeoutTicks
+      )
+   }
+
+   open fun launchFromJson(message: String,
+                           token: ActionToken? = NoToken): DeferredAction<OUT> {
+      val request = Wire.parse(provider.requestClass, message)
+
+      return provider.broker.launch(
+         request = request,
+         provider = provider,
+         token = token ?: NoToken,
+         timeoutTicks = provider.timeoutTicks
+      )
+   }
+
+   open fun launchFromJson(message: String,
                            token: ActionToken?,
                            timeout: Long,
                            unit: TimeUnit = TimeUnit.MILLISECONDS): DeferredAction<OUT> {
-      val request = Wire.parse(provider.requestClass, requestJson)
+      val request = Wire.parse(provider.requestClass, message)
 
       return provider.broker.launch(
          request = request,
@@ -396,11 +419,11 @@ abstract class WorkerActionProducer
       )
    }
 
-   open fun launchFromJson(requestJson: ByteArray,
+   open fun launchFromJson(message: ByteArray,
                            token: ActionToken?,
                            timeout: Long,
                            unit: TimeUnit = TimeUnit.MILLISECONDS): DeferredAction<OUT> {
-      val request = Wire.parse(provider.requestClass, requestJson)
+      val request = Wire.parse(provider.requestClass, message)
 
       return provider.broker.launch(
          request = request,
@@ -410,11 +433,11 @@ abstract class WorkerActionProducer
       )
    }
 
-   open fun launchFromJson(requestJson: ByteBuf,
+   open fun launchFromJson(message: ByteBuf,
                            token: ActionToken?,
                            timeout: Long,
                            unit: TimeUnit = TimeUnit.MILLISECONDS): DeferredAction<OUT> {
-      val request = Wire.parse(provider.requestClass, requestJson)
+      val request = Wire.parse(provider.requestClass, message)
 
       return provider.broker.launch(
          request = request,
@@ -425,11 +448,57 @@ abstract class WorkerActionProducer
    }
 
 
-   open fun launchFromMsgPack(requestJson: ByteArray,
+   open fun launchFromMsgPack(message: ByteArray): DeferredAction<OUT> {
+      val request = Wire.unpack(provider.requestClass, message)
+
+      return provider.broker.launch(
+         request = request,
+         provider = provider,
+         token = NoToken,
+         timeoutTicks = provider.timeoutTicks
+      )
+   }
+
+   open fun launchFromMsgPack(message: ByteBuf): DeferredAction<OUT> {
+      val request = Wire.unpack(provider.requestClass, message)
+
+      return provider.broker.launch(
+         request = request,
+         provider = provider,
+         token = NoToken,
+         timeoutTicks = provider.timeoutTicks
+      )
+   }
+
+   open fun launchFromMsgPack(message: ByteArray,
+                              token: ActionToken? = NoToken): DeferredAction<OUT> {
+      val request = Wire.unpack(provider.requestClass, message)
+
+      return provider.broker.launch(
+         request = request,
+         provider = provider,
+         token = token ?: NoToken,
+         timeoutTicks = provider.timeoutTicks
+      )
+   }
+
+   open fun launchFromMsgPack(message: ByteBuf,
+                              token: ActionToken? = NoToken): DeferredAction<OUT> {
+      val request = Wire.unpack(provider.requestClass, message)
+
+      return provider.broker.launch(
+         request = request,
+         provider = provider,
+         token = token ?: NoToken,
+         timeoutTicks = provider.timeoutTicks
+      )
+   }
+
+   open fun launchFromMsgPack(message: ByteArray,
                               token: ActionToken?,
                               timeout: Long,
                               unit: TimeUnit = TimeUnit.MILLISECONDS): DeferredAction<OUT> {
-      val request = Wire.unpack(provider.requestClass, requestJson)
+      val request = Wire.unpack(provider.requestClass, message)
 
       return provider.broker.launch(
          request = request,
@@ -439,11 +508,11 @@ abstract class WorkerActionProducer
       )
    }
 
-   open fun launchFromMsgPack(requestJson: ByteBuf,
+   open fun launchFromMsgPack(message: ByteBuf,
                               token: ActionToken?,
                               timeout: Long,
                               unit: TimeUnit = TimeUnit.MILLISECONDS): DeferredAction<OUT> {
-      val request = Wire.unpack(provider.requestClass, requestJson)
+      val request = Wire.unpack(provider.requestClass, message)
 
       return provider.broker.launch(
          request = request,
@@ -597,12 +666,12 @@ abstract class WorkerActionProducerWithBuilder
       return Single.just(WorkerReceipt().apply { messageId = NUID.nextGlobal() })
    }
 
-   override fun launchFromJson(requestJson: String,
+   override fun launchFromJson(message: String,
                                token: ActionToken?,
                                timeout: Long,
                                unit: TimeUnit): DeferredAction<OUT> {
-      val request = if (requestJson.isNotEmpty()) {
-         Wire.parse(provider.requestClass, requestJson)
+      val request = if (message.isNotEmpty()) {
+         Wire.parse(provider.requestClass, message)
       } else {
          createRequest()
       }
@@ -615,12 +684,12 @@ abstract class WorkerActionProducerWithBuilder
       )
    }
 
-   override fun launchFromJson(requestJson: ByteArray,
+   override fun launchFromJson(message: ByteArray,
                                token: ActionToken?,
                                timeout: Long,
                                unit: TimeUnit): DeferredAction<OUT> {
-      val request = if (requestJson.isNotEmpty()) {
-         Wire.parse(provider.requestClass, requestJson)
+      val request = if (message.isNotEmpty()) {
+         Wire.parse(provider.requestClass, message)
       } else {
          createRequest()
       }
@@ -633,12 +702,12 @@ abstract class WorkerActionProducerWithBuilder
       )
    }
 
-   override fun launchFromJson(requestJson: ByteBuf,
+   override fun launchFromJson(message: ByteBuf,
                                token: ActionToken?,
                                timeout: Long,
                                unit: TimeUnit): DeferredAction<OUT> {
-      val request = if (requestJson.isReadable) {
-         Wire.parse(provider.requestClass, requestJson)
+      val request = if (message.isReadable) {
+         Wire.parse(provider.requestClass, message)
       } else {
          createRequest()
       }
@@ -651,11 +720,11 @@ abstract class WorkerActionProducerWithBuilder
       )
    }
 
-   override fun launchFromMsgPack(requestJson: ByteArray,
+   override fun launchFromMsgPack(message: ByteArray,
                                   token: ActionToken?,
                                   timeout: Long,
                                   unit: TimeUnit): DeferredAction<OUT> {
-      val request = Wire.unpack(provider.requestClass, requestJson)
+      val request = Wire.unpack(provider.requestClass, message)
 
       return provider.broker.launch(
          request = request,
@@ -665,11 +734,11 @@ abstract class WorkerActionProducerWithBuilder
       )
    }
 
-   override fun launchFromMsgPack(requestJson: ByteBuf,
+   override fun launchFromMsgPack(message: ByteBuf,
                                   token: ActionToken?,
                                   timeout: Long,
                                   unit: TimeUnit): DeferredAction<OUT> {
-      val request = Wire.unpack(provider.requestClass, requestJson)
+      val request = Wire.unpack(provider.requestClass, message)
 
       return provider.broker.launch(
          request = request,

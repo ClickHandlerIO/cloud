@@ -186,44 +186,44 @@ public class NATSParserTests {
     parser.parseAssert("MSG subject 1 INBOX.0 2\r\nHI\r\n", "subject", 1, "INBOX.0", "HI");
   }
 
-  @Test
-  public void testMSGBenchmark() {
-    final ParserProxy parser = new ParserProxy();
-
-    int samples = 10;
-    int count = 2000000;
-    String payload = NUID.nextGlobal()
-        + "HI HIHI HIHI HIHI HIHI HIHI HIHI HIHI HIHI HIHI HIHI HIHI HIHI HIHI HIHI HI";
-
-//    final byte[] BUFFER = ("MSG m.0 1 " + payload.length() + "\r\n" + payload + "\r\n").getBytes(StandardCharsets.US_ASCII);
-    final byte[] BUFFER = ("MSG m 1 " + payload.length() + "\r\n" + payload + "\r\n")
-        .getBytes(StandardCharsets.UTF_8);
-//    final byte[] BUFFER = "MSG subject 1 2\r\nHI\r\n".getBytes(StandardCharsets.US_ASCII);
-
-    final Buffer buffer = Buffer.buffer(BUFFER);
-    final ByteBuf byteBuf = buffer.getByteBuf();
-
-    final ByteBuf buf = PooledByteBufAllocator.DEFAULT.directBuffer();
-    final ByteBuf buf2 = PooledByteBufAllocator.DEFAULT.directBuffer();
-    buf.writeBytes(BUFFER);
-
-    for (int x = 0; x < samples; x++) {
-      long start = System.currentTimeMillis();
-      for (int i = 0; i < count; i++) {
-        parser.parse(buf);
-        PlatformDependent.copyMemory(buf.memoryAddress(), buf2.memoryAddress(), buf.readerIndex());
-        buf.resetReaderIndex();
-
-        byte b = PlatformDependent.getByte(buf2.memoryAddress());
-        byte b2 = PlatformDependent.getByte(buf2.memoryAddress() + 1);
-//        System.out.println(String.valueOf((char)b));
-//        System.out.println(String.valueOf((char)b2));
-      }
-      long elapsed = System.currentTimeMillis() - start;
-      double runsPerSecond = 1000.0 / elapsed;
-      System.out.println((count * runsPerSecond) + " / sec");
-    }
-  }
+//  @Test
+//  public void testMSGBenchmark() {
+//    final ParserProxy parser = new ParserProxy();
+//
+//    int samples = 10;
+//    int count = 2000000;
+//    String payload = NUID.nextGlobal()
+//        + "HI HIHI HIHI HIHI HIHI HIHI HIHI HIHI HIHI HIHI HIHI HIHI HIHI HIHI HIHI HI";
+//
+////    final byte[] BUFFER = ("MSG m.0 1 " + payload.length() + "\r\n" + payload + "\r\n").getBytes(StandardCharsets.US_ASCII);
+//    final byte[] BUFFER = ("MSG m 1 " + payload.length() + "\r\n" + payload + "\r\n")
+//        .getBytes(StandardCharsets.UTF_8);
+////    final byte[] BUFFER = "MSG subject 1 2\r\nHI\r\n".getBytes(StandardCharsets.US_ASCII);
+//
+//    final Buffer buffer = Buffer.buffer(BUFFER);
+//    final ByteBuf byteBuf = buffer.getByteBuf();
+//
+//    final ByteBuf buf = PooledByteBufAllocator.DEFAULT.directBuffer();
+//    final ByteBuf buf2 = PooledByteBufAllocator.DEFAULT.directBuffer();
+//    buf.writeBytes(BUFFER);
+//
+//    for (int x = 0; x < samples; x++) {
+//      long start = System.currentTimeMillis();
+//      for (int i = 0; i < count; i++) {
+//        parser.parse(buf);
+//        PlatformDependent.copyMemory(buf.memoryAddress(), buf2.memoryAddress(), buf.readerIndex());
+//        buf.resetReaderIndex();
+//
+//        byte b = PlatformDependent.getByte(buf2.memoryAddress());
+//        byte b2 = PlatformDependent.getByte(buf2.memoryAddress() + 1);
+////        System.out.println(String.valueOf((char)b));
+////        System.out.println(String.valueOf((char)b2));
+//      }
+//      long elapsed = System.currentTimeMillis() - start;
+//      double runsPerSecond = 1000.0 / elapsed;
+//      System.out.println((count * runsPerSecond) + " / sec");
+//    }
+//  }
 
 
   @Test
@@ -371,47 +371,47 @@ public class NATSParserTests {
     Assert.assertEquals(++pingCounter, parser.pingCount);
   }
 
-  @Test
-  public void testPINGBenchmark() {
-    final ParserProxy parser = new ParserProxy();
-
-    int samples = 10;
-    int count = 2000000;
-
-    for (int x = 0; x < samples; x++) {
-      long start = System.currentTimeMillis();
-      for (int i = 0; i < count; i++) {
-        final byte[] BUFFER = new byte[]{P, I, N, G, CR, LF};
-        parser.parse(BUFFER);
-      }
-      long elapsed = System.currentTimeMillis() - start;
-      double runsPerSecond = 1000.0 / elapsed;
-      System.out.println((count * runsPerSecond) + " / sec");
-
-      Assert.assertEquals((x + 1) * count, parser.pingCount);
-    }
-  }
-
-  @Test
-  public void testPONGBenchmark() {
-    final ParserProxy parser = new ParserProxy();
-
-    int samples = 10;
-    int count = 2000000;
-
-    for (int x = 0; x < samples; x++) {
-      long start = System.currentTimeMillis();
-      for (int i = 0; i < count; i++) {
-        final byte[] BUFFER = new byte[]{P, O, N, G, CR, LF};
-        parser.parse(BUFFER);
-      }
-      long elapsed = System.currentTimeMillis() - start;
-      double runsPerSecond = 1000.0 / elapsed;
-      System.out.println((count * runsPerSecond) + " / sec");
-
-      Assert.assertEquals((x + 1) * count, parser.pongCount);
-    }
-  }
+//  @Test
+//  public void testPINGBenchmark() {
+//    final ParserProxy parser = new ParserProxy();
+//
+//    int samples = 10;
+//    int count = 2000000;
+//
+//    for (int x = 0; x < samples; x++) {
+//      long start = System.currentTimeMillis();
+//      for (int i = 0; i < count; i++) {
+//        final byte[] BUFFER = new byte[]{P, I, N, G, CR, LF};
+//        parser.parse(BUFFER);
+//      }
+//      long elapsed = System.currentTimeMillis() - start;
+//      double runsPerSecond = 1000.0 / elapsed;
+//      System.out.println((count * runsPerSecond) + " / sec");
+//
+//      Assert.assertEquals((x + 1) * count, parser.pingCount);
+//    }
+//  }
+//
+//  @Test
+//  public void testPONGBenchmark() {
+//    final ParserProxy parser = new ParserProxy();
+//
+//    int samples = 10;
+//    int count = 2000000;
+//
+//    for (int x = 0; x < samples; x++) {
+//      long start = System.currentTimeMillis();
+//      for (int i = 0; i < count; i++) {
+//        final byte[] BUFFER = new byte[]{P, O, N, G, CR, LF};
+//        parser.parse(BUFFER);
+//      }
+//      long elapsed = System.currentTimeMillis() - start;
+//      double runsPerSecond = 1000.0 / elapsed;
+//      System.out.println((count * runsPerSecond) + " / sec");
+//
+//      Assert.assertEquals((x + 1) * count, parser.pongCount);
+//    }
+//  }
 
   @Test
   public void testPONG() {

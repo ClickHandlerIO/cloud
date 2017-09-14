@@ -1,0 +1,16 @@
+rootProject.name = 'cloud'
+include ':action'
+include ':action-compiler'
+include ':action-nats'
+include ':common'
+include ':remoting'
+include ':sql'
+include ':action-example'
+
+project(':action').projectDir = "$rootDir/action" as File
+project(':action-compiler').projectDir = "$rootDir/action-compiler" as File
+project(':action-nats').projectDir = "$rootDir/action-nats" as File
+project(':common').projectDir = "$rootDir/common" as File
+project(':remoting').projectDir = "$rootDir/remoting" as File
+project(':sql').projectDir = "$rootDir/sql" as File
+project(':action-example').projectDir = "$rootDir/action-example" as File

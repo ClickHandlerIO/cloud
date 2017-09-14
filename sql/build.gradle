@@ -1,0 +1,21 @@
+
+description = 'SQL'
+dependencies {
+    compile group: 'com.google.dagger', name: 'dagger', version:'2.11'
+  compile project(':action')
+    compile group: 'io.vertx', name: 'vertx-core', version:'3.4.2'
+    compile group: 'io.reactivex', name: 'rxjava', version:'1.3.0'
+    compile group: 'io.reactivex.rxjava2', name: 'rxjava', version:'2.1.3'
+    compile group: 'io.vertx', name: 'vertx-rx-java', version:'3.4.2'
+    compile group: 'com.google.guava', name: 'guava', version:'21.0'
+    compile group: 'org.reflections', name: 'reflections', version:'0.9.11'
+    compile group: 'com.zaxxer', name: 'HikariCP', version:'2.6.3'
+    compile group: 'io.javaslang', name: 'javaslang', version:'2.0.4'
+    compile group: 'com.h2database', name: 'h2', version:'1.4.181'
+    compile group: 'cglib', name: 'cglib-nodep', version:'3.2.1'
+    compile group: 'mysql', name: 'mysql-connector-java', version:'5.1.42'
+    compile group: 'org.jooq', name: 'jooq', version:'3.9.4'
+    compile group: 'org.jooq', name: 'jooq-codegen', version:'3.9.4'
+    compile group: 'org.jooq', name: 'jooq-meta', version:'3.9.4'
+    compile group: 'com.nuodb.jdbc', name: 'nuodb-jdbc', version:'2.6.1'
+}

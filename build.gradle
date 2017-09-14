@@ -1,0 +1,59 @@
+buildscript {
+    ext.kotlin_version = '1.1.4-3'
+    ext.dagger_version = '2.11'
+
+    repositories {
+        jcenter()
+    }
+    dependencies {
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+}
+
+allprojects {
+    apply plugin: 'maven'
+
+    group = 'io.clickhandler'
+    version = '0.8.0-SNAPSHOT'
+
+//    uploadArchives {
+//        repositories {
+//            mavenDeployer {
+//                repository(url: "file://localhost/tmp/myRepo/")
+//            }
+//        }
+//    }
+}
+
+subprojects {
+    apply plugin: 'java'
+    apply plugin: 'kotlin'
+
+    sourceCompatibility = 1.8
+    targetCompatibility = 1.8
+
+    tasks.withType(JavaCompile) {
+        options.encoding = 'UTF-8'
+    }
+
+    task packageSources(type: Jar) {
+        classifier = 'sources'
+        from sourceSets.main.allSource
+    }
+
+    kotlin { experimental { coroutines 'enable' } }
+
+    artifacts.archives packageSources
+
+    repositories {
+        mavenLocal()
+        jcenter()
+
+        maven { url "https://repo.axismedtech.com/content/repositories/thirdparty" }
+        maven { url "http://repo1.maven.org/maven2/" }
+        maven { url "https://oss.sonatype.org/content/repositories/snapshots" }
+        maven { url "https://oss.sonatype.org/content/repositories/google-snapshots/" }
+        maven { url "http://maven.aspose.com/artifactory/simple/ext-release-local/" }
+        maven { url "https://jcenter.bintray.com" }
+    }
+}
