@@ -43,12 +43,13 @@ constructor(val vertx: Vertx, val actionProvider: Provider<A>) {
    var executionTimeoutEnabled: Boolean = false
 
    // Timeout
-   abstract internal var timeoutMillis: Int
-   internal var timeoutMillisLong = timeoutMillis.toLong()
+   abstract var timeoutMillis: Long
+      get
+      internal set
 
    // Calculate the default number of Ticks to constitute a timeout.
-   open internal var timeoutTicks = if (timeoutMillisLong > 0)
-      (timeoutMillisLong / MoveEventLoop.TICK_MS).let { if (it < 1) 1 else it }
+   open internal var timeoutTicks = if (timeoutMillis > 0)
+      (timeoutMillis / MoveEventLoop.TICK_MS).let { if (it < 1) 1 else it }
    else
       0
 
@@ -485,7 +486,9 @@ constructor(vertx: Vertx,
    val annotationTimeout: Int
       get() = annotation?.timeout ?: 0
 
-   override var timeoutMillis: Int = annotationTimeout
+   override var timeoutMillis: Long = annotationTimeout.toLong()
+      get
+      internal set
 }
 
 
@@ -506,7 +509,9 @@ constructor(vertx: Vertx,
    val visibility: ActionVisibility
       get() = annotation?.visibility ?: ActionVisibility.PRIVATE
 
-   override var timeoutMillis: Int = annotationTimeout
+   override var timeoutMillis: Long = annotationTimeout.toLong()
+      get
+      internal set
 }
 
 /**
@@ -561,5 +566,7 @@ constructor(vertx: Vertx, provider: Provider<A>)
    val annotationTimeout: Int
       get() = annotation?.timeout ?: 0
 
-   override var timeoutMillis: Int = annotationTimeout
+   override var timeoutMillis: Long = annotationTimeout.toLong()
+      get
+      internal set
 }

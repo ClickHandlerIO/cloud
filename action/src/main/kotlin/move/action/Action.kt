@@ -1,6 +1,7 @@
 package move.action
 
 import com.google.common.base.Throwables
+import io.netty.buffer.ByteBuf
 import io.vertx.core.Vertx
 import io.vertx.ext.web.RoutingContext
 import kotlinx.coroutines.experimental.*
@@ -20,8 +21,27 @@ import kotlin.coroutines.experimental.CoroutineContext
 
 enum class CircuitBreakerState {
    CLOSED,
+   /**
+    * State when the circuit is OPEN and a single
+    * request is allowed through to try to get it
+    * back to a CLOSED state.
+    */
    HALF_OPEN,
    OPEN,
+}
+
+interface ActionToken
+
+object NoToken : ActionToken
+
+data class AnyToken(val token: Any): ActionToken
+
+data class StringToken(val token: String): ActionToken
+
+data class BytesToken(val token: ByteArray): ActionToken
+
+data class BufferToken(val token: ByteBuf): ActionToken {
+   fun isReadable() = token.isReadable
 }
 
 interface DeferredAction<T> : Deferred<T> {
@@ -106,7 +126,7 @@ class MoveEventLoopDisposableHandle(@Volatile var block: Runnable?) : Disposable
    }
 }
 
-data class Reply<T>(val value: T?, val cause: Throwable?)
+data class ReplyCatch<T>(val value: T?, val cause: Throwable?)
 
 /*******************************************************************
  * Lifted FROM AbstractCoroutine!!!
@@ -116,6 +136,9 @@ data class Reply<T>(val value: T?, val cause: Throwable?)
 @PublishedApi internal const val MODE_DIRECT = 2         // when the context is right just invoke the delegate continuation direct
 @PublishedApi internal const val MODE_UNDISPATCHED = 3   // when the thread is right, but need to mark it with current coroutine
 
+/**
+ *
+ */
 abstract class JobAction<IN : Any, OUT : Any> :
    IJobAction<IN, OUT>(true),
    Continuation<OUT>,
@@ -154,14 +177,20 @@ abstract class JobAction<IN : Any, OUT : Any> :
 
    var metrics: ActionMetrics? = null
    var parent: JobAction<*, *>? = null
+      get
+      private set
 
-//   @Suppress("LeakingThis")
-//   var _context: CoroutineContext = this
-//      get
-//      private set
+   var token: ActionToken? = null
+      get
+      private set
+
+   @Suppress("LeakingThis")
+   var _context: CoroutineContext = this
+      get
+      private set
 
    override val context: CoroutineContext
-      get() = this
+      get() = _context
    override val coroutineContext: CoroutineContext get() = context
    override val hasCancellingState: Boolean get() = true
 
@@ -174,6 +203,7 @@ abstract class JobAction<IN : Any, OUT : Any> :
    internal open fun launch(eventLoop: MoveEventLoop,
                             provider: ActionProvider<*, IN, OUT>,
                             request: IN,
+                            token: ActionToken,
                             timeoutTicks: Long = 0,
                             root: Boolean = false) {
 //      if (MoveEventLoopGroup.currentEventLoop !== eventLoop) {
@@ -181,7 +211,7 @@ abstract class JobAction<IN : Any, OUT : Any> :
 //      }
 
       this.metrics = ActionMetrics()
-
+      this.token = token
       this.eventLoop = eventLoop
       this.provider = provider
       this._request = request
@@ -197,7 +227,8 @@ abstract class JobAction<IN : Any, OUT : Any> :
             starting = true
             CoroutineStart.DEFAULT({ internalExecute() }, this, this)
          } else {
-//            _context = parent._context
+            _context = parent._context
+            this.token = parent.token
 
             when {
                _deadline == 0L -> _deadline = parent._deadline
@@ -225,7 +256,7 @@ abstract class JobAction<IN : Any, OUT : Any> :
                                       request: IN,
                                       timeoutTicks: Long = 0,
                                       root: Boolean = false): OUT {
-      launch(eventLoop, provider, request, timeoutTicks, root)
+      launch(eventLoop, provider, request, NoToken, timeoutTicks, root)
       return await()
    }
 
@@ -268,6 +299,7 @@ abstract class JobAction<IN : Any, OUT : Any> :
                   this._deadline = parent._deadline + 1
             }
 
+            this._context = parent._context
             this.parent = parent
             return wrapInternalExecute()
          }
@@ -276,11 +308,11 @@ abstract class JobAction<IN : Any, OUT : Any> :
 
    override fun doTimeout() {
       val exception = ActionTimeoutException(this)
-      try {
-         cancel(exception)
-      } finally {
-         currentContinuation?.resumeWithException(exception)
-      }
+//      try {
+      cancel(exception)
+//      } finally {
+//         currentContinuation?.resumeWithException(exception)
+//      }
    }
 
    suspend fun <T> suspendAction(supplier: java.util.function.Function<CancellableContinuation<T>, T>): T {
@@ -302,49 +334,49 @@ abstract class JobAction<IN : Any, OUT : Any> :
          get() = continuation.context
 
       override fun resume(value: T) {
-         val job = action ?: this@JobAction
+         val job = action ?: eventLoop.job
 
          if (MoveEventLoopGroup.currentEventLoop !== eventLoop) {
             eventLoop.execute {
-               //               val previousJob = job
-               try {
-                  eventLoop.job = job
+               eventLoop.job = job
+
+               if (job.isCancelled) {
+                  continuation.resumeWithException(ActionTimeoutException(job))
+               } else {
                   continuation.resume(value)
-               } finally {
-//                  eventLoop.job = previousJob
                }
             }
          } else {
-//            val previousJob = eventLoop.job
-            try {
-               eventLoop.job = job
+            eventLoop.job = job
+
+            if (job.isCancelled) {
+               continuation.resumeWithException(ActionTimeoutException(job))
+            } else {
                continuation.resume(value)
-            } finally {
-//               eventLoop.job = previousJob
             }
          }
       }
 
       override fun resumeWithException(exception: Throwable) {
-         val job = action ?: this@JobAction
+         val job = action ?: eventLoop.job
 
          if (Vertx.currentContext() !== eventLoop) {
             eventLoop.execute {
-               //               val previousJob = eventLoop.job
-               try {
-                  eventLoop.job = job
+               eventLoop.job = job
+
+               if (job.isCancelled) {
+                  continuation.resumeWithException(ActionTimeoutException(job))
+               } else {
                   continuation.resumeWithException(exception)
-               } finally {
-//                  eventLoop.job = previousJob
                }
             }
          } else {
-//            val previousJob = eventLoop.job
-            try {
-               eventLoop.job = job
+            eventLoop.job = job
+
+            if (job.isCancelled) {
+               continuation.resumeWithException(ActionTimeoutException(job))
+            } else {
                continuation.resumeWithException(exception)
-            } finally {
-//               eventLoop.job = previousJob
             }
          }
       }
@@ -358,12 +390,6 @@ abstract class JobAction<IN : Any, OUT : Any> :
          starting = false
          return continuation
       }
-
-//      val job = if (continuation.context is JobAction<*, *, *, *>) {
-//         continuation.context as JobAction<*, *, *, *>
-//      } else {
-//         eventLoop.job
-//      }
 
       val job = eventLoop.job
 

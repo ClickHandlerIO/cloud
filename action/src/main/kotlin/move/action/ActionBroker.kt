@@ -14,7 +14,7 @@ fun changeGatewayBroker(broker: ActionBroker) {
    _GATEWAY_BROKER = broker
 
    Actions.worker.forEach {
-      it.provider0.broker = broker
+      it.provider.broker = broker
    }
 }
 
@@ -45,7 +45,7 @@ abstract class ActionBroker {
     */
    abstract suspend fun <A : JobAction<IN, OUT>, IN : Any, OUT : Any> ask(
       request: IN,
-      provider: InternalActionProvider<JobAction<IN, OUT>, IN, OUT>,
+      provider: InternalActionProvider<A, IN, OUT>,
       timeoutTicks: Long = 0
    ): OUT
 
@@ -54,7 +54,7 @@ abstract class ActionBroker {
     */
    abstract suspend fun <A : JobAction<IN, OUT>, IN : Any, OUT : Any> ask(
       request: IN,
-      provider: InternalActionProvider<JobAction<IN, OUT>, IN, OUT>,
+      provider: InternalActionProvider<A, IN, OUT>,
       timeoutTicks: Long = 0,
       delaySeconds: Int = 0
    ): OUT
@@ -64,7 +64,7 @@ abstract class ActionBroker {
     */
    abstract fun <A : JobAction<IN, OUT>, IN : Any, OUT : Any> rxAsk(
       request: IN,
-      provider: InternalActionProvider<JobAction<IN, OUT>, IN, OUT>,
+      provider: InternalActionProvider<A, IN, OUT>,
       timeoutTicks: Long = 0,
       delaySeconds: Int = 0,
       root: Boolean = false
@@ -76,38 +76,7 @@ abstract class ActionBroker {
     */
    abstract fun <A : JobAction<IN, OUT>, IN : Any, OUT : Any> launch(
       request: IN,
-      provider: InternalActionProvider<JobAction<IN, OUT>, IN, OUT>,
-      timeoutTicks: Long = 0,
-      delaySeconds: Int = 0,
-      root: Boolean = false
-   ): DeferredAction<OUT>
-
-
-   /**
-    *
-    */
-   abstract suspend fun <A : JobAction<IN, OUT>, IN : Any, OUT : Any> ask(
-      request: IN,
-      provider: WorkerActionProvider<JobAction<IN, OUT>, IN, OUT>,
-      timeoutTicks: Long = 0
-   ): OUT
-
-   /**
-    *
-    */
-   abstract suspend fun <A : JobAction<IN, OUT>, IN : Any, OUT : Any> ask(
-      request: IN,
-      provider: WorkerActionProvider<JobAction<IN, OUT>, IN, OUT>,
-      timeoutTicks: Long = 0,
-      delaySeconds: Int = 0
-   ): OUT
-
-   /**
-    *
-    */
-   abstract fun <A : JobAction<IN, OUT>, IN : Any, OUT : Any> rxAsk(
-      request: IN,
-      provider: WorkerActionProvider<JobAction<IN, OUT>, IN, OUT>,
+      provider: InternalActionProvider<A, IN, OUT>,
       timeoutTicks: Long = 0,
       delaySeconds: Int = 0,
       root: Boolean = false
@@ -118,7 +87,8 @@ abstract class ActionBroker {
     */
    abstract fun <A : JobAction<IN, OUT>, IN : Any, OUT : Any> launch(
       request: IN,
-      provider: WorkerActionProvider<JobAction<IN, OUT>, IN, OUT>,
+      provider: InternalActionProvider<A, IN, OUT>,
+      token: ActionToken = NoToken,
       timeoutTicks: Long = 0,
       delaySeconds: Int = 0,
       root: Boolean = false
@@ -128,18 +98,72 @@ abstract class ActionBroker {
    /**
     *
     */
-   abstract suspend fun ask(
+   abstract suspend fun <A : JobAction<IN, OUT>, IN : Any, OUT : Any> ask(
+      request: IN,
+      provider: WorkerActionProvider<A, IN, OUT>,
+      timeoutTicks: Long = 0
+   ): OUT
+
+   /**
+    *
+    */
+   abstract suspend fun <A : JobAction<IN, OUT>, IN : Any, OUT : Any> ask(
+      request: IN,
+      provider: WorkerActionProvider<A, IN, OUT>,
+      timeoutTicks: Long = 0,
+      delaySeconds: Int = 0
+   ): OUT
+
+   /**
+    *
+    */
+   abstract fun <A : JobAction<IN, OUT>, IN : Any, OUT : Any> rxAsk(
+      request: IN,
+      provider: WorkerActionProvider<A, IN, OUT>,
+      timeoutTicks: Long = 0,
+      delaySeconds: Int = 0,
+      root: Boolean = false
+   ): DeferredAction<OUT>
+
+   /**
+    *
+    */
+   abstract fun <A : JobAction<IN, OUT>, IN : Any, OUT : Any> launch(
+      request: IN,
+      provider: WorkerActionProvider<A, IN, OUT>,
+      timeoutTicks: Long = 0,
+      delaySeconds: Int = 0,
+      root: Boolean = false
+   ): DeferredAction<OUT>
+
+   /**
+    *
+    */
+   abstract fun <A : JobAction<IN, OUT>, IN : Any, OUT : Any> launch(
+      request: IN,
+      provider: WorkerActionProvider<A, IN, OUT>,
+      token: ActionToken = NoToken,
+      timeoutTicks: Long = 0,
+      delaySeconds: Int = 0,
+      root: Boolean = false
+   ): DeferredAction<OUT>
+
+
+   /**
+    *
+    */
+   abstract suspend fun <A : HttpAction> ask(
       request: RoutingContext,
-      provider: HttpActionProvider<HttpAction>,
+      provider: HttpActionProvider<A>,
       timeoutTicks: Long = 0
    )
 
    /**
     *
     */
-   abstract suspend fun ask(
+   abstract suspend fun <A : HttpAction> ask(
       request: RoutingContext,
-      provider: HttpActionProvider<HttpAction>,
+      provider: HttpActionProvider<A>,
       timeoutTicks: Long = 0,
       delaySeconds: Int = 0
    )
@@ -147,9 +171,9 @@ abstract class ActionBroker {
    /**
     *
     */
-   abstract fun rxAsk(
+   abstract fun <A : HttpAction> rxAsk(
       request: RoutingContext,
-      provider: HttpActionProvider<HttpAction>,
+      provider: HttpActionProvider<A>,
       timeoutTicks: Long = 0,
       delaySeconds: Int = 0,
       root: Boolean = false
@@ -158,14 +182,13 @@ abstract class ActionBroker {
    /**
     *
     */
-   abstract fun launch(
+   abstract fun <A : HttpAction> launch(
       request: RoutingContext,
-      provider: HttpActionProvider<HttpAction>,
+      provider: HttpActionProvider<A>,
       timeoutTicks: Long = 0,
       delaySeconds: Int = 0,
       root: Boolean = false
    ): DeferredAction<Unit>
-
 
    companion object {
       internal val _default = LocalBroker
@@ -184,7 +207,7 @@ abstract class ActionBroker {
 abstract class GatewayBroker : ActionBroker() {
    suspend override fun <A : JobAction<IN, OUT>, IN : Any, OUT : Any> ask(
       request: IN,
-      provider: InternalActionProvider<JobAction<IN, OUT>, IN, OUT>,
+      provider: InternalActionProvider<A, IN, OUT>,
       timeoutTicks: Long): OUT {
 
       return LocalBroker.ask(request, provider, timeoutTicks)
@@ -192,7 +215,7 @@ abstract class GatewayBroker : ActionBroker() {
 
    suspend override fun <A : JobAction<IN, OUT>, IN : Any, OUT : Any> ask(
       request: IN,
-      provider: InternalActionProvider<JobAction<IN, OUT>, IN, OUT>,
+      provider: InternalActionProvider<A, IN, OUT>,
       timeoutTicks: Long,
       delaySeconds: Int): OUT {
 
@@ -201,7 +224,7 @@ abstract class GatewayBroker : ActionBroker() {
 
    override fun <A : JobAction<IN, OUT>, IN : Any, OUT : Any> rxAsk(
       request: IN,
-      provider: InternalActionProvider<JobAction<IN, OUT>, IN, OUT>,
+      provider: InternalActionProvider<A, IN, OUT>,
       timeoutTicks: Long,
       delaySeconds: Int,
       root: Boolean): DeferredAction<OUT> {
@@ -211,7 +234,7 @@ abstract class GatewayBroker : ActionBroker() {
 
    override fun <A : JobAction<IN, OUT>, IN : Any, OUT : Any> launch(
       request: IN,
-      provider: InternalActionProvider<JobAction<IN, OUT>, IN, OUT>,
+      provider: InternalActionProvider<A, IN, OUT>,
       timeoutTicks: Long,
       delaySeconds: Int,
       root: Boolean): DeferredAction<OUT> {
@@ -219,29 +242,29 @@ abstract class GatewayBroker : ActionBroker() {
       return LocalBroker.launch(request, provider, timeoutTicks, delaySeconds, root)
    }
 
-   suspend override fun ask(request: RoutingContext,
-                            provider: HttpActionProvider<HttpAction>,
+   suspend override fun <A : HttpAction> ask(request: RoutingContext,
+                            provider: HttpActionProvider<A>,
                             timeoutTicks: Long) {
       LocalBroker.ask(request, provider, timeoutTicks)
    }
 
-   suspend override fun ask(request: RoutingContext,
-                            provider: HttpActionProvider<HttpAction>,
+   suspend override fun <A : HttpAction> ask(request: RoutingContext,
+                            provider: HttpActionProvider<A>,
                             timeoutTicks: Long,
                             delaySeconds: Int) {
       LocalBroker.ask(request, provider, timeoutTicks, delaySeconds)
    }
 
-   override fun rxAsk(request: RoutingContext,
-                      provider: HttpActionProvider<HttpAction>,
+   override fun <A : HttpAction> rxAsk(request: RoutingContext,
+                      provider: HttpActionProvider<A>,
                       timeoutTicks: Long,
                       delaySeconds: Int,
                       root: Boolean): DeferredAction<Unit> {
       return LocalBroker.rxAsk(request, provider, timeoutTicks, delaySeconds, root)
    }
 
-   override fun launch(request: RoutingContext,
-                       provider: HttpActionProvider<HttpAction>,
+   override fun <A : HttpAction> launch(request: RoutingContext,
+                       provider: HttpActionProvider<A>,
                        timeoutTicks: Long,
                        delaySeconds: Int,
                        root: Boolean): DeferredAction<Unit> {
@@ -258,7 +281,7 @@ object LocalBroker : ActionBroker() {
 
    suspend override fun <A : JobAction<IN, OUT>, IN : Any, OUT : Any> ask(
       request: IN,
-      provider: InternalActionProvider<JobAction<IN, OUT>, IN, OUT>,
+      provider: InternalActionProvider<A, IN, OUT>,
       timeoutTicks: Long): OUT {
 
       var eventLoop = MoveEventLoopGroup.currentEventLoop
@@ -271,6 +294,7 @@ object LocalBroker : ActionBroker() {
                eventLoop,
                provider,
                request,
+               NoToken,
                timeoutTicks,
                false
             )
@@ -289,7 +313,7 @@ object LocalBroker : ActionBroker() {
 
    suspend override fun <A : JobAction<IN, OUT>, IN : Any, OUT : Any> ask(
       request: IN,
-      provider: InternalActionProvider<JobAction<IN, OUT>, IN, OUT>,
+      provider: InternalActionProvider<A, IN, OUT>,
       timeoutTicks: Long,
       delaySeconds: Int): OUT {
 
@@ -303,6 +327,7 @@ object LocalBroker : ActionBroker() {
                eventLoop,
                provider,
                request,
+               NoToken,
                timeoutTicks,
                false
             )
@@ -321,7 +346,7 @@ object LocalBroker : ActionBroker() {
 
    override fun <A : JobAction<IN, OUT>, IN : Any, OUT : Any> rxAsk(
       request: IN,
-      provider: InternalActionProvider<JobAction<IN, OUT>, IN, OUT>,
+      provider: InternalActionProvider<A, IN, OUT>,
       timeoutTicks: Long,
       delaySeconds: Int,
       root: Boolean): DeferredAction<OUT> {
@@ -336,6 +361,7 @@ object LocalBroker : ActionBroker() {
                eventLoop,
                provider,
                request,
+               NoToken,
                timeoutTicks,
                false
             )
@@ -345,6 +371,7 @@ object LocalBroker : ActionBroker() {
             eventLoop,
             provider,
             request,
+            NoToken,
             timeoutTicks,
             false
          )
@@ -354,7 +381,7 @@ object LocalBroker : ActionBroker() {
 
    override fun <A : JobAction<IN, OUT>, IN : Any, OUT : Any> launch(
       request: IN,
-      provider: InternalActionProvider<JobAction<IN, OUT>, IN, OUT>,
+      provider: InternalActionProvider<A, IN, OUT>,
       timeoutTicks: Long,
       delaySeconds: Int,
       root: Boolean): DeferredAction<OUT> {
@@ -368,7 +395,8 @@ object LocalBroker : ActionBroker() {
                eventLoop,
                provider,
                request,
-               0,
+               NoToken,
+               timeoutTicks,
                true
             )
          }
@@ -377,7 +405,8 @@ object LocalBroker : ActionBroker() {
             eventLoop,
             provider,
             request,
-            0,
+            NoToken,
+            timeoutTicks,
             true
          )
       }
@@ -385,10 +414,45 @@ object LocalBroker : ActionBroker() {
       return action
    }
 
+   override fun <A : JobAction<IN, OUT>, IN : Any, OUT : Any> launch(
+      request: IN,
+      provider: InternalActionProvider<A, IN, OUT>,
+      token: ActionToken,
+      timeoutTicks: Long,
+      delaySeconds: Int,
+      root: Boolean): DeferredAction<OUT> {
+
+      val eventLoop = provider.eventLoopGroup.next()
+      val action = provider.actionProvider.get()
+
+      if (MoveEventLoopGroup.currentEventLoop !== eventLoop) {
+         eventLoop.execute {
+            action.launch(
+               eventLoop,
+               provider,
+               request,
+               token,
+               timeoutTicks,
+               true
+            )
+         }
+      } else {
+         action.launch(
+            eventLoop,
+            provider,
+            request,
+            token,
+            timeoutTicks,
+            true
+         )
+      }
+
+      return action
+   }
 
    suspend override fun <A : JobAction<IN, OUT>, IN : Any, OUT : Any> ask(
       request: IN,
-      provider: WorkerActionProvider<JobAction<IN, OUT>, IN, OUT>,
+      provider: WorkerActionProvider<A, IN, OUT>,
       timeoutTicks: Long): OUT {
 
       var eventLoop = MoveEventLoopGroup.currentEventLoop
@@ -401,6 +465,7 @@ object LocalBroker : ActionBroker() {
                eventLoop,
                provider,
                request,
+               NoToken,
                timeoutTicks,
                false
             )
@@ -419,7 +484,7 @@ object LocalBroker : ActionBroker() {
 
    suspend override fun <A : JobAction<IN, OUT>, IN : Any, OUT : Any> ask(
       request: IN,
-      provider: WorkerActionProvider<JobAction<IN, OUT>, IN, OUT>,
+      provider: WorkerActionProvider<A, IN, OUT>,
       timeoutTicks: Long,
       delaySeconds: Int): OUT {
 
@@ -433,6 +498,7 @@ object LocalBroker : ActionBroker() {
                eventLoop,
                provider,
                request,
+               NoToken,
                timeoutTicks,
                false
             )
@@ -451,7 +517,7 @@ object LocalBroker : ActionBroker() {
 
    override fun <A : JobAction<IN, OUT>, IN : Any, OUT : Any> rxAsk(
       request: IN,
-      provider: WorkerActionProvider<JobAction<IN, OUT>, IN, OUT>,
+      provider: WorkerActionProvider<A, IN, OUT>,
       timeoutTicks: Long,
       delaySeconds: Int,
       root: Boolean): DeferredAction<OUT> {
@@ -466,6 +532,7 @@ object LocalBroker : ActionBroker() {
                eventLoop,
                provider,
                request,
+               NoToken,
                timeoutTicks,
                false
             )
@@ -475,6 +542,7 @@ object LocalBroker : ActionBroker() {
             eventLoop,
             provider,
             request,
+            NoToken,
             timeoutTicks,
             false
          )
@@ -484,7 +552,7 @@ object LocalBroker : ActionBroker() {
 
    override fun <A : JobAction<IN, OUT>, IN : Any, OUT : Any> launch(
       request: IN,
-      provider: WorkerActionProvider<JobAction<IN, OUT>, IN, OUT>,
+      provider: WorkerActionProvider<A, IN, OUT>,
       timeoutTicks: Long,
       delaySeconds: Int,
       root: Boolean): DeferredAction<OUT> {
@@ -498,7 +566,8 @@ object LocalBroker : ActionBroker() {
                eventLoop,
                provider,
                request,
-               0,
+               NoToken,
+               timeoutTicks,
                true
             )
          }
@@ -507,7 +576,8 @@ object LocalBroker : ActionBroker() {
             eventLoop,
             provider,
             request,
-            0,
+            NoToken,
+            timeoutTicks,
             true
          )
       }
@@ -515,10 +585,45 @@ object LocalBroker : ActionBroker() {
       return action
    }
 
+   override fun <A : JobAction<IN, OUT>, IN : Any, OUT : Any> launch(
+      request: IN,
+      provider: WorkerActionProvider<A, IN, OUT>,
+      token: ActionToken,
+      timeoutTicks: Long,
+      delaySeconds: Int,
+      root: Boolean): DeferredAction<OUT> {
 
-   suspend override fun ask(request: RoutingContext,
-                            provider: HttpActionProvider<HttpAction>,
-                            timeoutTicks: Long) {
+      val eventLoop = provider.eventLoopGroup.next()
+      val action = provider.actionProvider.get()
+
+      if (MoveEventLoopGroup.currentEventLoop !== eventLoop) {
+         eventLoop.execute {
+            action.launch(
+               eventLoop,
+               provider,
+               request,
+               token,
+               timeoutTicks,
+               true
+            )
+         }
+      } else {
+         action.launch(
+            eventLoop,
+            provider,
+            request,
+            token,
+            timeoutTicks,
+            true
+         )
+      }
+
+      return action
+   }
+
+   suspend override fun <A : HttpAction> ask(request: RoutingContext,
+                                             provider: HttpActionProvider<A>,
+                                             timeoutTicks: Long) {
 
       var eventLoop = MoveEventLoopGroup.currentEventLoop
       val action = provider.actionProvider.get()
@@ -530,6 +635,7 @@ object LocalBroker : ActionBroker() {
                eventLoop,
                provider,
                request,
+               NoToken,
                timeoutTicks,
                false
             )
@@ -546,8 +652,8 @@ object LocalBroker : ActionBroker() {
       }
    }
 
-   suspend override fun ask(request: RoutingContext,
-                            provider: HttpActionProvider<HttpAction>,
+   suspend override fun <A : HttpAction> ask(request: RoutingContext,
+                            provider: HttpActionProvider<A>,
                             timeoutTicks: Long,
                             delaySeconds: Int) {
 
@@ -561,6 +667,7 @@ object LocalBroker : ActionBroker() {
                eventLoop,
                provider,
                request,
+               NoToken,
                timeoutTicks,
                false
             )
@@ -577,8 +684,8 @@ object LocalBroker : ActionBroker() {
       }
    }
 
-   override fun rxAsk(request: RoutingContext,
-                      provider: HttpActionProvider<HttpAction>,
+   override fun <A : HttpAction> rxAsk(request: RoutingContext,
+                      provider: HttpActionProvider<A>,
                       timeoutTicks: Long,
                       delaySeconds: Int,
                       root: Boolean): DeferredAction<Unit> {
@@ -593,6 +700,7 @@ object LocalBroker : ActionBroker() {
                eventLoop,
                provider,
                request,
+               NoToken,
                timeoutTicks,
                true
             )
@@ -602,6 +710,7 @@ object LocalBroker : ActionBroker() {
             eventLoop,
             provider,
             request,
+            NoToken,
             timeoutTicks,
             true
          )
@@ -610,8 +719,8 @@ object LocalBroker : ActionBroker() {
       return action
    }
 
-   override fun launch(request: RoutingContext,
-                       provider: HttpActionProvider<HttpAction>,
+   override fun <A : HttpAction> launch(request: RoutingContext,
+                       provider: HttpActionProvider<A>,
                        timeoutTicks: Long,
                        delaySeconds: Int,
                        root: Boolean): DeferredAction<Unit> {
@@ -626,7 +735,8 @@ object LocalBroker : ActionBroker() {
                eventLoop,
                provider,
                request,
-               0,
+               NoToken,
+               timeoutTicks,
                true
             )
          }
@@ -635,7 +745,8 @@ object LocalBroker : ActionBroker() {
             eventLoop,
             provider,
             request,
-            0,
+            NoToken,
+            timeoutTicks,
             true
          )
       }

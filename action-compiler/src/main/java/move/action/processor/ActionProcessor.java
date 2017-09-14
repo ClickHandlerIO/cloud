@@ -416,11 +416,16 @@ public class ActionProcessor extends AbstractProcessor {
         }
       }
 
-      for (ExecutableElement cons :
-          ElementFilter.constructorsIn(requestType.getResolvedElement().getEnclosedElements())) {
-        if (cons.getParameters() == null || cons.getParameters().isEmpty()) {
-          requestParameterlessCtor = true;
+      try {
+        for (ExecutableElement cons :
+            ElementFilter.constructorsIn(requestType.getResolvedElement().getEnclosedElements())) {
+          if (cons.getParameters() == null || cons.getParameters().isEmpty()) {
+            requestParameterlessCtor = true;
+          }
         }
+      } catch (Throwable e) {
+        // Ignore.
+        requestParameterlessCtor = false;
       }
 
       this.hasParameterlessCtor = parameterlessCtor;
@@ -913,7 +918,7 @@ public class ActionProcessor extends AbstractProcessor {
       classNames.addAll(actionClasses);
 
       for (int i = 0; i < classNames.size(); i++) {
-        codeBlock.add(i < classNames.size() - 1 ? "$T.class," : "$T.class", classNames.get(i));
+        codeBlock.add(i < classNames.size() - 1 ? "$L.class," : "$L.class", classNames.get(i).toString());
         codeBlock.add("");
       }
 
@@ -1227,12 +1232,14 @@ public class ActionProcessor extends AbstractProcessor {
           if (!contents.isEmpty()) {
             for (ActionHolder action : actions.values()) {
               if (!contents.contains(action.providerClassName.simpleName())) {
-                messager.printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "Action: " +
-                        action.name +
-                        " was created. Full Regeneration needed. \"clean\" and \"compile\""
-                );
+                messager.printMessage(Kind.WARNING, "ActionLocator: " +
+                    action.name +" was already processed");
+//                messager.printMessage(
+//                    Diagnostic.Kind.ERROR,
+//                    "Action: " +
+//                        action.name +
+//                        " was created. Full Regeneration needed. \"clean\" and \"compile\""
+//                );
                 return;
               }
             }
@@ -1262,12 +1269,14 @@ public class ActionProcessor extends AbstractProcessor {
           if (!contents.isEmpty()) {
             for (ActionPackage child : children.values()) {
               if (!contents.contains(child.getClassName() + " " + child.name + ";")) {
-                messager.printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "ActionLocator: " +
-                        child.path +
-                        " was created. Full Regeneration needed. \"clean\" and \"compile\""
-                );
+                messager.printMessage(Kind.WARNING, "ActionLocator: " +
+                    child.path + " was already processed");
+//                messager.printMessage(
+//                    Diagnostic.Kind.ERROR,
+//                    "ActionLocator: " +
+//                        child.path +
+//                        " was created. Full Regeneration needed. \"clean\" and \"compile\""
+//                );
                 return;
               }
             }

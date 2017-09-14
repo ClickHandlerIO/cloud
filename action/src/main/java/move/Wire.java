@@ -105,8 +105,7 @@ public class Wire {
     try {
       return MSGPACK_MAPPER.readValue(data, cls);
     } catch (Throwable e) {
-      LOG.info("Failed to unpack MsgPack data", e);
-      throw new RuntimeException(e);
+      throw new WireException(e);
     }
   }
 
@@ -126,8 +125,7 @@ public class Wire {
     try {
       return MSGPACK_MAPPER.readValue(new ByteBufferBackedInputStream(buffer), cls);
     } catch (Throwable e) {
-      LOG.info("Failed to unpack MsgPack data", e);
-      throw new RuntimeException(e);
+      throw new WireException(e);
     }
   }
 
@@ -135,9 +133,7 @@ public class Wire {
     try {
       return MSGPACK_MAPPER.writeValueAsBytes(obj);
     } catch (Throwable e) {
-      LOG.info("Failed to byteify Object", e);
-//            throw new RuntimeException(e);
-      return null;
+      throw new WireException(e);
     }
   }
 
@@ -149,9 +145,7 @@ public class Wire {
     try {
       return MAPPER.readValue(json, cls);
     } catch (Throwable e) {
-      LOG.info("Failed to parse Json string", e);
-//            throw new RuntimeException(e);
-      return null;
+      throw new WireException(e);
     }
   }
 
@@ -162,9 +156,7 @@ public class Wire {
     try {
       return MAPPER.readValue(json, cls);
     } catch (Throwable e) {
-      LOG.info("Failed to parse Json data", e);
-//            throw new RuntimeException(e);
-      return null;
+      throw new WireException(e);
     }
   }
 
@@ -175,9 +167,7 @@ public class Wire {
     try {
       return MAPPER.readValue(json, offset, length, cls);
     } catch (Throwable e) {
-      LOG.info("Failed to parse Json data", e);
-//            throw new RuntimeException(e);
-      return null;
+      throw new WireException(e);
     }
   }
 
@@ -185,9 +175,7 @@ public class Wire {
     try {
       return MAPPER.readValue(json, cls);
     } catch (Throwable e) {
-      LOG.info("Failed to parse Json data", e);
-//            throw new RuntimeException(e);
-      return null;
+      throw new WireException(e);
     }
   }
 
@@ -207,8 +195,7 @@ public class Wire {
     try {
       return MAPPER.readValue(new ByteBufferBackedInputStream(buffer), cls);
     } catch (Throwable e) {
-      LOG.info("Failed to unpack MsgPack data", e);
-      throw new RuntimeException(e);
+      throw new WireException(e);
     }
   }
 
@@ -216,9 +203,7 @@ public class Wire {
     try {
       return MAPPER.writeValueAsBytes(obj);
     } catch (Throwable e) {
-      LOG.info("Failed to byteify Object", e);
-//            throw new RuntimeException(e);
-      return null;
+      throw new WireException(e);
     }
   }
 
@@ -226,9 +211,7 @@ public class Wire {
     try {
       return MAPPER.writeValueAsString(obj);
     } catch (Throwable e) {
-      LOG.info("Failed to stringify Object", e);
-//            throw new RuntimeException(e);
-      return null;
+      throw new WireException(e);
     }
   }
 
@@ -240,8 +223,7 @@ public class Wire {
     try {
       return YAML_MAPPER.readValue(yaml, cls);
     } catch (Throwable e) {
-      LOG.info("Failed to parse Json string", e);
-      throw new RuntimeException(e);
+      throw new WireException(e);
     }
   }
 
@@ -252,8 +234,7 @@ public class Wire {
     try {
       return YAML_MAPPER.readValue(yaml, cls);
     } catch (Throwable e) {
-      LOG.info("Failed to parse Json string", e);
-      throw new RuntimeException(e);
+      throw new WireException(e);
     }
   }
 
@@ -261,9 +242,7 @@ public class Wire {
     try {
       return YAML_MAPPER.writeValueAsString(obj);
     } catch (Throwable e) {
-      LOG.info("Failed to stringify Object", e);
-//            throw new RuntimeException(e);
-      return null;
+      throw new WireException(e);
     }
   }
 

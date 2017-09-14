@@ -1,10 +1,14 @@
 package move.action
 
+import io.netty.buffer.ByteBuf
 import io.vertx.ext.web.RoutingContext
+import move.NUID
+import move.Wire
 import rx.Single
 import java.util.concurrent.TimeUnit
 import java.util.function.Consumer
 import javax.inject.Inject
+import javax.inject.Provider
 
 /**
  * Action Producers are in charge of dispatching an action request through
@@ -26,8 +30,12 @@ abstract class ActionProducer<A : Action<IN, OUT>, IN : Any, OUT : Any, P : Acti
 
    @Inject
    internal fun injectProvider(provider: P) {
-      this.provider = provider
       entry.injectProvider(provider)
+      onProviderSet(provider)
+   }
+
+   protected open fun onProviderSet(provider: P) {
+      this.provider = provider
    }
 
    private class ProducerEntry
@@ -43,7 +51,7 @@ abstract class ActionProducer<A : Action<IN, OUT>, IN : Any, OUT : Any, P : Acti
       @Synchronized
       internal fun injectProvider(provider: P) {
          this.provider = provider
-         list.forEach { it.provider = provider }
+         list.forEach { it.onProviderSet(provider) }
          list.clear()
       }
    }
@@ -82,7 +90,6 @@ abstract class ActionProducer<A : Action<IN, OUT>, IN : Any, OUT : Any, P : Acti
 abstract class InternalActionProducer
 <A : JobAction<IN, OUT>, IN : Any, OUT : Any, P : InternalActionProvider<A, IN, OUT>>
    : ActionProducer<A, IN, OUT, P>() {
-   val provider0: InternalActionProvider<JobAction<IN, OUT>, IN, OUT> get() = provider.self
 
    /**
     * Waits for response.
@@ -93,9 +100,35 @@ abstract class InternalActionProducer
    suspend open infix fun ask(request: IN): OUT {
       return provider.broker.ask(
          request = request,
-         provider = provider0,
-         timeoutTicks = provider0.timeoutTicks
+         provider = provider,
+         timeoutTicks = provider.timeoutTicks
       )
+   }
+
+   suspend open infix fun await(request: IN): OUT {
+      return provider.broker.ask(
+         request = request,
+         provider = provider,
+         timeoutTicks = provider.timeoutTicks
+      )
+   }
+
+   @Deprecated("!!! THIS IS BLOCKING !!!")
+   open infix fun execute(request: IN): OUT {
+      return provider.broker.rxAsk(
+         request = request,
+         provider = provider,
+         timeoutTicks = provider.timeoutTicks
+      ).asSingle().toBlocking().value()
+   }
+
+   @Deprecated("!!! THIS IS BLOCKING !!!")
+   open infix fun blocking(request: IN): OUT {
+      return provider.broker.rxAsk(
+         request = request,
+         provider = provider,
+         timeoutTicks = provider.timeoutTicks
+      ).asSingle().toBlocking().value()
    }
 
    suspend open fun ask(request: IN,
@@ -103,7 +136,7 @@ abstract class InternalActionProducer
                         unit: TimeUnit = TimeUnit.MILLISECONDS): OUT {
       return provider.broker.ask(
          request = request,
-         provider = provider0,
+         provider = provider,
          timeoutTicks = MoveEventLoop.calculateTicks(timeout, unit)
       )
    }
@@ -111,8 +144,8 @@ abstract class InternalActionProducer
    infix open fun rxAsk(request: IN): DeferredAction<OUT> {
       return provider.broker.rxAsk(
          request = request,
-         provider = provider0,
-         timeoutTicks = provider0.timeoutTicks
+         provider = provider,
+         timeoutTicks = provider.timeoutTicks
       )
    }
 
@@ -124,8 +157,8 @@ abstract class InternalActionProducer
    infix open fun launch(request: IN): DeferredAction<OUT> {
       return provider.broker.launch(
          request = request,
-         provider = provider0,
-         timeoutTicks = provider0.timeoutTicks
+         provider = provider,
+         timeoutTicks = provider.timeoutTicks
       )
    }
 
@@ -134,7 +167,7 @@ abstract class InternalActionProducer
                    unit: TimeUnit = TimeUnit.MILLISECONDS): DeferredAction<OUT> {
       return provider.broker.launch(
          request = request,
-         provider = provider0,
+         provider = provider,
          timeoutTicks = MoveEventLoop.calculateTicks(timeout, unit)
       )
    }
@@ -149,6 +182,10 @@ abstract class InternalActionProducerWithBuilder
       return ask(createRequest().apply(block))
    }
 
+   infix suspend open fun await(block: IN.() -> Unit): OUT {
+      return ask(createRequest().apply(block))
+   }
+
    infix open fun rxAsk(block: IN.() -> Unit): DeferredAction<OUT> {
       return rxAsk(createRequest().apply(block))
    }
@@ -157,11 +194,39 @@ abstract class InternalActionProducerWithBuilder
       return launch(createRequest().apply(block))
    }
 
+   @Deprecated("", ReplaceWith("launch"))
+   open fun singleBuilder(request: IN): Single<OUT> {
+      return single(request)
+   }
+
+   @Deprecated("", ReplaceWith("launch"))
+   open fun singleBuilder(token: ActionToken?, request: IN): Single<OUT> {
+      return provider.broker.launch(
+         request = request,
+         provider = provider,
+         token = token ?: NoToken,
+         timeoutTicks = provider.timeoutTicks
+      ).asSingle()
+   }
+
    @Deprecated("", ReplaceWith("rxAsk"))
    open fun singleBuilder(consumer: Consumer<IN>): Single<OUT> {
       val request = createRequest()
       consumer.accept(request)
       return single(request)
+   }
+
+   @Deprecated("", ReplaceWith("rxAsk"))
+   open fun singleBuilder(token: ActionToken?, consumer: Consumer<IN>): Single<OUT> {
+      val request = createRequest()
+      consumer.accept(request)
+
+      return provider.broker.launch(
+         request = request,
+         provider = provider,
+         token = token ?: NoToken,
+         timeoutTicks = provider.timeoutTicks
+      ).asSingle()
    }
 }
 
@@ -169,7 +234,56 @@ abstract class InternalActionProducerWithBuilder
 abstract class WorkerActionProducer
 <A : JobAction<IN, OUT>, IN : Any, OUT : Any, P : WorkerActionProvider<A, IN, OUT>>
    : ActionProducer<A, IN, OUT, P>() {
-   val provider0: WorkerActionProvider<JobAction<IN, OUT>, IN, OUT> get() = provider0.self
+
+   var guarded = true
+      get
+      private set
+
+   override fun onProviderSet(provider: P) {
+      super.onProviderSet(provider)
+      guarded = provider.annotation?.guarded == true
+   }
+
+   @Deprecated("!!! THIS IS BLOCKING !!!")
+   open infix fun execute(request: IN): OUT {
+      return provider.broker.rxAsk(
+         request = request,
+         provider = provider,
+         timeoutTicks = provider.timeoutTicks
+      ).asSingle().toBlocking().value()
+   }
+
+   @Deprecated("!!! THIS IS BLOCKING !!!")
+   open infix fun blocking(request: IN): OUT {
+      return provider.broker.rxAsk(
+         request = request,
+         provider = provider,
+         timeoutTicks = provider.timeoutTicks
+      ).asSingle().toBlocking().value()
+   }
+
+   @Deprecated("!!! THIS IS BLOCKING !!!")
+   open infix fun blockingLocal(request: IN): OUT {
+      return provider.broker.rxAsk(
+         request = request,
+         provider = provider,
+         timeoutTicks = provider.timeoutTicks
+      ).asSingle().toBlocking().value()
+   }
+
+   /**
+    * Waits for response.
+    * This executes as a child to the current action.
+    *
+    * Exception is thrown if it times out.
+    */
+   suspend open infix fun await(request: IN): OUT {
+      return provider.broker.ask(
+         request = request,
+         provider = provider,
+         timeoutTicks = provider.timeoutTicks
+      )
+   }
 
    /**
     * Waits for response.
@@ -180,8 +294,8 @@ abstract class WorkerActionProducer
    suspend open infix fun ask(request: IN): OUT {
       return provider.broker.ask(
          request = request,
-         provider = provider0,
-         timeoutTicks = provider0.timeoutTicks
+         provider = provider,
+         timeoutTicks = provider.timeoutTicks
       )
    }
 
@@ -190,7 +304,7 @@ abstract class WorkerActionProducer
                         unit: TimeUnit = TimeUnit.MILLISECONDS): OUT {
       return provider.broker.ask(
          request = request,
-         provider = provider0,
+         provider = provider,
          timeoutTicks = MoveEventLoop.calculateTicks(timeout, unit)
       )
    }
@@ -198,8 +312,16 @@ abstract class WorkerActionProducer
    infix fun rxAsk(request: IN): DeferredAction<OUT> {
       return provider.broker.rxAsk(
          request = request,
-         provider = provider0,
-         timeoutTicks = provider0.timeoutTicks
+         provider = provider,
+         timeoutTicks = provider.timeoutTicks
+      )
+   }
+
+   fun rxAsk(request: IN, actionProvider: Provider<A>): DeferredAction<OUT> {
+      return provider.broker.rxAsk(
+         request = request,
+         provider = provider,
+         timeoutTicks = provider.timeoutTicks
       )
    }
 
@@ -208,11 +330,33 @@ abstract class WorkerActionProducer
       return rxAsk(request).asSingle()
    }
 
+   @Deprecated("", ReplaceWith("rxAsk"))
+   open fun single(token: ActionToken?, request: IN): Single<OUT> {
+      return provider.broker.launch(
+         request = request,
+         provider = provider,
+         token = token ?: NoToken,
+         timeoutTicks = provider.timeoutTicks
+      ).asSingle()
+   }
+
+   @Deprecated("", ReplaceWith("launch"))
+   infix fun send(request: IN): Single<WorkerReceipt> {
+      launch(request)
+      return Single.just(WorkerReceipt().apply { messageId = NUID.nextGlobal() })
+   }
+
+   @Deprecated("", ReplaceWith("launch"))
+   fun send(request: IN, key: String): Single<WorkerReceipt> {
+      launch(request)
+      return Single.just(WorkerReceipt().apply { messageId = NUID.nextGlobal() })
+   }
+
    infix fun launch(request: IN): DeferredAction<OUT> {
       return provider.broker.launch(
          request = request,
-         provider = provider0,
-         timeoutTicks = provider0.timeoutTicks
+         provider = provider,
+         timeoutTicks = provider.timeoutTicks
       )
    }
 
@@ -221,7 +365,90 @@ abstract class WorkerActionProducer
               unit: TimeUnit = TimeUnit.MILLISECONDS): DeferredAction<OUT> {
       return provider.broker.launch(
          request = request,
-         provider = provider0,
+         provider = provider,
+         timeoutTicks = MoveEventLoop.calculateTicks(timeout, unit)
+      )
+   }
+
+   fun launch(request: IN,
+              token: ActionToken?,
+              timeout: Long,
+              unit: TimeUnit = TimeUnit.MILLISECONDS): DeferredAction<OUT> {
+      return provider.broker.launch(
+         request = request,
+         provider = provider,
+         token = token ?: NoToken,
+         timeoutTicks = MoveEventLoop.calculateTicks(timeout, unit)
+      )
+   }
+
+   open fun launchFromJson(requestJson: String,
+                           token: ActionToken?,
+                           timeout: Long,
+                           unit: TimeUnit = TimeUnit.MILLISECONDS): DeferredAction<OUT> {
+      val request = Wire.parse(provider.requestClass, requestJson)
+
+      return provider.broker.launch(
+         request = request,
+         provider = provider,
+         token = token ?: NoToken,
+         timeoutTicks = MoveEventLoop.calculateTicks(timeout, unit)
+      )
+   }
+
+   open fun launchFromJson(requestJson: ByteArray,
+                           token: ActionToken?,
+                           timeout: Long,
+                           unit: TimeUnit = TimeUnit.MILLISECONDS): DeferredAction<OUT> {
+      val request = Wire.parse(provider.requestClass, requestJson)
+
+      return provider.broker.launch(
+         request = request,
+         provider = provider,
+         token = token ?: NoToken,
+         timeoutTicks = MoveEventLoop.calculateTicks(timeout, unit)
+      )
+   }
+
+   open fun launchFromJson(requestJson: ByteBuf,
+                           token: ActionToken?,
+                           timeout: Long,
+                           unit: TimeUnit = TimeUnit.MILLISECONDS): DeferredAction<OUT> {
+      val request = Wire.parse(provider.requestClass, requestJson)
+
+      return provider.broker.launch(
+         request = request,
+         provider = provider,
+         token = token ?: NoToken,
+         timeoutTicks = MoveEventLoop.calculateTicks(timeout, unit)
+      )
+   }
+
+
+   open fun launchFromMsgPack(requestJson: ByteArray,
+                              token: ActionToken?,
+                              timeout: Long,
+                              unit: TimeUnit = TimeUnit.MILLISECONDS): DeferredAction<OUT> {
+      val request = Wire.unpack(provider.requestClass, requestJson)
+
+      return provider.broker.launch(
+         request = request,
+         provider = provider,
+         token = token ?: NoToken,
+         timeoutTicks = MoveEventLoop.calculateTicks(timeout, unit)
+      )
+   }
+
+   open fun launchFromMsgPack(requestJson: ByteBuf,
+                              token: ActionToken?,
+                              timeout: Long,
+                              unit: TimeUnit = TimeUnit.MILLISECONDS): DeferredAction<OUT> {
+      val request = Wire.unpack(provider.requestClass, requestJson)
+
+      return provider.broker.launch(
+         request = request,
+         provider = provider,
+         token = token ?: NoToken,
          timeoutTicks = MoveEventLoop.calculateTicks(timeout, unit)
       )
    }
@@ -310,6 +537,10 @@ abstract class WorkerActionProducerWithBuilder
       return ask(createRequest().apply(block))
    }
 
+   suspend infix open fun await(block: IN.() -> Unit): OUT {
+      return ask(createRequest().apply(block))
+   }
+
    infix open fun rxAsk(block: IN.() -> Unit): DeferredAction<OUT> {
       return rxAsk(createRequest().apply(block))
    }
@@ -318,11 +549,134 @@ abstract class WorkerActionProducerWithBuilder
       return launch(createRequest().apply(block))
    }
 
+//   @Deprecated("", ReplaceWith("rxAsk"))
+//   open fun singleBuilder(request: IN): Single<OUT> {
+//      return single(request)
+//   }
+
+   @Deprecated("", ReplaceWith("launch"))
+   open fun singleBuilder(request: IN): Single<OUT> {
+      return single(request)
+   }
+
+   @Deprecated("", ReplaceWith("launch"))
+   open fun singleBuilder(token: ActionToken?, request: IN): Single<OUT> {
+      return provider.broker.launch(
+         request = request,
+         provider = provider,
+         token = token ?: NoToken,
+         timeoutTicks = provider.timeoutTicks
+      ).asSingle()
+   }
+
    @Deprecated("", ReplaceWith("rxAsk"))
    open fun singleBuilder(consumer: Consumer<IN>): Single<OUT> {
       val request = createRequest()
       consumer.accept(request)
       return single(request)
+   }
+
+   @Deprecated("", ReplaceWith("rxAsk"))
+   open fun singleBuilder(token: ActionToken?, consumer: Consumer<IN>): Single<OUT> {
+      val request = createRequest()
+      consumer.accept(request)
+
+      return provider.broker.launch(
+         request = request,
+         provider = provider,
+         token = token ?: NoToken,
+         timeoutTicks = provider.timeoutTicks
+      ).asSingle()
+   }
+
+   @Deprecated("", ReplaceWith("launch"))
+   infix fun send(consumer: Consumer<IN>): Single<WorkerReceipt> {
+      val request = createRequest()
+      consumer.accept(request)
+      launch(request)
+      return Single.just(WorkerReceipt().apply { messageId = NUID.nextGlobal() })
+   }
+
+   override fun launchFromJson(requestJson: String,
+                               token: ActionToken?,
+                               timeout: Long,
+                               unit: TimeUnit): DeferredAction<OUT> {
+      val request = if (requestJson.isNotEmpty()) {
+         Wire.parse(provider.requestClass, requestJson)
+      } else {
+         createRequest()
+      }
+
+      return provider.broker.launch(
+         request = request,
+         provider = provider,
+         token = token ?: NoToken,
+         timeoutTicks = MoveEventLoop.calculateTicks(timeout, unit)
+      )
+   }
+
+   override fun launchFromJson(requestJson: ByteArray,
+                               token: ActionToken?,
+                               timeout: Long,
+                               unit: TimeUnit): DeferredAction<OUT> {
+      val request = if (requestJson.isNotEmpty()) {
+         Wire.parse(provider.requestClass, requestJson)
+      } else {
+         createRequest()
+      }
+
+      return provider.broker.launch(
+         request = request,
+         provider = provider,
+         token = token ?: NoToken,
+         timeoutTicks = MoveEventLoop.calculateTicks(timeout, unit)
+      )
+   }
+
+   override fun launchFromJson(requestJson: ByteBuf,
+                               token: ActionToken?,
+                               timeout: Long,
+                               unit: TimeUnit): DeferredAction<OUT> {
+      val request = if (requestJson.isReadable) {
+         Wire.parse(provider.requestClass, requestJson)
+      } else {
+         createRequest()
+      }
+
+      return provider.broker.launch(
+         request = request,
+         provider = provider,
+         token = token ?: NoToken,
+         timeoutTicks = MoveEventLoop.calculateTicks(timeout, unit)
+      )
+   }
+
+   override fun launchFromMsgPack(requestJson: ByteArray,
+                                  token: ActionToken?,
+                                  timeout: Long,
+                                  unit: TimeUnit): DeferredAction<OUT> {
+      val request = Wire.unpack(provider.requestClass, requestJson)
+
+      return provider.broker.launch(
+         request = request,
+         provider = provider,
+         token = token ?: NoToken,
+         timeoutTicks = MoveEventLoop.calculateTicks(timeout, unit)
+      )
+   }
+
+   override fun launchFromMsgPack(requestJson: ByteBuf,
+                                  token: ActionToken?,
+                                  timeout: Long,
+                                  unit: TimeUnit): DeferredAction<OUT> {
+      val request = Wire.unpack(provider.requestClass, requestJson)
+
+      return provider.broker.launch(
+         request = request,
+         provider = provider,
+         token = token ?: NoToken,
+         timeoutTicks = MoveEventLoop.calculateTicks(timeout, unit)
+      )
    }
 }
 
@@ -333,8 +687,6 @@ abstract class HttpActionProducer
 
    fun visibleTo(visibility: ActionVisibility) = provider.visibility == visibility
 
-   val provider0: HttpActionProvider<HttpAction> get() = provider.self
-
    /**
     * Waits for response.
     * This executes as a child to the current action.
@@ -344,8 +696,8 @@ abstract class HttpActionProducer
    suspend open infix fun ask(request: RoutingContext) {
       provider.broker.ask(
          request = request,
-         provider = provider0,
-         timeoutTicks = provider0.timeoutTicks
+         provider = provider,
+         timeoutTicks = provider.timeoutTicks
       )
    }
 
@@ -354,7 +706,7 @@ abstract class HttpActionProducer
                         unit: TimeUnit = TimeUnit.MILLISECONDS) {
       return provider.broker.ask(
          request = request,
-         provider = provider0,
+         provider = provider,
          timeoutTicks = MoveEventLoop.calculateTicks(timeout, unit)
       )
    }
@@ -362,8 +714,8 @@ abstract class HttpActionProducer
    infix fun rxAsk(request: RoutingContext): DeferredAction<Unit> {
       return provider.broker.rxAsk(
          request = request,
-         provider = provider0,
-         timeoutTicks = provider0.timeoutTicks
+         provider = provider,
+         timeoutTicks = provider.timeoutTicks
       )
    }
 
@@ -375,8 +727,8 @@ abstract class HttpActionProducer
    infix fun launch(request: RoutingContext): DeferredAction<Unit> {
       return provider.broker.launch(
          request = request,
-         provider = provider0,
-         timeoutTicks = provider0.timeoutTicks
+         provider = provider,
+         timeoutTicks = provider.timeoutTicks
       )
    }
 
@@ -385,7 +737,7 @@ abstract class HttpActionProducer
               unit: TimeUnit = TimeUnit.MILLISECONDS): DeferredAction<Unit> {
       return provider.broker.launch(
          request = request,
-         provider = provider0,
+         provider = provider,
          timeoutTicks = MoveEventLoop.calculateTicks(timeout, unit)
       )
    }
