@@ -481,10 +481,10 @@ constructor(vertx: Vertx,
 
    override val isInternal = true
 
-   val annotation: Internal? = actionClass.getAnnotation(Internal::class.java)
+   val annotation: Internal = actionClass.getAnnotation(Internal::class.java)
 
    val annotationTimeout: Int
-      get() = annotation?.timeout ?: 0
+      get() = annotation.timeout
 
    override var timeoutMillis: Long = annotationTimeout.toLong()
       get
@@ -503,15 +503,28 @@ constructor(vertx: Vertx,
 
    override val isWorker = true
 
-   val annotation: Worker? = actionClass.getAnnotation(Worker::class.java)
-   val annotationTimeout = annotation?.timeout ?: 0
+   val annotation: Worker = actionClass.getAnnotation(Worker::class.java)!!
+   val annotationTimeout = annotation.timeout
 
    val visibility: ActionVisibility
-      get() = annotation?.visibility ?: ActionVisibility.PRIVATE
+      get() = annotation.visibility
 
    override var timeoutMillis: Long = annotationTimeout.toLong()
       get
       internal set
+
+   val path = if (annotation.path.isBlank())
+      "/${actionClass.canonicalName.replace(".", "/")}"
+   else
+      cleanPath(annotation.path.trim())
+
+   private fun cleanPath(path: String): String {
+      if (!path.startsWith("/")) {
+         return "/$path"
+      } else {
+         return path
+      }
+   }
 }
 
 /**
@@ -560,13 +573,26 @@ constructor(vertx: Vertx, provider: Provider<A>)
 
    override val isHttp = true
 
-   val annotation: Http? = actionClass.getAnnotation(Http::class.java)
-   val visibility: ActionVisibility = annotation?.visibility ?: ActionVisibility.PUBLIC
+   val annotation: Http = actionClass.getAnnotation(Http::class.java)
+   val visibility: ActionVisibility = annotation.visibility
 
    val annotationTimeout: Int
-      get() = annotation?.timeout ?: 0
+      get() = annotation.timeout
 
    override var timeoutMillis: Long = annotationTimeout.toLong()
       get
       internal set
+
+   val path = if (annotation.path.isBlank())
+      "/${actionClass.canonicalName.replace(".", "/")}"
+   else
+      cleanPath(annotation.path.trim())
+
+   private fun cleanPath(path: String): String {
+      if (!path.startsWith("/")) {
+         return "/$path"
+      } else {
+         return path
+      }
+   }
 }

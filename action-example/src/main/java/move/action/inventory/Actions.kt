@@ -22,24 +22,25 @@ enum class Code {
 class Login : InternalAction<LoginRequest, LoginReply>() {
    suspend override fun execute(): LoginReply {
 
-      return LoginReply(Code.SUCCESS)
-   }
-}
-
-
-/**
- *
- */
-@Internal
-class Login2 : InternalAction<LoginRequest, LoginReply>() {
-   suspend override fun execute(): LoginReply {
-      val reply = Move.inventory.Login3 ask {
-         username = ""
-      }
 
       return LoginReply(Code.SUCCESS)
    }
 }
+
+
+///**
+// *
+// */
+//@Internal
+//class Login2 : InternalAction<LoginRequest, LoginReply>() {
+//   suspend override fun execute(): LoginReply {
+//      val reply = Move.inventory.Login3 ask {
+//         username = ""
+//      }
+//
+//      return LoginReply(Code.SUCCESS)
+//   }
+//}
 
 
 

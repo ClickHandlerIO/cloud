@@ -1,5 +1,7 @@
 package move.action.processor;
 
+import static javax.tools.StandardLocation.SOURCE_OUTPUT;
+
 import com.google.auto.service.AutoService;
 import com.squareup.javapoet.AnnotationSpec;
 import com.squareup.javapoet.ClassName;
@@ -44,6 +46,7 @@ import javax.lang.model.SourceVersion;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
+import javax.lang.model.element.PackageElement;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.TypeParameterElement;
 import javax.lang.model.element.VariableElement;
@@ -57,7 +60,6 @@ import javax.tools.Diagnostic;
 import javax.tools.Diagnostic.Kind;
 import javax.tools.FileObject;
 import javax.tools.JavaFileObject;
-import javax.tools.StandardLocation;
 import move.action.ActionLocator;
 import move.action.ActionProducer;
 import move.action.ActionProvider;
@@ -139,7 +141,7 @@ public class ActionProcessor extends AbstractProcessor {
    */
   @Override
   public SourceVersion getSupportedSourceVersion() {
-    return SourceVersion.RELEASE_8;
+    return SourceVersion.latestSupported();
   }
 
   /**
@@ -172,8 +174,8 @@ public class ActionProcessor extends AbstractProcessor {
           .getElementsAnnotatedWith(Http.class);
       final Set<? extends Element> actorElements = roundEnv
           .getElementsAnnotatedWith(Actor.class);
-      final Set<? extends Element> internalActorElements = roundEnv
-          .getElementsAnnotatedWith(Actor.class);
+      final Set<? extends Element> daemonElements = roundEnv
+          .getElementsAnnotatedWith(Daemon.class);
 
       final HashSet<Element> elements = new HashSet<>();
 
@@ -189,8 +191,8 @@ public class ActionProcessor extends AbstractProcessor {
       if (actorElements != null) {
         elements.addAll(actorElements);
       }
-      if (internalActorElements != null) {
-        elements.addAll(internalActorElements);
+      if (daemonElements != null) {
+        elements.addAll(daemonElements);
       }
 
       for (Element annotatedElement : elements) {
@@ -206,6 +208,33 @@ public class ActionProcessor extends AbstractProcessor {
             .getAnnotation(Daemon.class);
 
         final TypeElement element = elementUtils.getTypeElement(annotatedElement.toString());
+//        final PackageElement packageElement = elementUtils.getPackageOf(element);
+
+//        messager.printMessage(Kind.WARNING, element.getQualifiedName());
+
+//        messager.printMessage(Kind.WARNING, "Action: " + element.getQualifiedName().toString());
+//        messager.printMessage(Kind.WARNING, "Package: " + packageElement);
+
+//        final FileObject fileObject = filer.getResource(
+//            SOURCE_OUTPUT,
+//            element.getQualifiedName()
+//                .subSequence(
+//                    0,
+//                    element.getQualifiedName().length() - element.getSimpleName().length() - 1).toString().replace(".", "/"),
+//            element.getSimpleName() + "_Module.java"
+//        );
+//
+//
+//
+//        if (fileObject != null && fileObject.getLastModified() > 0L) {
+//          messager.printMessage(Kind.WARNING, "Action already processed: " + fileObject.toUri().toString());
+////          continue;
+//        }
+
+//        if (actionMap.containsKey(element.getQualifiedName().toString())) {
+//          messager.printMessage(Kind.WARNING, "Already Processed: " + element.getQualifiedName().toString());
+//          continue;
+//        }
 
         ActionHolder holder = actionMap.get(element.getQualifiedName().toString());
 
@@ -705,7 +734,6 @@ public class ActionProcessor extends AbstractProcessor {
         return;
       }
 
-      messager.printMessage(Kind.WARNING, element.getQualifiedName());
       resolveDeclaredTypeVars(element.getSuperclass());
 
       final List<? extends TypeMirror> interfaces = element.getInterfaces();
@@ -851,7 +879,7 @@ public class ActionProcessor extends AbstractProcessor {
     String existingPackageModuleSource() {
       try {
         final FileObject fileObject = filer.getResource(
-            StandardLocation.SOURCE_OUTPUT,
+            SOURCE_OUTPUT,
             path,
             moduleSimpleName + ".java"
         );
@@ -865,7 +893,7 @@ public class ActionProcessor extends AbstractProcessor {
     FileObject getModuleFile() {
       try {
         final FileObject fileObject = filer.getResource(
-            StandardLocation.SOURCE_OUTPUT,
+            SOURCE_OUTPUT,
             path,
             moduleSimpleName + ".java"
         );
@@ -918,7 +946,8 @@ public class ActionProcessor extends AbstractProcessor {
       classNames.addAll(actionClasses);
 
       for (int i = 0; i < classNames.size(); i++) {
-        codeBlock.add(i < classNames.size() - 1 ? "$L.class," : "$L.class", classNames.get(i).toString());
+        codeBlock.add(i < classNames.size() - 1 ? "$L.class," : "$L.class",
+            classNames.get(i).toString());
         codeBlock.add("");
       }
 
@@ -1219,79 +1248,97 @@ public class ActionProcessor extends AbstractProcessor {
         );
       });
 
-      if (!actions.isEmpty()) {
-        try {
-          final FileObject fileObject = filer.getResource(
-              StandardLocation.SOURCE_OUTPUT,
-              path,
-              getClassName() + ".java"
-          );
-          final CharSequence content = fileObject.getCharContent(true);
-          final String contents = content.toString();
-
-          if (!contents.isEmpty()) {
-            for (ActionHolder action : actions.values()) {
-              if (!contents.contains(action.providerClassName.simpleName())) {
-                messager.printMessage(Kind.WARNING, "ActionLocator: " +
-                    action.name +" was already processed");
-//                messager.printMessage(
-//                    Diagnostic.Kind.ERROR,
-//                    "Action: " +
-//                        action.name +
-//                        " was created. Full Regeneration needed. \"clean\" and \"compile\""
-//                );
-                return;
-              }
-            }
-
-            // Generate child packages.
-            for (ActionPackage childPackage : children.values()) {
-              childPackage.generate();
-            }
-
-            return;
-          }
-        } catch (Throwable e) {
-          // Ignore.
-        }
-      }
-
-      if (!children.isEmpty()) {
-        try {
-          final FileObject fileObject = filer.getResource(
-              StandardLocation.SOURCE_OUTPUT,
-              path,
-              getClassName() + ".java"
-          );
-          final CharSequence content = fileObject.getCharContent(true);
-          final String contents = content.toString();
-
-          if (!contents.isEmpty()) {
-            for (ActionPackage child : children.values()) {
-              if (!contents.contains(child.getClassName() + " " + child.name + ";")) {
-                messager.printMessage(Kind.WARNING, "ActionLocator: " +
-                    child.path + " was already processed");
-//                messager.printMessage(
-//                    Diagnostic.Kind.ERROR,
-//                    "ActionLocator: " +
-//                        child.path +
-//                        " was created. Full Regeneration needed. \"clean\" and \"compile\""
-//                );
-                return;
-              }
-            }
-
-            // Generate child packages.
-            for (ActionPackage childPackage : children.values()) {
-              childPackage.generate();
-            }
-
-            return;
-          }
-        } catch (Throwable e) {
-          // Ignore.
-        }
-      }
+//      if (!actions.isEmpty()) {
+//        try {
+//          final FileObject fileObject = filer.getResource(
+//              SOURCE_OUTPUT,
+//              path,
+//              getClassName() + ".java"
+//          );
+//
+//          if (fileObject.getLastModified() > 0) {
+//            messager.printMessage(Kind.WARNING, "ActionLocator already exists: " + getClassName());
+//
+//            for (ActionPackage childPackage : children.values()) {
+//              childPackage.generate();
+//            }
+//          }
+////          final CharSequence content = fileObject.getCharContent(true);
+////          final String contents = content.toString();
+////
+////          if (!contents.isEmpty()) {
+////            for (ActionHolder action : actions.values()) {
+////              if (!contents.contains(action.providerClassName.simpleName())) {
+////                messager.printMessage(Kind.WARNING, "ActionLocator: " +
+////                    action.name +" was already processed");
+//////                messager.printMessage(
+//////                    Diagnostic.Kind.ERROR,
+//////                    "Action: " +
+//////                        action.name +
+//////                        " was created. Full Regeneration needed. \"clean\" and \"compile\""
+//////                );
+////                return;
+////              }
+////            }
+////
+////            // Generate child packages.
+////            for (ActionPackage childPackage : children.values()) {
+////              childPackage.generate();
+////            }
+////
+////            return;
+////          }
+//        } catch (Throwable e) {
+//          // Ignore.
+//        }
+//      }
+//
+//      if (!children.isEmpty()) {
+//        try {
+//          final FileObject fileObject = filer.getResource(
+//              SOURCE_OUTPUT,
+//              path,
+//              getClassName() + ".java"
+//          );
+//
+//          if (fileObject.getLastModified() > 0) {
+//            messager.printMessage(Kind.WARNING, "ActionLocator already exists: " + getClassName());
+//
+//            for (ActionPackage childPackage : children.values()) {
+//              childPackage.generate();
+//            }
+//            return;
+//          }
+//
+////          final CharSequence content = fileObject.getCharContent(true);
+////          final String contents = content.toString();
+////
+////          if (!contents.isEmpty()) {
+////            for (ActionPackage child : children.values()) {
+////              if (!contents.contains(child.getClassName() + " " + child.name + ";")) {
+////                messager.printMessage(Kind.WARNING, "ActionLocator: " +
+////                    child.path + " was already processed");
+//////                messager.printMessage(
+//////                    Diagnostic.Kind.ERROR,
+//////                    "ActionLocator: " +
+//////                        child.path +
+//////                        " was created. Full Regeneration needed. \"clean\" and \"compile\""
+//////                );
+////                return;
+////              }
+////            }
+////
+////            // Generate child packages.
+////            for (ActionPackage childPackage : children.values()) {
+////              childPackage.generate();
+////            }
+////
+////            return;
+////          }
+//        } catch (Throwable e) {
+//          // Ignore.
+//        }
+//      }
 
       type.addMethod(ctor.build());
 

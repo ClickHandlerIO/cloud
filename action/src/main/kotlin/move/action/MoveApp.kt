@@ -122,7 +122,6 @@ abstract class MoveApp<G : MoveComponent> {
       .setDescription("Use Native transport 'epoll' or 'kqueue' if available")
       .setRequired(false)
       .setFlag(true)
-      .setDefaultValue(NUID.nextGlobal())
 
    open val OPTION_LIST_WORKERS = Option()
       .setLongName("list")
@@ -152,7 +151,7 @@ abstract class MoveApp<G : MoveComponent> {
       else
          NodeRole.REMOTE
 
-   var nativeTransport: Boolean = true
+   var nativeTransport: Boolean = false
       get
       private set
 
@@ -231,6 +230,16 @@ abstract class MoveApp<G : MoveComponent> {
 
          // Start Daemons.
          step8_StartDeamons()
+
+         // onStarted()
+         onStarted()
+
+         // Add shutdown hook.
+         Runtime.getRuntime().addShutdownHook(Thread {
+            runBlocking {
+               shutdown()
+            }
+         })
       }
    }
 
@@ -392,11 +401,6 @@ abstract class MoveApp<G : MoveComponent> {
    suspend abstract fun step7_BuildComponent(): G
 
    /**
-    * Intercept before "build()"
-    */
-   suspend open fun afterBuild() {}
-
-   /**
     * Start Daemons.
     */
    suspend open fun step8_StartDeamons() {
@@ -410,6 +414,14 @@ abstract class MoveApp<G : MoveComponent> {
    }
 
    suspend open fun onStarted() {
+
+   }
+
+   suspend open fun shutdown() {
+      stopDaemons()
+   }
+
+   suspend open fun stopDaemons() {
 
    }
 }
