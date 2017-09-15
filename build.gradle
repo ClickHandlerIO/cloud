@@ -7,6 +7,7 @@ buildscript {
     }
     dependencies {
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+        classpath 'com.github.jengelman.gradle.plugins:shadow:2.0.1'
     }
 }
 
@@ -41,7 +42,11 @@ subprojects {
         from sourceSets.main.allSource
     }
 
-    kotlin { experimental { coroutines 'enable' } }
+    tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).all {
+        kotlinOptions {
+            jvmTarget = '1.8'
+        }
+    }
 
     artifacts.archives packageSources
 
@@ -57,3 +62,4 @@ subprojects {
         maven { url "https://jcenter.bintray.com" }
     }
 }
+

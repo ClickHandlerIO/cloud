@@ -15,6 +15,10 @@ import io.vertx.rxjava.core.cli.CLI
 import io.vertx.rxjava.core.cli.CommandLine
 import kotlinx.coroutines.experimental.runBlocking
 import move.NUID
+import move.Wire
+import org.slf4j.LoggerFactory
+import java.io.File
+import java.nio.file.Files
 
 interface MoveComponent {
    fun actions(): ActionManager
@@ -71,6 +75,8 @@ fun locateVertx(): Vertx {
  *
  */
 abstract class MoveApp<G : MoveComponent> {
+   val log by lazy { LoggerFactory.getLogger("app") }
+
    val OPTION_HELP = Option()
       .setLongName("help")
       .setShortName("h")
@@ -79,7 +85,7 @@ abstract class MoveApp<G : MoveComponent> {
 
    val OPTION_MODE = Option()
       .setLongName("mode")
-      .setShortName("M")
+      .setShortName("m")
       .setDescription("Mode to run in")
       .setChoices(setOf("dev", "test", "prod"))
       .setDefaultValue("DEV")
@@ -87,19 +93,19 @@ abstract class MoveApp<G : MoveComponent> {
 
    val OPTION_WORKER = Option()
       .setLongName("worker")
-      .setShortName("W")
+      .setShortName("w")
       .setDescription("Enables 'WORKER' role")
       .setFlag(true)
 
    val OPTION_REMOTE = Option()
       .setLongName("remote")
-      .setShortName("R")
+      .setShortName("r")
       .setDescription("Enables 'REMOTE' role")
       .setFlag(true)
 
    open val OPTION_CONFIG = Option()
       .setLongName("config")
-      .setShortName("C")
+      .setShortName("c")
       .setDescription("Config file path")
       .setRequired(false)
 
@@ -115,7 +121,16 @@ abstract class MoveApp<G : MoveComponent> {
       .setShortName("n")
       .setDescription("Use Native transport 'epoll' or 'kqueue' if available")
       .setRequired(false)
+      .setFlag(true)
       .setDefaultValue(NUID.nextGlobal())
+
+   open val OPTION_LIST_WORKERS = Option()
+      .setLongName("list")
+      .setShortName("l")
+      .setDescription("List Worker Actions")
+      .setRequired(false)
+      .setChoices(setOf("public", "internal", "private", "all"))
+      .setDefaultValue("public")
 
    var nodeId: String = NUID.nextGlobal()
       get
@@ -163,12 +178,15 @@ abstract class MoveApp<G : MoveComponent> {
       _MOVE = this as MoveApp<MoveComponent>
 
       runBlocking {
-         beforeCLI()
+         val args = step1_ReceiveArgs(args)
+
+         step2_PrepareArgs()
 
          // Create CommandLine
-         cli = buildCLI()
+         cli = step3_BuildCLI()
 
-         line = cli.parse(first(args))
+         // Parse CLI.
+         line = cli.parse(args)
 
          // Exit if CLI is invalid
          if (!line.isValid || line.isAskingForHelp) {
@@ -179,37 +197,46 @@ abstract class MoveApp<G : MoveComponent> {
             println(builder.toString())
 
             System.exit(-1)
+            return@runBlocking
          }
 
-         // Process the internal Command Line Options.
-         processInternalOptions(line)
-
          // After CLI
-         onCLI(line)
+         step4_AfterCLI(line)
 
          // Build Vertx.
-         vertx = vertx()
+         vertx = step5_CreateVertx()
 
          // Init EventLoop Group.
          eventLoopGroup = MoveEventLoopGroup.Companion.get(vertx)
 
          // Invoke function before the object graph is built.
-         beforeBuild()
+         step6_BeforeBuildComponent()
 
          // Build Dagger component.
-         component = build()
+         component = step7_BuildComponent()
 
          // Init Actions.
-         actions()
+         component.actions()
+
+         // Process the internal Command Line Options.
+         processInternalOptions(line)
+
+         if (line.isOptionAssigned(OPTION_LIST_WORKERS)) {
+            component.actions().actions.producers
+               .forEach { log.info(it.provider.actionClass.canonicalName) }
+
+            System.exit(0)
+            return@runBlocking
+         }
 
          // Start Daemons.
-         startDaemons()
+         step8_StartDeamons()
       }
    }
 
    open val name = "move"
-   open val summary = "MoveApp Cloud Service"
-   open val description = "MoveApp Cloud Service"
+   open val summary = "Move Cloud Microservice"
+   open val description = ""
 
    suspend fun loggingProvider(): String = "slf4j"
 
@@ -219,22 +246,9 @@ abstract class MoveApp<G : MoveComponent> {
    /**
     * Filter raw arguments before CLI.
     */
-   suspend open fun first(args: Array<String>) = args.toList()
+   suspend open fun step1_ReceiveArgs(args: Array<String>) = args.toList()
 
-   /**
-    *
-    */
-   suspend open fun onInvalidCLI(cli: CommandLine) {
-   }
-
-   /**
-    *
-    */
-   suspend open fun onCLI(cli: CommandLine) {
-
-   }
-
-   suspend open fun beforeCLI() {
+   suspend open fun step2_PrepareArgs() {
       // Setup JBoss logging provider.
       System.setProperty("org.jboss.logging.provider", "slf4j")
       // Setup IP stack. We want IPv4.
@@ -243,9 +257,15 @@ abstract class MoveApp<G : MoveComponent> {
    }
 
    /**
+    *
+    */
+   suspend open fun onInvalidCLI(cli: CommandLine) {
+   }
+
+   /**
     * Build the actual CommandLine object.
     */
-   suspend open fun buildCLI(): CLI {
+   suspend open fun step3_BuildCLI(): CLI {
       return CLI.create(name)
          .setSummary(summary)
          .addOptions(options(mutableListOf()))
@@ -253,14 +273,44 @@ abstract class MoveApp<G : MoveComponent> {
    }
 
    /**
+    *
+    */
+   suspend open fun step4_AfterCLI(cli: CommandLine) {
+
+   }
+
+   fun <T> parseConfig(cli: CommandLine, configClass: Class<T>, defaultValue: () -> T): T {
+      if (cli.isOptionAssigned(OPTION_CONFIG)) {
+         val configFile = File(cli.getRawValueForOption(OPTION_CONFIG))
+         val configFileContents = Files.readAllBytes(configFile.toPath())
+
+         try {
+            return Wire.parseYAML(
+               configClass,
+               configFileContents
+            )
+         } catch (e: Throwable) {
+            return Wire.parse(
+               configClass,
+               configFileContents
+            )
+         }
+      } else {
+         return defaultValue()
+      }
+   }
+
+   /**
     * Build up CommandLine Options.
     */
    suspend open fun options(options: MutableList<Option>): List<Option> {
       options.add(OPTION_HELP)
+      options.add(OPTION_NODE_ID)
       options.add(OPTION_WORKER)
       options.add(OPTION_REMOTE)
+      options.add(OPTION_NATIVE_TRANSPORT)
       options.add(OPTION_CONFIG)
-      options.add(OPTION_REMOTE)
+      options.add(OPTION_LIST_WORKERS)
       return options
    }
 
@@ -296,12 +346,7 @@ abstract class MoveApp<G : MoveComponent> {
       }
    }
 
-   /**
-    * Construct Vertx.
-    */
-   suspend open fun vertx() = Vertx.vertx(vertxOptions())
-
-   suspend open fun vertxOptions(): VertxOptions {
+   suspend open fun configureVertx(): VertxOptions {
       val options = VertxOptions()
 
       if (mode == Mode.DEV || mode == Mode.TEST) {
@@ -332,26 +377,29 @@ abstract class MoveApp<G : MoveComponent> {
    }
 
    /**
-    * Get constructed ActionManager from Dagger Component.
+    * Construct Vertx.
     */
-   suspend open fun actions(): ActionManager {
-      return component.actions()
-   }
+   suspend open fun step5_CreateVertx() = Vertx.vertx(configureVertx())
 
    /**
     * Intercept before "build()"
     */
-   suspend open fun beforeBuild() {}
+   suspend open fun step6_BeforeBuildComponent() {}
 
    /**
     * Construct Dagger Object graph.
     */
-   suspend abstract fun build(): G
+   suspend abstract fun step7_BuildComponent(): G
+
+   /**
+    * Intercept before "build()"
+    */
+   suspend open fun afterBuild() {}
 
    /**
     * Start Daemons.
     */
-   suspend open fun startDaemons() {
+   suspend open fun step8_StartDeamons() {
       Actions.daemons.forEach {
          // Each Daemon is started and must receive that
          // it started successfully before the next one
@@ -359,6 +407,10 @@ abstract class MoveApp<G : MoveComponent> {
          // Daemons use the Actor model and can be communicated
          // with by passing messages.
       }
+   }
+
+   suspend open fun onStarted() {
+
    }
 }
 

@@ -8,8 +8,8 @@ import javax.inject.Singleton;
  */
 @Singleton
 @Component(modules = {
-    MoveFirstModule.class,
-    move.MoveSecondModule.class
+    move.action.MoveModule.class,
+    move.Move_GeneratedModule.class
 })
 public interface AppComponent extends MoveComponent {
 

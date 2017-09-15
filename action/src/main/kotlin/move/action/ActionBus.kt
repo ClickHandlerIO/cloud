@@ -2,7 +2,6 @@ package move.action
 
 import io.nats.client.Message
 import move.NUID
-import net.openhft.chronicle.queue.impl.single.SingleChronicleQueueBuilder
 import rx.Single
 
 interface WithGroupId {
@@ -99,86 +98,4 @@ enum class WorkerType {
     * balanced.
     */
    FLEX,
-}
-
-enum class QueueType {
-   /**
-    *
-    */
-   ACTOR,
-   /**
-    *
-    */
-   LOW,
-   /**
-    *
-    */
-   HIGH,
-   /**
-    * Low Priority Blocking Actions
-    */
-   BLOCKING_LOW,
-   /**
-    * High Priority Blocking Actions
-    */
-   BLOCKING_HIGH,
-   /**
-    *
-    */
-   LARGE_HIGH,
-   /**
-    *
-    */
-   LARGE_LOW,
-}
-
-/**
- *
- */
-object ActionQueue {
-   val queue = SingleChronicleQueueBuilder.binary("/Users/clay/move/trades").build()
-
-   @JvmStatic
-   fun main(args: Array<String>) {
-      println("Writing...")
-      write()
-
-      println("Reading...")
-      read()
-
-      queue.close()
-   }
-
-   fun write() {
-      val appender = queue.acquireAppender()
-
-      for (i in 1..5) {
-         val start = System.currentTimeMillis()
-         for (i in 1..1000000) {
-            appender.writeDocument {
-               it.writeEventName(i.toString())
-
-            }
-            appender.lastIndexAppended()
-         }
-         println(System.currentTimeMillis() - start)
-      }
-   }
-
-   fun read() {
-      val reader = queue.createTailer()
-
-      reader.moveToIndex(0)
-
-      for (i in 1..100) {
-         val sb = StringBuilder()
-         reader.readDocument {
-            it.readEventName(sb)
-
-            println(sb.toString())
-
-            sb.setLength(0)
-         }
-      }
-   }
 }

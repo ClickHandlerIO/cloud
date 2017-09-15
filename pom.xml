@@ -468,30 +468,6 @@ http://www.w3.org/2001/XMLSchema-instance ">
         <version>${nats.version}</version>
       </dependency>
 
-      <!--<dependency>-->
-      <!--<groupId>io.netty</groupId>-->
-      <!--<artifactId>netty-codec-haproxy</artifactId>-->
-      <!--<version>${netty.version}</version>-->
-      <!--</dependency>-->
-
-      <dependency>
-        <groupId>com.netflix.hystrix</groupId>
-        <artifactId>hystrix-core</artifactId>
-        <version>${hystrix.version}</version>
-      </dependency>
-
-      <dependency>
-        <groupId>com.netflix.hystrix</groupId>
-        <artifactId>hystrix-metrics-event-stream</artifactId>
-        <version>${hystrix.version}</version>
-      </dependency>
-
-      <dependency>
-        <groupId>com.netflix.hystrix</groupId>
-        <artifactId>hystrix-codahale-metrics-publisher</artifactId>
-        <version>${hystrix.version}</version>
-      </dependency>
-
       <dependency>
         <groupId>io.dropwizard.metrics</groupId>
         <artifactId>metrics-core</artifactId>

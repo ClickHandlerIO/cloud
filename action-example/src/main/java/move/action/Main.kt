@@ -18,13 +18,15 @@ object App : MoveApp<AppComponent>() {
       start(args)
    }
 
-   suspend override fun build() = DaggerAppComponent.create()
+   suspend override fun step7_BuildComponent() = DaggerAppComponent.create()
 
-   suspend override fun vertxOptions(): VertxOptions {
-      return super.vertxOptions().setEventLoopPoolSize(Runtime.getRuntime().availableProcessors() * 2)
+   suspend override fun configureVertx(): VertxOptions {
+      return super
+         .configureVertx()
+         .setEventLoopPoolSize(Runtime.getRuntime().availableProcessors() * 2)
    }
 
-   suspend override fun startDaemons() {
+   suspend override fun step8_StartDeamons() {
       val passes = 100
       val parallelism = Runtime.getRuntime().availableProcessors() * 2
       val statsInternval = 1000L

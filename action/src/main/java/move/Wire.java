@@ -227,6 +227,17 @@ public class Wire {
     }
   }
 
+  public static <T> T parseYAML(Class<T> cls, byte[] yaml) {
+    if (yaml == null || yaml.length == 0) {
+      return null;
+    }
+    try {
+      return YAML_MAPPER.readValue(yaml, cls);
+    } catch (Throwable e) {
+      throw new WireException(e);
+    }
+  }
+
   public static <T> T readYAML(Class<T> cls, String yaml) {
     if (yaml == null || yaml.isEmpty()) {
       return null;

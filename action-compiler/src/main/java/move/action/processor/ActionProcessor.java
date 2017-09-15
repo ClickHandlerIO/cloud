@@ -88,7 +88,7 @@ public class ActionProcessor extends AbstractProcessor {
   static final String LOCATOR_SUFFIX = "_Locator";
   static final String LOCATOR_ROOT_SUFFIX = "_LocatorRoot";
   static final String MODULE_SUFFIX = "_Module";
-  static final String ROOT_MODULE_NAME = "MoveSecondModule";
+  static final String ROOT_MODULE_NAME = "Move_GeneratedModule";
   static final String PRODUCER_SUFFIX = "_Producer";
   static final String PROVIDER_SUFFIX = "_Provider";
   static final ParameterizedTypeName ACTION_PROVIDER_NAME = ParameterizedTypeName.get(
@@ -895,7 +895,7 @@ public class ActionProcessor extends AbstractProcessor {
       final List<ClassName> classNames = new ArrayList<>();
 
       if (root) {
-//        classNames.add(ClassName.get(MoveFirstModule.class));
+//        classNames.add(ClassName.get(MoveModule.class));
       }
 
       // Generate a new package module.
