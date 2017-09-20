@@ -7,12 +7,12 @@ import javax.inject.Singleton
 /**
  *
  */
-@Daemon(
-   // Only start for REMOTE role.
-   role = NodeRole.REMOTE,
-   // Ensure it's at the end.
-   order = Int.MAX_VALUE
-)
+//@Daemon(
+//   // Only start for REMOTE role.
+//   role = NodeRole.REMOTE,
+//   // Ensure it's at the end.
+//   order = Int.MAX_VALUE
+//)
 @Singleton
 class WebServerDaemon : AbstractDaemon() {
    lateinit var server: RemotingServerImpl

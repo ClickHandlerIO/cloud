@@ -48,7 +48,7 @@ constructor(val vertx: Vertx, val actionProvider: Provider<A>) {
 
    // Calculate the default number of Ticks to constitute a timeout.
    open internal var timeoutTicks = if (timeoutMillis > 0)
-      (timeoutMillis / MoveEventLoop.TICK_MS).let { if (it < 1) 1 else it }
+      (timeoutMillis / MEventLoop.TICK_MS).let { if (it < 1) 1 else it }
    else
       0
 

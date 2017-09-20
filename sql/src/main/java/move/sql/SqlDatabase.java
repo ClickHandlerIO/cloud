@@ -51,8 +51,8 @@ import javaslang.control.Try;
 import javax.sql.DataSource;
 import move.action.ActionTimeoutException;
 import move.action.JobAction;
-import move.action.MoveEventLoop;
-import move.action.MoveKernel;
+import move.action.MEventLoop;
+import move.action.MKernel;
 import move.common.UID;
 import move.metrics.Metrics;
 import move.threading.WorkerPool;
@@ -1392,7 +1392,7 @@ public class SqlDatabase extends AbstractIdleService {
   }
 
   public <T> Single<move.sql.SqlResult<T>> rxWrite(SqlCallable<T> task, int timeoutMillis) {
-    final MoveEventLoop eventLoop = MoveKernel.INSTANCE.getOrCreateContext();
+    final MEventLoop eventLoop = MKernel.INSTANCE.getOrCreateContext();
 
     final SqlAction action = new SqlAction(eventLoop, timeoutMillis);
 
@@ -1464,7 +1464,7 @@ public class SqlDatabase extends AbstractIdleService {
   }
 
   public <T> Single<T> rxSingle(SqlReadCallable<T> task, int timeoutMillis) {
-    final MoveEventLoop eventLoop = MoveKernel.INSTANCE.getOrCreateContext();
+    final MEventLoop eventLoop = MKernel.INSTANCE.getOrCreateContext();
 
     final SqlAction action = new SqlAction(eventLoop, timeoutMillis);
 
@@ -2120,14 +2120,14 @@ public class SqlDatabase extends AbstractIdleService {
 
   public static class SqlAction {
 
-    MoveEventLoop eventLoop;
+    MEventLoop eventLoop;
     String callingActionName = "";
     Statement currentStatement;
     JobAction job;
     long timeoutMillis;
     long deadline;
 
-    public SqlAction(MoveEventLoop eventLoop, long timeoutMillis) {
+    public SqlAction(MEventLoop eventLoop, long timeoutMillis) {
       this.eventLoop = eventLoop;
 
       if (eventLoop != null) {
@@ -2137,7 +2137,7 @@ public class SqlDatabase extends AbstractIdleService {
 
           if (job.getDeadline() > 0L) {
             timeoutMillis = Math.min(
-                (job.getDeadline() * MoveEventLoop.TICK_MS) - System.currentTimeMillis(),
+                (job.getDeadline() * MEventLoop.TICK_MS) - System.currentTimeMillis(),
                 timeoutMillis
             );
           }

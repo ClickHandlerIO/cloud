@@ -14,12 +14,12 @@ import java.util.concurrent.ThreadLocalRandom
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
-val CURRENT_LOOP = ThreadLocal<MoveEventLoop>()
+val CURRENT_LOOP = ThreadLocal<MEventLoop>()
 
 /**
  *
  */
-object MoveKernel {
+object MKernel {
    inline val currentEventLoop get() = CURRENT_LOOP.get()
 
    val vertxInternal = VERTX.delegate as VertxInternal
@@ -34,7 +34,7 @@ object MoveKernel {
    val eventLoops = vertxInternal.eventLoopGroup
       .iterator()
       .asSequence()
-      .map { MoveEventLoop(eventLoopDefault, vertxInternal, JsonObject(), it as EventLoop) }
+      .map { MEventLoop(eventLoopDefault, vertxInternal, JsonObject(), it as EventLoop) }
       .toList()
 
    val eventLoopCount = eventLoops.size
@@ -43,8 +43,8 @@ object MoveKernel {
    val executorsByEventLoop = eventLoops.map { it.eventLoop to it }.toMap()
 
    // Application wide scheduled executor.
-   // This is used to process ticks for each MoveEventLoop.
-   // Each MoveEventLoop has it's own structures and WheelTimers to
+   // This is used to process ticks for each MEventLoop.
+   // Each MEventLoop has it's own structures and WheelTimers to
    // invoke and resume Actions that are assigned to it.
    // This allows for a very scalable and predictable behavior when managing
    // large amounts of Timers. Millions of timers can effectively be managed
@@ -69,8 +69,8 @@ object MoveKernel {
       // Check for timeouts every TICK_MS
       scheduledExecutor.scheduleAtFixedRate(
          this::tick,
-         MoveEventLoop.TICK_MS,
-         MoveEventLoop.TICK_MS,
+         MEventLoop.TICK_MS,
+         MEventLoop.TICK_MS,
          TimeUnit.MILLISECONDS
       )
 
@@ -98,21 +98,21 @@ object MoveKernel {
       }
    }
 
-   fun forKey(bytes: ByteArray): MoveEventLoop {
+   fun forKey(bytes: ByteArray): MEventLoop {
       return eventLoops[CRC16.calc(bytes) % eventLoopCount]
    }
 
    /**
     *
     */
-   fun next(): MoveEventLoop {
+   fun next(): MEventLoop {
       return next(io.vertx.core.Vertx.currentContext())
    }
 
    /**
     *
     */
-   fun next(context: Context?): MoveEventLoop {
+   fun next(context: Context?): MEventLoop {
       if (context == null)
          return nextRandom()
 
@@ -128,15 +128,15 @@ object MoveKernel {
 
    fun getOrCreateContext() = CURRENT_LOOP.get() ?: nextRandom()
 
-   fun forEachExecute(action: (MoveEventLoop) -> Unit) {
+   fun forEachExecute(action: (MEventLoop) -> Unit) {
       eventLoops.forEach { it.execute { action(it) } }
    }
 
-   fun forEach(action: (MoveEventLoop) -> Unit) {
+   fun forEach(action: (MEventLoop) -> Unit) {
       eventLoops.forEach(action)
    }
 
-   suspend fun initEventLoops(block: suspend (MoveEventLoop) -> Unit) {
+   suspend fun initEventLoops(block: suspend (MEventLoop) -> Unit) {
       eventLoops.forEach {
          async(Unconfined) {
             block(it)
@@ -145,33 +145,33 @@ object MoveKernel {
    }
 
 //   companion object {
-//      val instances = mutableMapOf<Vertx, MoveKernel>()
+//      val instances = mutableMapOf<Vertx, MKernel>()
 //
 //      val currentEventLoop get() = local.get()
 //
-//      internal val local = ThreadLocal<MoveEventLoop>()
+//      internal val local = ThreadLocal<MEventLoop>()
 //
-//      protected fun setLocal(eventLoop: MoveEventLoop) {
+//      protected fun setLocal(eventLoop: MEventLoop) {
 //         local.set(eventLoop)
 //      }
 //
 //      @Synchronized
-//      fun get(vertx: Vertx): MoveKernel {
+//      fun get(vertx: Vertx): MKernel {
 //         val i = instances[vertx]
 //         if (i != null) {
 //            return i
 //         }
 //
-//         val n = MoveKernel(vertx as VertxInternal)
+//         val n = MKernel(vertx as VertxInternal)
 //         instances[vertx] = n
 //         return n
 //      }
 //
-//      fun get(vertx: io.vertx.rxjava.core.Vertx): MoveKernel {
+//      fun get(vertx: io.vertx.rxjava.core.Vertx): MKernel {
 //         return get(vertx.delegate)
 //      }
 //
-//      fun get(vertxInternal: VertxInternal): MoveKernel {
+//      fun get(vertxInternal: VertxInternal): MKernel {
 //         return get(vertxInternal as Vertx)
 //      }
 //   }

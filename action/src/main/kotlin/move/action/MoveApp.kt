@@ -204,8 +204,8 @@ abstract class MoveApp<G : MoveComponent> {
          // Build Vertx.
          vertx = step5_CreateVertx()
 
-         // Init MoveKernel
-         MoveKernel.init()
+         // Init MKernel
+         MKernel.init()
 
          // Invoke function before the object graph is built.
          step6_BeforeBuildComponent()

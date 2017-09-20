@@ -33,7 +33,7 @@ open class RemotingServer(val port: Int = 15000, val host: String = "", var auth
 
    suspend fun start() {
       // Create a WebSocket map for each EventLoop.
-      MoveKernel.initEventLoops { MAP.set(LongSkipListMap()) }
+      MKernel.initEventLoops { MAP.set(LongSkipListMap()) }
 
       httpServer = buildHttpServer()
       awaitEvent<AsyncResult<HttpServer>> { r -> httpServer?.listen { r.handle(it) } }
@@ -165,7 +165,7 @@ open class RemotingServer(val port: Int = 15000, val host: String = "", var auth
    }
 
    protected open fun onWebSocket(webSocket: ServerWebSocket) {
-      var eventLoop = MoveKernel.currentEventLoop
+      var eventLoop = MKernel.currentEventLoop
 
       // Have we hit our websocket limit?
       if (webSocketCounter.get() >= maxWebSockets) {
@@ -183,10 +183,10 @@ open class RemotingServer(val port: Int = 15000, val host: String = "", var auth
    }
 
    fun evict() {
-      MoveKernel.forEachExecute { evict(it) }
+      MKernel.forEachExecute { evict(it) }
    }
 
-   private fun evict(loop: MoveEventLoop) {
+   private fun evict(loop: MEventLoop) {
 
    }
 
@@ -208,7 +208,7 @@ open class RemotingServer(val port: Int = 15000, val host: String = "", var auth
 
    inner class WS(val id: Long,
                   val webSocket: ServerWebSocket,
-                  val eventLoop: MoveEventLoop) : HasTimers {
+                  val eventLoop: MEventLoop) : HasTimers {
 
       var inFlight = 0
       var counter = 0

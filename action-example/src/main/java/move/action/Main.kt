@@ -65,12 +65,12 @@ object App : MoveApp<AppComponent>() {
 //      counter.send(IncCounter)
 
       val passes = 100
-      val parallelism = MoveKernel.eventLoops.size
+      val parallelism = MKernel.eventLoops.size
       val statsInternval = 1000L
       val invocationsPerPass = 1_000_000
       val actionsPerInvocation = 2
 
-      val dispatcher = MoveKernel.eventLoops[0].dispatcher
+      val dispatcher = MKernel.eventLoops[0].dispatcher
 
       A.AllocateInventory ask { id = "" }
 
@@ -169,7 +169,7 @@ object App : MoveApp<AppComponent>() {
          val start = System.currentTimeMillis()
          for (t in 0..parallelism - 1) {
             val single = Single.create<Unit> { subscriber ->
-               val eventLoop = MoveKernel.eventLoops[t]
+               val eventLoop = MKernel.eventLoops[t]
                eventLoop.runOnContext {
                   val counter = AtomicInteger(0)
                   try {

@@ -34,11 +34,11 @@ public final class VertxThread extends FastThreadLocalThread {
     this.maxExecTime = maxExecTime;
   }
 
-  ContextImpl getContext() {
+  public ContextImpl getContext() {
     return context;
   }
 
-  void setContext(ContextImpl context) {
+  public void setContext(ContextImpl context) {
     this.context = context;
   }
 

@@ -253,9 +253,7 @@ public class ActionProcessor extends AbstractProcessor {
             messager.printMessage(Diagnostic.Kind.ERROR, e.getMessage());
           }
 
-          holder = new ActionHolder(element, requestType, responseType, internal, worker, http,
-              actor,
-              daemon);
+          holder = new ActionHolder(element, requestType, responseType, internal, worker, http);
         }
 
         // Ensure only 1 action annotation was used.
@@ -268,12 +266,6 @@ public class ActionProcessor extends AbstractProcessor {
           actionAnnotationCount++;
         }
         if (holder.http != null) {
-          actionAnnotationCount++;
-        }
-        if (holder.actor != null) {
-          actionAnnotationCount++;
-        }
-        if (holder.daemon != null) {
           actionAnnotationCount++;
         }
         if (actionAnnotationCount > 1) {
@@ -356,6 +348,17 @@ public class ActionProcessor extends AbstractProcessor {
     return resolver;
   }
 
+  public static class ActorHolder {
+
+    final Actor actor;
+    final Daemon daemon;
+
+    public ActorHolder(Actor actor, Daemon daemon) {
+      this.actor = actor;
+      this.daemon = daemon;
+    }
+  }
+
   /**
    *
    */
@@ -365,8 +368,6 @@ public class ActionProcessor extends AbstractProcessor {
     final Internal internal;
     final Worker worker;
     final Http http;
-    final Actor actor;
-    final Daemon daemon;
     final ClassName className;
     final TypeElement type;
     final TypeName typeName;
@@ -398,17 +399,13 @@ public class ActionProcessor extends AbstractProcessor {
         DeclaredTypeVar replyType,
         Internal internal,
         Worker worker,
-        Http http,
-        Actor actor,
-        Daemon daemon) {
+        Http http) {
       this.type = type;
       this.requestType = requestType;
       this.replyType = replyType;
       this.internal = internal;
       this.worker = worker;
       this.http = http;
-      this.actor = actor;
-      this.daemon = daemon;
       this.className = ClassName.get(type);
       this.name = type.getQualifiedName().toString();
       this.simpleName = type.getSimpleName().toString();
@@ -564,14 +561,6 @@ public class ActionProcessor extends AbstractProcessor {
 
     boolean isHttp() {
       return http != null;
-    }
-
-    boolean isActor() {
-      return actor != null;
-    }
-
-    boolean getDaemon() {
-      return daemon != null;
     }
   }
 

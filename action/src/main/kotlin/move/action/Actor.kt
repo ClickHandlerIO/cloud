@@ -1,6 +1,7 @@
 package move.action
 
 import io.netty.buffer.ByteBuf
+import io.vertx.core.Handler
 import kotlinx.coroutines.experimental.*
 import kotlinx.coroutines.experimental.channels.*
 import kotlinx.coroutines.experimental.selects.SelectClause1
@@ -184,7 +185,7 @@ abstract class AbstractActorAction<E> :
    var ended = 0L
    private var uncaughtExceptionCount = 0L
 
-   lateinit var eventLoop: MoveEventLoop
+   lateinit var eventLoop: MEventLoop
    lateinit var _channel: Channel<E>
    override val channel: Channel<E>
       get() = _channel
@@ -253,12 +254,12 @@ abstract class AbstractActorAction<E> :
    /**
     * Launches action as the root coroutine.
     */
-   internal open fun launch(eventLoop: MoveEventLoop,
+   internal open fun launch(eventLoop: MEventLoop,
       //                            provider: ActionProvider<*, IN, OUT>,
                             id: String,
                             timeoutTicks: Long = 0,
                             root: Boolean = false) {
-//      if (MoveKernel.currentEventLoop !== eventLoop) {
+//      if (MKernel.currentEventLoop !== eventLoop) {
 //         throw RuntimeException("Invoked from outside EventLoop thread.")
 //      }
 
@@ -395,7 +396,7 @@ abstract class AbstractActorAction<E> :
          get() = continuation.context
 
       override fun resume(value: T) {
-         if (MoveKernel.currentEventLoop !== eventLoop) {
+         if (MKernel.currentEventLoop !== eventLoop) {
             eventLoop.execute {
                continuation.resume(value)
             }
@@ -405,7 +406,7 @@ abstract class AbstractActorAction<E> :
       }
 
       override fun resumeWithException(exception: Throwable) {
-         if (MoveKernel.currentEventLoop !== eventLoop) {
+         if (MKernel.currentEventLoop !== eventLoop) {
             eventLoop.execute {
                continuation.resumeWithException(exception)
             }
@@ -436,7 +437,7 @@ abstract class AbstractActorAction<E> :
     *
     */
    override fun invokeOnTimeout(time: Long, unit: TimeUnit, block: Runnable): DisposableHandle {
-      if (MoveKernel.currentEventLoop === eventLoop) {
+      if (MKernel.currentEventLoop === eventLoop) {
          // Run directly.
          block.run()
          // Already disposed.
@@ -465,7 +466,7 @@ abstract class AbstractActorAction<E> :
     */
    protected suspend fun <T> blocking(block: suspend () -> T): T =
       suspendCancellableCoroutine { cont ->
-         eventLoop.executeBlocking0<T>({
+         eventLoop.executeBlocking<T>(Handler {
             blockingBegin()
             try {
                val result = runBlocking { block() }
@@ -473,7 +474,7 @@ abstract class AbstractActorAction<E> :
             } catch (e: Throwable) {
                eventLoop.execute { it.fail(e) }
             }
-         }, {
+         }, Handler {
             blockingEnd()
             if (it.failed()) {
                eventLoop.execute { cont.resumeWithException(it.cause()) }
@@ -488,7 +489,7 @@ abstract class AbstractActorAction<E> :
     */
    protected suspend fun <T> javaBlocking(block: Supplier<T>): T =
       suspendCancellableCoroutine { cont ->
-         eventLoop.executeBlocking0<T>({
+         eventLoop.executeBlocking<T>(Handler {
             blockingBegin()
             try {
                val result = runBlocking { block.get() }
@@ -496,7 +497,7 @@ abstract class AbstractActorAction<E> :
             } catch (e: Throwable) {
                eventLoop.execute { it.fail(e) }
             }
-         }, {
+         }, Handler {
             blockingEnd()
             if (it.failed()) {
                eventLoop.execute { cont.resumeWithException(it.cause()) }

@@ -2,6 +2,7 @@ package move.action
 
 import com.google.common.base.Throwables
 import io.netty.buffer.ByteBuf
+import io.vertx.core.Handler
 import io.vertx.core.Vertx
 import io.vertx.ext.web.RoutingContext
 import kotlinx.coroutines.experimental.*
@@ -62,7 +63,7 @@ class ActionTimeoutException(val action: IJobAction<*, *>) : CancellationExcepti
    }
 }
 
-class MoveDispatcher(val eventLoop: MoveEventLoop) : CoroutineDispatcher(), Delay {
+class MoveDispatcher(val eventLoop: MEventLoop) : CoroutineDispatcher(), Delay {
    fun execute(task: () -> Unit) = eventLoop.execute(task)
 
    override fun dispatch(context: CoroutineContext, block: Runnable) {
@@ -138,7 +139,7 @@ abstract class JobAction<IN : Any, OUT : Any> :
       get() = _timers!!
 
    // The "root" action is the "Dispatcher".
-   // The assigned MoveEventLoop is used.
+   // The assigned MEventLoop is used.
    override val key: CoroutineContext.Key<ContinuationInterceptor>
       get() = ContinuationInterceptor.Key
 
@@ -148,7 +149,7 @@ abstract class JobAction<IN : Any, OUT : Any> :
    lateinit var provider: ActionProvider<*, IN, OUT>
       get
       private set
-   lateinit var eventLoop: MoveEventLoop
+   lateinit var eventLoop: MEventLoop
    private var wheelDeadline = false
 
    // Field helpers.
@@ -253,13 +254,13 @@ abstract class JobAction<IN : Any, OUT : Any> :
    /**
     * Launches action as the root coroutine.
     */
-   internal open fun launch(eventLoop: MoveEventLoop,
+   internal open fun launch(eventLoop: MEventLoop,
                             provider: ActionProvider<*, IN, OUT>,
                             request: IN,
                             token: ActionToken,
                             timeoutTicks: Long = 0,
                             root: Boolean = false) {
-//      if (MoveKernel.currentEventLoop !== eventLoop) {
+//      if (MKernel.currentEventLoop !== eventLoop) {
 //         throw RuntimeException("Invoked from outside EventLoop thread.")
 //      }
 
@@ -304,7 +305,7 @@ abstract class JobAction<IN : Any, OUT : Any> :
    /**
     * Executes action "Inline".
     */
-   internal open suspend fun execute0(eventLoop: MoveEventLoop,
+   internal open suspend fun execute0(eventLoop: MEventLoop,
                                       provider: ActionProvider<*, IN, OUT>,
                                       request: IN,
                                       timeoutTicks: Long = 0,
@@ -316,13 +317,13 @@ abstract class JobAction<IN : Any, OUT : Any> :
    /**
     * Executes action "Inline".
     */
-   internal open suspend fun execute1(eventLoop: MoveEventLoop,
+   internal open suspend fun execute1(eventLoop: MEventLoop,
                                       provider: ActionProvider<*, IN, OUT>,
                                       request: IN,
                                       timeoutTicks: Long = 0,
                                       root: Boolean = false): OUT {
       // Thread check.
-//      if (MoveKernel.currentEventLoop !== eventLoop) {
+//      if (MKernel.currentEventLoop !== eventLoop) {
 //         throw RuntimeException("Invoked from outside EventLoop thread.")
 //      }
 
@@ -389,11 +390,11 @@ abstract class JobAction<IN : Any, OUT : Any> :
       override fun resume(value: T) {
          val job = action ?: eventLoop.job
 
-         if (MoveKernel.currentEventLoop !== eventLoop) {
+         if (MKernel.currentEventLoop !== eventLoop) {
             eventLoop.execute {
                eventLoop.job = job
 
-               if (job.isCancelled) {
+               if (job?.isCancelled == true) {
                   continuation.resumeWithException(ActionTimeoutException(job))
                } else {
                   continuation.resume(value)
@@ -402,7 +403,7 @@ abstract class JobAction<IN : Any, OUT : Any> :
          } else {
             eventLoop.job = job
 
-            if (job.isCancelled) {
+            if (job?.isCancelled == true) {
                continuation.resumeWithException(ActionTimeoutException(job))
             } else {
                continuation.resume(value)
@@ -417,7 +418,7 @@ abstract class JobAction<IN : Any, OUT : Any> :
             eventLoop.execute {
                eventLoop.job = job
 
-               if (job.isCancelled) {
+               if (job?.isCancelled == true) {
                   continuation.resumeWithException(ActionTimeoutException(job))
                } else {
                   continuation.resumeWithException(exception)
@@ -426,7 +427,7 @@ abstract class JobAction<IN : Any, OUT : Any> :
          } else {
             eventLoop.job = job
 
-            if (job.isCancelled) {
+            if (job?.isCancelled == true) {
                continuation.resumeWithException(ActionTimeoutException(job))
             } else {
                continuation.resumeWithException(exception)
@@ -664,7 +665,7 @@ abstract class JobAction<IN : Any, OUT : Any> :
     */
    protected suspend fun <T> blocking(block: suspend () -> T): T =
       suspendCancellableCoroutine { cont ->
-         eventLoop.executeBlocking0<T>({
+         eventLoop.executeBlocking<T>(Handler {
             blockingBegin()
             try {
                val result = runBlocking { block() }
@@ -672,7 +673,7 @@ abstract class JobAction<IN : Any, OUT : Any> :
             } catch (e: Throwable) {
                eventLoop.execute { it.fail(e) }
             }
-         }, {
+         }, Handler {
             blockingEnd()
             if (it.failed()) {
                eventLoop.execute { cont.resumeWithException(it.cause()) }
@@ -687,7 +688,7 @@ abstract class JobAction<IN : Any, OUT : Any> :
     */
    protected suspend fun <T> javaBlocking(block: Supplier<T>): T =
       suspendCancellableCoroutine { cont ->
-         eventLoop.executeBlocking0<T>({
+         eventLoop.executeBlocking<T>(Handler {
             blockingBegin()
             try {
                val result = runBlocking { block.get() }
@@ -695,7 +696,7 @@ abstract class JobAction<IN : Any, OUT : Any> :
             } catch (e: Throwable) {
                eventLoop.execute { it.fail(e) }
             }
-         }, {
+         }, Handler {
             blockingEnd()
             if (it.failed()) {
                eventLoop.execute { cont.resumeWithException(it.cause()) }
@@ -863,7 +864,7 @@ abstract class JobAction<IN : Any, OUT : Any> :
     *
     */
    override fun invokeOnTimeout(time: Long, unit: TimeUnit, block: Runnable): DisposableHandle {
-      if (MoveKernel.currentEventLoop === eventLoop) {
+      if (MKernel.currentEventLoop === eventLoop) {
          // Run directly.
          block.run()
          // Already disposed.

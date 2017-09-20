@@ -42,22 +42,22 @@ import org.jetbrains.annotations.NotNull;
  * at the trade-off of less precise expiration. Action timeouts happen in normalized 200ms blocks or
  * up to 5 times / second. If more precise timeouts are needed, then use LockSupport.
  *
- * Every MoveEventLoop processes network I/O and user tasks in the same thread. Network I/O is
- * handled by "epoll" if on Linux. "kqueue" if on BSD. "NIO" is the fallback. Native transport is
- * preferable especially in regards to garbage collection since most buffers point to native memory.
- * This is ideal for Move's goal of "real-time" or very low latency and is preferred over maximum
+ * Every MEventLoop processes network I/O and user tasks in the same thread. Network I/O is handled
+ * by "epoll" if on Linux. "kqueue" if on BSD. "NIO" is the fallback. Native transport is preferable
+ * especially in regards to garbage collection since most buffers point to native memory. This is
+ * ideal for Move's goal of "real-time" or very low latency and is preferred over maximum
  * throughput.
  *
- * Actions are sequenced by the ceiling 100ms block of their calculated unix millisecond epoch
+ * Actions are sequenced by the ceiling TICK_MS block of their calculated unix millisecond epoch
  * deadline. If an Action has no deadline then there is no associated deadline tracking cost.
- * However, every Action has a strong reference stored on the MoveEventLoop to ensure it's not
+ * However, every Action has a strong reference stored on the MEventLoop to ensure it's not
  * collected by the GC.
  *
- * An entire Action's lifecycle happens within a single MoveEventLoop.
+ * An entire Action's lifecycle happens within a single MEventLoop.
  *
  * @author Clay Molocznik
  */
-public class MoveEventLoop extends ContextExt {
+public class MEventLoop extends ContextExt {
 
   // Tick duration in milliseconds.
   public static final long TICK_MS = 200L;
@@ -73,8 +73,8 @@ public class MoveEventLoop extends ContextExt {
                   ? 1000
                   : 10)
       / TICK_MS);
-  public static final Logger log = LoggerFactory.getLogger(MoveEventLoop.class);
-  static final ThreadLocal<MoveEventLoop> THREAD_LOCAL = new ThreadLocal<>();
+  public static final Logger log = LoggerFactory.getLogger(MEventLoop.class);
+  static final ThreadLocal<MEventLoop> THREAD_LOCAL = new ThreadLocal<>();
   // MoveApp kotlinx-coroutines Dispatcher.
   public final MoveDispatcher dispatcher = new MoveDispatcher(this);
   // Netty EventLoop.
@@ -105,7 +105,7 @@ public class MoveEventLoop extends ContextExt {
 
   private AtomicLong cpuTime = new AtomicLong(0L);
 
-  public MoveEventLoop(
+  public MEventLoop(
       @NotNull EventLoopContext eventLoopDefault,
       @NotNull VertxInternal vertxInternal,
       @NotNull JsonObject config,
@@ -466,11 +466,6 @@ public class MoveEventLoop extends ContextExt {
   public void executeAsync(Handler<Void> task) {
     // No metrics, we are on the event loop.
     eventLoop.execute(wrapTask(task));
-  }
-
-  public <T> void executeBlocking0(Handler<Future<T>> blockingCodeHandler,
-      Handler<AsyncResult<T>> asyncResultHandler) {
-    super.executeBlocking(blockingCodeHandler, asyncResultHandler);
   }
 
   /**
