@@ -10,7 +10,9 @@ import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.fasterxml.jackson.module.kotlin.KotlinModule;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufOutputStream;
 import io.vertx.core.buffer.Buffer;
+import java.io.DataOutput;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -137,6 +139,16 @@ public class Wire {
     }
   }
 
+  public static void pack(Object obj, ByteBuf buf) {
+    try {
+      final DataOutput out = new ByteBufOutputStream(buf);
+      MSGPACK_MAPPER.writeValue(out, obj);
+    } catch (Throwable e) {
+      throw new WireException(e);
+    }
+  }
+
+
 
   public static <T> T parse(Class<T> cls, String json) {
     if (json == null || json.isEmpty()) {
@@ -202,6 +214,15 @@ public class Wire {
   public static byte[] byteify(Object obj) {
     try {
       return MAPPER.writeValueAsBytes(obj);
+    } catch (Throwable e) {
+      throw new WireException(e);
+    }
+  }
+
+  public static void byteify(Object obj, ByteBuf buf) {
+    try {
+      final DataOutput out = new ByteBufOutputStream(buf);
+      MAPPER.writeValue(out, obj);
     } catch (Throwable e) {
       throw new WireException(e);
     }

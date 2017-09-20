@@ -131,6 +131,8 @@ abstract class MoveApp<G : MoveComponent> {
       .setChoices(setOf("public", "internal", "private", "all"))
       .setDefaultValue("public")
 
+   lateinit var vertxOptions: VertxOptions
+
    var nodeId: String = NUID.nextGlobal()
       get
       private set
@@ -151,7 +153,7 @@ abstract class MoveApp<G : MoveComponent> {
       else
          NodeRole.REMOTE
 
-   var nativeTransport: Boolean = false
+   var nativeTransport: Boolean = true
       get
       private set
 
@@ -165,7 +167,7 @@ abstract class MoveApp<G : MoveComponent> {
    lateinit var vertx: Vertx
       get
       private set
-   lateinit var eventLoopGroup: MoveEventLoopGroup
+   lateinit var threadManager: MoveThreadManager
       get
       private set
    lateinit var component: G
@@ -206,7 +208,7 @@ abstract class MoveApp<G : MoveComponent> {
          vertx = step5_CreateVertx()
 
          // Init EventLoop Group.
-         eventLoopGroup = MoveEventLoopGroup.Companion.get(vertx)
+         threadManager = MoveThreadManager.Companion.get(vertx)
 
          // Invoke function before the object graph is built.
          step6_BeforeBuildComponent()
@@ -381,6 +383,8 @@ abstract class MoveApp<G : MoveComponent> {
          options.internalBlockingPoolSize = options.eventLoopPoolSize * 50
          options.metricsOptions = MetricsOptions().setEnabled(true)
       }
+
+      this.vertxOptions = options
 
       return options
    }

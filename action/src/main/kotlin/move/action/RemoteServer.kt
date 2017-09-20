@@ -1,8 +1,8 @@
 package move.action
 
+import io.netty.buffer.ByteBuf
 import io.netty.handler.codec.http.HttpResponseStatus
-import io.vertx.core.AbstractVerticle
-import io.vertx.core.Future
+import io.vertx.core.AsyncResult
 import io.vertx.core.buffer.Buffer
 import io.vertx.core.http.HttpMethod
 import io.vertx.core.http.HttpServer
@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicLong
  *
  * @author Clay Molocznik
  */
-open class RemoteServer(val port: Int = 15000, val host: String = "", var auth: JWTAuth) : AbstractVerticle() {
+open class RemoteServer(val port: Int = 15000, val host: String = "", var auth: JWTAuth) {
    var httpServer: HttpServer? = null
    val counter = AtomicLong(0L)
 
@@ -27,7 +27,7 @@ open class RemoteServer(val port: Int = 15000, val host: String = "", var auth: 
    // long "re-hashing" delays until extreme load.
    // Supports 1.5 million.
    val webSocketMap: ConcurrentMap<Long, WS> = ConcurrentHashMap<Long, WS>(
-      2_000_000,
+      if (MOVE.mode == Mode.PROD) 2_000_000 else 10,
       0.75f,
       Runtime.getRuntime().availableProcessors() * 2
    )
@@ -38,27 +38,17 @@ open class RemoteServer(val port: Int = 15000, val host: String = "", var auth: 
    init {
    }
 
-   override fun start(startFuture: Future<Void>?) {
+   suspend fun start() {
       httpServer = buildHttpServer()
-      httpServer?.listen {
-         if (it.failed())
-            startFuture?.fail(it.cause())
-         else
-            startFuture?.complete()
-      } ?: startFuture?.fail("HttpServer was not returned from buildHttpServer")
+      awaitEvent<AsyncResult<HttpServer>> { r -> httpServer?.listen { r.handle(it) } }
    }
 
-   override fun stop(stopFuture: Future<Void>?) {
-      httpServer?.close {
-         if (it.failed())
-            stopFuture?.fail(it.cause())
-         else
-            stopFuture?.complete()
-      } ?: stopFuture?.complete()
+   suspend fun stop() {
+      awaitEvent<AsyncResult<Void>> { r -> httpServer?.close { r.handle(it) } }
    }
 
    fun buildHttpServer(): HttpServer {
-      val router = Router.router(vertx)
+      val router = Router.router(VERTX.delegate)
 
       Actions.http
          .filter { it.visibleTo(ActionVisibility.PUBLIC) }
@@ -91,21 +81,21 @@ open class RemoteServer(val port: Int = 15000, val host: String = "", var auth: 
 
             // Create handler.
             route.handler { routingContext ->
-//               // Ask
-//               producer.rxAsk(request = routingContext).asSingle().subscribe(
-//                  {
-//                     if (!routingContext.response().ended()) {
-//                        onIncompleteResponse(producer, routingContext)
-//                     }
-//                  },
-//                  { onException(producer, routingContext, it) }
-//               )
+               // Ask
+               producer.rxAsk(request = routingContext).asSingle().subscribe(
+                  {
+                     if (!routingContext.response().ended()) {
+                        onIncompleteResponse(producer, routingContext)
+                     }
+                  },
+                  { onException(producer, routingContext, it) }
+               )
             }
          }
 
       router.route().handler(this::catchAll)
 
-      return vertx
+      return VERTX.delegate
          .createHttpServer(buildHttpOptions())
          .websocketHandler(this::websocket)
          .requestHandler(router::accept)
@@ -236,37 +226,85 @@ open class RemoteServer(val port: Int = 15000, val host: String = "", var auth: 
    }
 }
 
-data class VerifyResult(val tokenToPass: String?,
-                        val expires: Long,
-                        /**
-                         *
-                         */
-                        val maxInFlight: Int = 0,
-                        /**
-                         * The unique ID of user or system
-                         */
-                        val userId: String? = null,
-                        /**
-                         * Limit the number of connections the user can have.
-                         * This is across the entire network.
-                         */
-                        val maxConnections: Int = 0)
+data class VerifyResult(
+   /**
+    *
+    */
+   val tokenToPass: String?,
+   /**
+    * Epoch in millis when token expires.
+    */
+   val expires: Long,
+   /**
+    *
+    */
+   val maxInFlight: Int = 0,
+   /**
+    * The unique ID of user or system
+    */
+   val userId: String? = null,
+   /**
+    * Limit the number of connections the user can have.
+    * This is across the entire network.
+    */
+   val maxConnections: Int = 0
+)
 
 interface RemoteVerifier {
    fun verify(token: String): VerifyResult
 }
 
 data class RemoteEnvelope(
+   /**
+    *
+    */
    val direction: Int = 1,
    // This is the ID of the request.
    // Full asynchronous pipelining is used
    val id: Long,
    // This maps to a path or action name.
    val name: String,
+   /**
+    *
+    */
    val timeout: Long,
+   /**
+    *
+    */
    val payload: Buffer
 )
 
+/**
+ * Wire format for remoting.
+ */
 object RemotePacker {
 
 }
+
+enum class RemoteMessageType {
+   ASK,
+   ASK_REPLY,
+   PRESENCE_GET,
+   PRESENCE_LEAVE,
+   PRESENCE_STATE,
+   PRESENCE_CHANGE,
+   STREAM,
+}
+
+
+data class AskMsg(
+   val id: Long,
+   val payload: ByteArray
+)
+
+data class AskReplyMsg(
+   val id: Long,
+   val code: Int,
+   val payload: ByteArray
+)
+
+data class StreamMsg(
+   val id: Long,
+   val seq: Long,
+   val payload: ByteBuf
+)

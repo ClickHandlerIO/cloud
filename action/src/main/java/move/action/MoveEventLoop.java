@@ -17,6 +17,8 @@
 package move.action;
 
 import io.netty.channel.EventLoop;
+import io.vertx.core.AsyncResult;
+import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.impl.ContextExt;
 import io.vertx.core.impl.EventLoopContext;
@@ -24,28 +26,27 @@ import io.vertx.core.impl.VertxInternal;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadMXBean;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import kotlin.Unit;
+import kotlin.coroutines.experimental.CoroutineContext;
 import kotlin.jvm.functions.Function0;
 import kotlinx.coroutines.experimental.CancellableContinuation;
-import kotlinx.coroutines.experimental.DisposableHandle;
 import org.jetbrains.annotations.NotNull;
-import org.quartz.Job;
-import org.quartz.JobExecutionContext;
-import org.quartz.JobExecutionException;
 
 /**
  * Optimized EvenLoop Context for managing Action lifecycle. Action timeouts are efficiently tracked
- * at the trade-off of less precise expiration. Action timeouts happen in normalized 100ms blocks or
- * up to 10 times / second. If more precise timeouts are needed, then use LockSupport.
+ * at the trade-off of less precise expiration. Action timeouts happen in normalized 200ms blocks or
+ * up to 5 times / second. If more precise timeouts are needed, then use LockSupport.
  *
- * Every MoveEventLoop processes network I/O and user tasks in the same thread.
- * Network I/O is handled by "epoll" if on Linux. "kqueue" if on BSD. "NIO" is the fallback.
- * Native transport is preferable especially in regards to garbage collection since most
- * buffers point to native memory. This is ideal for Move's goal of "real-time" or
- * very low latency and is preferred over maximum throughput.
+ * Every MoveEventLoop processes network I/O and user tasks in the same thread. Network I/O is
+ * handled by "epoll" if on Linux. "kqueue" if on BSD. "NIO" is the fallback. Native transport is
+ * preferable especially in regards to garbage collection since most buffers point to native memory.
+ * This is ideal for Move's goal of "real-time" or very low latency and is preferred over maximum
+ * throughput.
  *
  * Actions are sequenced by the ceiling 100ms block of their calculated unix millisecond epoch
  * deadline. If an Action has no deadline then there is no associated deadline tracking cost.
@@ -59,9 +60,9 @@ import org.quartz.JobExecutionException;
 public class MoveEventLoop extends ContextExt {
 
   // Tick duration in milliseconds.
-  public static final long TICK_MS = 100L;
+  public static final long TICK_MS = 200L;
   // Wheel size. 10 minutes is a good amount of time.
-  // It degrades to a SkipList that's unbounded for timeouts greater than 10 minutes.
+  // It degrades to a SkipList that's unbounded for timeouts greater than wheel size.
   public static final int WHEEL_LENGTH = (int) (TimeUnit.MINUTES.toMillis(10) / TICK_MS);
   public static final int MAX_TICKS_BEHIND = (int) (TimeUnit
       .SECONDS
@@ -85,15 +86,24 @@ public class MoveEventLoop extends ContextExt {
   private final LongSkipListMap<Timer> timers = new LongSkipListMap<>();
   // Wheel timer related.
   private final Timer[] timerWheel = new Timer[WHEEL_LENGTH];
+  private final ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
   long epoch;
   long epochTick;
   JobAction<?, ?> job;
+  private Thread thread;
+  private long id;
   private long tick = 0;
   private int wheelIndex = 0;
   private long maxWheelEpoch;
   private long maxWheelEpochTick;
   private AtomicLong ticks = new AtomicLong(0L);
   private Timer nonTimedTimmer = new Timer();
+
+  private Object actorStore;
+  private Object counterStore;
+  private Object bus;
+
+  private AtomicLong cpuTime = new AtomicLong(0L);
 
   public MoveEventLoop(
       @NotNull EventLoopContext eventLoopDefault,
@@ -112,8 +122,10 @@ public class MoveEventLoop extends ContextExt {
 
     try {
       nettyEventLoop().submit(() -> {
-        MoveEventLoopGroup.Companion.setLocal(this);
+        MoveThreadManager.Companion.setLocal(this);
         setContextOnThread();
+        thread = Thread.currentThread();
+        id = thread.getId();
       }).await();
     } catch (InterruptedException e) {
       throw new RuntimeException(e);
@@ -143,6 +155,10 @@ public class MoveEventLoop extends ContextExt {
     }
     final long ticks = millis / TICK_MS;
     return ticks < 1L ? 0L : ticks;
+  }
+
+  public long getId() {
+    return id;
   }
 
   public long getEpoch() {
@@ -299,6 +315,40 @@ public class MoveEventLoop extends ContextExt {
 
   /**
    *
+   * @param actor
+   * @param delayMillis
+   * @return
+   */
+  TimerEventHandle scheduleTimer(AbstractActorAction<?> actor,
+      long delayMillis) {
+    final long epochMillis = System.currentTimeMillis() + delayMillis;
+    final TimerEventHandle handle = new TimerEventHandle(actor);
+
+    if (epochMillis < maxWheelEpoch) {
+      timerWheel[wheelIndexFromEpoch(epochMillis)].add(handle);
+    } else {
+      final long key = epochMillis / TICK_MS;
+      Timer timer = timers.get(key);
+      if (timer == null) {
+        timer = new Timer(handle);
+        timers.put(key, timer);
+      } else {
+        timer.add(handle);
+      }
+    }
+
+    return handle;
+  }
+
+  long toTicks(long millis) {
+    if (millis < TICK_MS) {
+      return 1;
+    }
+    return (long)Math.ceil((double)millis / (double)TICK_MS);
+  }
+
+  /**
+   *
    */
   void stop() {
     // Cancels all running Actions and Timers and Rejects new tasks.
@@ -410,56 +460,16 @@ public class MoveEventLoop extends ContextExt {
     eventLoop.execute(wrapTask(task));
   }
 
-  private static class CronJob implements Job {
-
-    @Override
-    public void execute(JobExecutionContext jobExecutionContext) throws JobExecutionException {
-      System.out.println(jobExecutionContext.getFireTime());
-    }
+  public <T> void executeBlocking0(Handler<Future<T>> blockingCodeHandler,
+      Handler<AsyncResult<T>> asyncResultHandler) {
+    super.executeBlocking(blockingCodeHandler, asyncResultHandler);
   }
 
-  /**
-   *
-   */
-  static class TimerHandle implements DisposableHandle {
-
-    TimerHandle prev;
-    TimerHandle next;
-
-    void expired() {
-      // NOOP
-    }
-
-    void remove() {
-      // NOOP
-    }
-
-    @Override
-    public void dispose() {
-
-    }
-
-    @Override
-    public void unregister() {
-      dispose();
-    }
-
-    void unlink() {
-      final TimerHandle p = prev;
-      if (p == null) {
-        return;
-      }
-
-      final TimerHandle n = next;
-      p.next = n;
-      if (n != null) {
-        n.prev = p;
-      }
-
-      prev = null;
-      next = null;
-    }
-  }
+//  @Override
+//  public <T> void executeBlocking(Handler<Future<T>> blockingCodeHandler, TaskQueue queue,
+//      Handler<AsyncResult<T>> asyncResultHandler) {
+//    super.executeBlocking(blockingCodeHandler, queue, asyncResultHandler);
+//  }
 
   /**
    *
@@ -504,19 +514,75 @@ public class MoveEventLoop extends ContextExt {
     }
   }
 
+  public static class TimerEventHandle extends TimerHandle {
+
+    AbstractActorAction<?> actor;
+
+    public TimerEventHandle(AbstractActorAction<?> actor) {
+      this.actor = actor;
+      actor.addTimer(this);
+    }
+
+    void expired() {
+      if (actor == null) {
+        unlink();
+        return;
+      }
+
+      if (actor.isCancelled() || actor.isCompleted()) {
+        unlink();
+        return;
+      }
+
+      try {
+        actor.onTimerEvent(this);
+      } catch (Throwable e) {
+        // Ignore.
+      } finally {
+        unlink();
+      }
+    }
+
+    @Override
+    void unlink() {
+      super.unlink();
+
+      if (actor != null) {
+        actor.removeTimer(this);
+        actor = null;
+      }
+    }
+
+    @Override
+    void remove() {
+      if (actor == null) {
+        return;
+      }
+
+      unlink();
+    }
+
+    @Override
+    public void dispose() {
+      remove();
+    }
+  }
+
   /**
    *
    */
   static class DelayHandle extends TimerHandle {
 
-    //    IJobAction action;
     CancellableContinuation<Unit> continuation;
 
     public DelayHandle(
-//        IJobAction action,
         CancellableContinuation<Unit> continuation) {
-//      this.action = action;
       this.continuation = continuation;
+
+      final CoroutineContext ctx = continuation.getContext();
+      if (ctx instanceof HasTimers) {
+        ((HasTimers) ctx).addTimer(this);
+      }
     }
 
     void expired() {
@@ -543,12 +609,22 @@ public class MoveEventLoop extends ContextExt {
     }
 
     @Override
+    void unlink() {
+      super.unlink();
+
+      final CoroutineContext ctx = continuation.getContext();
+      if (ctx instanceof HasTimers) {
+        ((HasTimers) ctx).removeTimer(this);
+      }
+    }
+
+    @Override
     void remove() {
       if (continuation == null) {
         return;
       }
 
-      if (continuation.isCompleted() || continuation.isCompleted()) {
+      if (continuation.isCancelled() || continuation.isCompleted()) {
         unlink();
         continuation = null;
         return;

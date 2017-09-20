@@ -48,6 +48,8 @@ subprojects {
         }
     }
 
+    kotlin { experimental { coroutines 'enable' } }
+
     artifacts.archives packageSources
 
     repositories {

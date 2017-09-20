@@ -16,7 +16,7 @@ public @interface Daemon {
   /**
    * Name of Daemon.
    */
-  String value();
+  String value() default "";
 
   /**
    * Role that applies to this Daemon.

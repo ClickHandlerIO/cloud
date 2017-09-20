@@ -2,11 +2,24 @@ package move.action
 
 import io.reactivex.Single
 import io.vertx.core.VertxOptions
+import kotlinx.coroutines.experimental.CommonPool
+import kotlinx.coroutines.experimental.CompletableDeferred
+import kotlinx.coroutines.experimental.channels.actor
+import kotlinx.coroutines.experimental.delay
 import org.slf4j.LoggerFactory
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 // Global convenience Variable.
 val Move = App.component.locator()
+
+sealed class ActorMsg
+
+sealed class ActorKil : ActorMsg()
+
+sealed class CounterMsg
+object IncCounter : CounterMsg() // one-way message to increment counter
+class GetCounter(val response: CompletableDeferred<Int>) : CounterMsg() // a request with reply
 
 // App
 object App : MoveApp<AppComponent>() {
@@ -23,17 +36,46 @@ object App : MoveApp<AppComponent>() {
    suspend override fun configureVertx(): VertxOptions {
       return super
          .configureVertx()
-         .setEventLoopPoolSize(Runtime.getRuntime().availableProcessors() * 2)
+         .setEventLoopPoolSize(Runtime.getRuntime().availableProcessors() - 1)
+//         .setEventLoopPoolSize(4)
    }
 
-   suspend override fun step8_StartDeamons() {
+   // This function launches a new counter actor
+   fun counterActor() = actor<CounterMsg>(CommonPool, capacity = 1) {
+      var counter = 0 // actor state
+      for (msg in channel) { // iterate over incoming messages
+         when (msg) {
+            is IncCounter -> {
+               delay(1)
+               counter++
+               println("IncCounter on Thread ${Thread.currentThread().name}")
+            }
+            is GetCounter -> msg.response.complete(counter)
+         }
+      }
+      println("Finished Actor")
+   }
+
+   suspend override fun onStarted() {
+//      val counter = counterActor()
+//
+//      for (i in 1..10) {
+//         counter.send(IncCounter)
+//      }
+//      val response = CompletableDeferred<Int>()
+//      counter.send(GetCounter(response))
+//      println("Counter = ${response.await()}")
+//      counter.close()
+//      delay(1, TimeUnit.SECONDS)
+//      counter.send(IncCounter)
+
       val passes = 100
-      val parallelism = Runtime.getRuntime().availableProcessors() * 2
+      val parallelism = threadManager.eventLoops.size
       val statsInternval = 1000L
       val invocationsPerPass = 1_000_000
       val actionsPerInvocation = 2
 
-      val dispatcher = eventLoopGroup.executors[0].dispatcher
+      val dispatcher = threadManager.eventLoops[0].dispatcher
 
       Move.AllocateInventory ask { id = "" }
 
@@ -130,14 +172,13 @@ object App : MoveApp<AppComponent>() {
       for (c in 1..passes) {
          var list = mutableListOf<Single<Unit>>()
          val start = System.currentTimeMillis()
-         for (t in 0..parallelism-1) {
+         for (t in 0..parallelism - 1) {
             val single = Single.create<Unit> { subscriber ->
-               val eventLoop = eventLoopGroup.executors[t]
+               val eventLoop = threadManager.eventLoops[t]
                eventLoop.runOnContext {
                   val counter = AtomicInteger(0)
                   try {
                      for (i in 1..invocationsPerPass) {
-//                        AllocateInventory ask ""
                         val call = Move.Allocate.rxAsk("HI")
                         call.invokeOnCompletion {
                            if (counter.incrementAndGet() == invocationsPerPass) {

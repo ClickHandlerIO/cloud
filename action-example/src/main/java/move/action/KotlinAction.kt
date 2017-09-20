@@ -1,9 +1,5 @@
 package move.action
 
-import kotlinx.coroutines.experimental.CommonPool
-import kotlinx.coroutines.experimental.async
-import kotlinx.coroutines.experimental.selects.SelectClause1
-import kotlinx.coroutines.experimental.yield
 import javax.inject.Inject
 
 //
@@ -29,6 +25,8 @@ import javax.inject.Inject
 )
 class Ping : HttpAction() {
    suspend override fun execute() {
+      param("")
+
       resp.setStatusCode(200).end("PONG")
    }
 }
@@ -107,7 +105,7 @@ class Allocate : InternalAction<String, String>() {
 //         println(Thread.currentThread().name)
 //      }
 //
-//      launch(App.eventLoopGroup.next().dispatcher) {
+//      launch(App.threadManager.next().dispatcher) {
 //         println(Thread.currentThread().name)
 //         delay(1000)
 //         println(Thread.currentThread().name)

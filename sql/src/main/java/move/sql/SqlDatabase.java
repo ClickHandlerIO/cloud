@@ -52,7 +52,7 @@ import javax.sql.DataSource;
 import move.action.JobAction;
 import move.action.ActionTimeoutException;
 import move.action.MoveEventLoop;
-import move.action.MoveEventLoopGroup;
+import move.action.MoveThreadManager;
 import move.common.UID;
 import move.metrics.Metrics;
 import move.threading.WorkerPool;
@@ -1393,7 +1393,7 @@ public class SqlDatabase extends AbstractIdleService {
 
   public <T> Single<move.sql.SqlResult<T>> rxWrite(SqlCallable<T> task, int timeoutMillis) {
     final io.vertx.rxjava.core.Context context = vertx.currentContext();
-    final MoveEventLoop eventLoop = MoveEventLoopGroup.Companion.getCurrentEventLoop();
+    final MoveEventLoop eventLoop = MoveThreadManager.Companion.getCurrentEventLoop();
 
     final SqlAction action = new SqlAction(eventLoop, timeoutMillis);
 
@@ -1470,7 +1470,7 @@ public class SqlDatabase extends AbstractIdleService {
 
   public <T> Single<T> rxSingle(SqlReadCallable<T> task, int timeoutMillis) {
     final io.vertx.rxjava.core.Context context = vertx.getOrCreateContext();
-    final MoveEventLoop eventLoop = MoveEventLoopGroup.Companion.getCurrentEventLoop();
+    final MoveEventLoop eventLoop = MoveThreadManager.Companion.getCurrentEventLoop();
 
     final SqlAction action = new SqlAction(eventLoop, timeoutMillis);
 

@@ -21,5 +21,5 @@ public @interface Actor {
    *
    * @return
    */
-  String value();
+  String value() default "";
 }

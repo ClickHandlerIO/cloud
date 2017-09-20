@@ -1,16 +1,11 @@
 package move.presence;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.hazelcast.nio.ObjectDataInput;
-import com.hazelcast.nio.ObjectDataOutput;
-import com.hazelcast.nio.serialization.DataSerializable;
-import java.io.IOException;
-import java.util.Map;
 
 /**
  *
  */
-public class PresenceJoin implements DataSerializable {
+public class PresenceJoin {
 
   @JsonProperty
   public String sessionId;
@@ -26,19 +21,6 @@ public class PresenceJoin implements DataSerializable {
   public String device;
   @JsonProperty
   public String state;
-
-  public static PresenceJoin from(ObjectDataInput in) throws IOException {
-    final PresenceJoin request = new PresenceJoin();
-    request.readData(in);
-    return request;
-  }
-
-  public static PresenceJoin from(Map.Entry<String, PresenceOccupant> entry) {
-    if (entry == null) {
-      return new PresenceJoin();
-    }
-    return from(entry.getValue());
-  }
 
   public static PresenceJoin from(PresenceOccupant occupant) {
     if (occupant == null) {
@@ -88,27 +70,5 @@ public class PresenceJoin implements DataSerializable {
   public PresenceJoin state(final String state) {
     this.state = state;
     return this;
-  }
-
-  @Override
-  public void writeData(ObjectDataOutput out) throws IOException {
-    out.writeUTF(sessionId);
-    out.writeUTF(userId);
-    out.writeUTF(nodeId);
-    out.writeUTF(name);
-    out.writeUTF(imageUrl);
-    out.writeUTF(device);
-    out.writeUTF(state);
-  }
-
-  @Override
-  public void readData(ObjectDataInput in) throws IOException {
-    sessionId = in.readUTF();
-    userId = in.readUTF();
-    nodeId = in.readUTF();
-    name = in.readUTF();
-    imageUrl = in.readUTF();
-    device = in.readUTF();
-    state = in.readUTF();
   }
 }

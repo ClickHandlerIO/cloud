@@ -39,7 +39,7 @@ constructor(val vertx: Vertx, val actionProvider: Provider<A>) {
    open val isDaemon = false
 
    val vertxCore: io.vertx.core.Vertx = vertx.delegate
-   val eventLoopGroup = MoveEventLoopGroup.get(vertx)
+   val eventLoopGroup = MoveThreadManager.get(vertx)
    var executionTimeoutEnabled: Boolean = false
 
    // Timeout

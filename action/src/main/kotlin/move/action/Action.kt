@@ -13,10 +13,16 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import java.util.function.Supplier
-import kotlin.coroutines.experimental.AbstractCoroutineContextElement
 import kotlin.coroutines.experimental.Continuation
 import kotlin.coroutines.experimental.ContinuationInterceptor
 import kotlin.coroutines.experimental.CoroutineContext
+
+
+interface HasTimers {
+   fun addTimer(handle: TimerHandle)
+
+   fun removeTimer(handle: TimerHandle)
+}
 
 
 enum class CircuitBreakerState {
@@ -34,13 +40,13 @@ interface ActionToken
 
 object NoToken : ActionToken
 
-data class AnyToken(val token: Any): ActionToken
+data class AnyToken(val token: Any) : ActionToken
 
-data class StringToken(val token: String): ActionToken
+data class StringToken(val token: String) : ActionToken
 
-data class BytesToken(val token: ByteArray): ActionToken
+data class BytesToken(val token: ByteArray) : ActionToken
 
-data class BufferToken(val token: ByteBuf): ActionToken {
+data class BufferToken(val token: ByteBuf) : ActionToken {
    fun isReadable() = token.isReadable
 }
 
@@ -53,28 +59,6 @@ class ActionTimeoutException(val action: IJobAction<*, *>) : CancellationExcepti
       return "ActionTimeout [${action.javaClass.canonicalName}]"
    }
 }
-
-/**
- * User-specified name of coroutine. This name is used in debugging mode.
- * See [newCoroutineContext] for the description of coroutine debugging facilities.
- */
-data class ActionParent(
-   /**
-    * User-defined coroutine name.
-    */
-   val action: IJobAction<*, *>
-) : AbstractCoroutineContextElement(ActionParent) {
-   /**
-    * Key for [CoroutineName] instance in the coroutine context.
-    */
-   companion object Key : CoroutineContext.Key<ActionParent>
-
-   /**
-    * Returns a string representation of the object.
-    */
-   override fun toString(): String = "CoroutineName($action)"
-}
-
 
 class MoveDispatcher(val eventLoop: MoveEventLoop) : CoroutineDispatcher(), Delay {
    fun execute(task: () -> Unit) = eventLoop.execute(task)
@@ -126,8 +110,6 @@ class MoveEventLoopDisposableHandle(@Volatile var block: Runnable?) : Disposable
    }
 }
 
-data class ReplyCatch<T>(val value: T?, val cause: Throwable?)
-
 /*******************************************************************
  * Lifted FROM AbstractCoroutine!!!
  *******************************************************************/
@@ -145,8 +127,16 @@ abstract class JobAction<IN : Any, OUT : Any> :
    CoroutineContext,
    CoroutineScope,
    Delay,
-   ContinuationInterceptor {
+   ContinuationInterceptor,
+   HasTimers {
 
+   private var hasTimers = false
+   private var _timers: ArrayList<TimerHandle>? = null
+   internal val timers
+      get() = _timers!!
+
+   // The "root" action is the "Dispatcher".
+   // The assigned MoveEventLoop is used.
    override val key: CoroutineContext.Key<ContinuationInterceptor>
       get() = ContinuationInterceptor.Key
 
@@ -197,6 +187,62 @@ abstract class JobAction<IN : Any, OUT : Any> :
    var starting = false
    var currentContinuation: Continuation<*>? = null
 
+
+   var tick: Boolean = true
+   // Metrics.
+   var begin: Long = 0
+   var beginTick: Long = 0
+   var endTick: Long = 0
+   var cpu: Long = 0
+   var cpuBegin: Long = 0
+   var blocking: Long = 0
+   var blockingBegin: Long = 0
+   var child: Long = 0
+   var childCpu: Long = 0
+   var childBlocking: Long = 0
+
+   var shortCircuited = false
+   var fallbackSucceed = false
+   var fallbackFailed = false
+   var failed = false
+
+   internal fun begin() {
+      begin = if (tick) eventLoop.epochTick else System.currentTimeMillis()
+   }
+
+   internal fun end() = if (tick) eventLoop.epochTick - begin else System.currentTimeMillis() - begin
+
+   internal fun blockingBegin() {
+      blockingBegin = if (tick) eventLoop.epochTick else System.currentTimeMillis()
+   }
+
+   internal fun blockingEnd() {
+      blocking += if (tick)
+         eventLoop.epochTick - blockingBegin
+      else
+         System.currentTimeMillis() - blockingBegin
+   }
+
+   override fun addTimer(handle: TimerHandle) {
+      hasTimers = true
+      if (_timers == null) {
+         _timers = arrayListOf(handle)
+      }
+   }
+
+   override fun removeTimer(handle: TimerHandle) {
+      if (_timers != null)
+         _timers!! -= handle
+      hasTimers = !timers.isEmpty()
+      if (!hasTimers)
+         _timers = null
+   }
+
+   private fun removeAllTimers() {
+      _timers?.apply { forEach { it.remove() }; clear() }
+      _timers = null
+   }
+
    /**
     * Launches action as the root coroutine.
     */
@@ -206,11 +252,11 @@ abstract class JobAction<IN : Any, OUT : Any> :
                             token: ActionToken,
                             timeoutTicks: Long = 0,
                             root: Boolean = false) {
-//      if (MoveEventLoopGroup.currentEventLoop !== eventLoop) {
+//      if (MoveThreadManager.currentEventLoop !== eventLoop) {
 //         throw RuntimeException("Invoked from outside EventLoop thread.")
 //      }
 
-      this.metrics = ActionMetrics()
+//      this.metrics = ActionMetrics()
       this.token = token
       this.eventLoop = eventLoop
       this.provider = provider
@@ -227,7 +273,7 @@ abstract class JobAction<IN : Any, OUT : Any> :
             starting = true
             CoroutineStart.DEFAULT({ internalExecute() }, this, this)
          } else {
-            _context = parent._context
+            _context = parent._context + this
             this.token = parent.token
 
             when {
@@ -251,7 +297,7 @@ abstract class JobAction<IN : Any, OUT : Any> :
    /**
     * Executes action "Inline".
     */
-   internal open suspend fun execute1(eventLoop: MoveEventLoop,
+   internal open suspend fun execute0(eventLoop: MoveEventLoop,
                                       provider: ActionProvider<*, IN, OUT>,
                                       request: IN,
                                       timeoutTicks: Long = 0,
@@ -263,17 +309,17 @@ abstract class JobAction<IN : Any, OUT : Any> :
    /**
     * Executes action "Inline".
     */
-   internal open suspend fun execute0(eventLoop: MoveEventLoop,
+   internal open suspend fun execute1(eventLoop: MoveEventLoop,
                                       provider: ActionProvider<*, IN, OUT>,
                                       request: IN,
                                       timeoutTicks: Long = 0,
                                       root: Boolean = false): OUT {
       // Thread check.
-//      if (MoveEventLoopGroup.currentEventLoop !== eventLoop) {
+//      if (MoveThreadManager.currentEventLoop !== eventLoop) {
 //         throw RuntimeException("Invoked from outside EventLoop thread.")
 //      }
 
-      this.metrics = ActionMetrics()
+//      this.metrics = ActionMetrics()
 
       this.eventLoop = eventLoop
       this.provider = provider
@@ -336,7 +382,7 @@ abstract class JobAction<IN : Any, OUT : Any> :
       override fun resume(value: T) {
          val job = action ?: eventLoop.job
 
-         if (MoveEventLoopGroup.currentEventLoop !== eventLoop) {
+         if (MoveThreadManager.currentEventLoop !== eventLoop) {
             eventLoop.execute {
                eventLoop.job = job
 
@@ -391,12 +437,15 @@ abstract class JobAction<IN : Any, OUT : Any> :
          return continuation
       }
 
-      val job = eventLoop.job
+      return continuation
 
-      val actionContinuation = ActionContinuation(job, continuation)
-      job?.currentContinuation = actionContinuation
-
-      return actionContinuation
+//      val continuationContext = continuation.context
+//      val job = eventLoop.job
+//
+//      val actionContinuation = ActionContinuation(job, continuation)
+//      job?.currentContinuation = actionContinuation
+//
+//      return actionContinuation
    }
 
    /**
@@ -445,8 +494,6 @@ abstract class JobAction<IN : Any, OUT : Any> :
       }
 
       try {
-         onStart()
-
          when (state) {
             CircuitBreakerState.OPEN -> throw CircuitOpenException()
             CircuitBreakerState.HALF_OPEN -> {
@@ -612,17 +659,16 @@ abstract class JobAction<IN : Any, OUT : Any> :
     */
    protected suspend fun <T> blocking(block: suspend () -> T): T =
       suspendCancellableCoroutine { cont ->
-         provider.vertx.executeBlocking<T>({
-            metrics?.blockingBegin()
+         eventLoop.executeBlocking0<T>({
+            blockingBegin()
             try {
-               val result = runBlocking { block.invoke() }
-               metrics?.blockingEnd()
-               eventLoop.execute { it.complete(result) }
+               val result = runBlocking { block() }
+               it.complete(result)
             } catch (e: Throwable) {
-               metrics?.blockingEnd()
                eventLoop.execute { it.fail(e) }
             }
          }, {
+            blockingEnd()
             if (it.failed()) {
                eventLoop.execute { cont.resumeWithException(it.cause()) }
             } else {
@@ -636,17 +682,16 @@ abstract class JobAction<IN : Any, OUT : Any> :
     */
    protected suspend fun <T> javaBlocking(block: Supplier<T>): T =
       suspendCancellableCoroutine { cont ->
-         provider.vertx.executeBlocking<T>({
-            metrics?.blockingBegin()
+         eventLoop.executeBlocking0<T>({
+            blockingBegin()
             try {
                val result = runBlocking { block.get() }
-               metrics?.blockingEnd()
-               eventLoop.execute { it.complete(result) }
+               it.complete(result)
             } catch (e: Throwable) {
-               metrics?.blockingEnd()
                eventLoop.execute { it.fail(e) }
             }
          }, {
+            blockingEnd()
             if (it.failed()) {
                eventLoop.execute { cont.resumeWithException(it.cause()) }
             } else {
@@ -670,7 +715,7 @@ abstract class JobAction<IN : Any, OUT : Any> :
       suspendCancellableCoroutine { cont ->
          try {
             executor.execute {
-               metrics?.blockingBegin()
+               blockingBegin()
                try {
                   val result = runBlocking {
                      try {
@@ -679,12 +724,12 @@ abstract class JobAction<IN : Any, OUT : Any> :
                         throw e
                      }
                   }
-                  metrics?.blockingEnd()
+                  blockingEnd()
                   eventLoop.execute {
                      cont.resume(result)
                   }
                } catch (e: Throwable) {
-                  metrics?.blockingEnd()
+                  blockingEnd()
                   eventLoop.execute {
                      cont.resumeWithException(e)
                   }
@@ -702,7 +747,7 @@ abstract class JobAction<IN : Any, OUT : Any> :
       suspendCancellableCoroutine { cont ->
          try {
             executor.execute {
-               metrics?.blockingBegin()
+               blockingBegin()
                try {
                   val result = runBlocking {
                      try {
@@ -711,12 +756,12 @@ abstract class JobAction<IN : Any, OUT : Any> :
                         throw e
                      }
                   }
-                  metrics?.blockingEnd()
+                  blockingEnd()
                   eventLoop.execute {
                      cont.resume(result)
                   }
                } catch (e: Throwable) {
-                  metrics?.blockingEnd()
+                  blockingEnd()
                   eventLoop.execute {
                      cont.resumeWithException(e)
                   }
@@ -738,16 +783,15 @@ abstract class JobAction<IN : Any, OUT : Any> :
    protected suspend fun <T> blocking(pool: WorkerPool, block: suspend () -> T): T =
       suspendCancellableCoroutine { cont ->
          pool.executeBlocking<T>({
-            metrics?.blockingBegin()
+            blockingBegin()
             try {
-               val result = runBlocking { block.invoke() }
-               metrics?.blockingEnd()
-               eventLoop.execute { it.complete(result) }
+               val result = runBlocking { block() }
+               it.complete(result)
             } catch (e: Throwable) {
-               metrics?.blockingEnd()
-               eventLoop.execute { it.fail(e) }
+               it.fail(e)
             }
          }, {
+            blockingEnd()
             if (it.failed()) {
                eventLoop.execute { cont.resumeWithException(it.cause()) }
             } else {
@@ -762,14 +806,14 @@ abstract class JobAction<IN : Any, OUT : Any> :
    protected suspend fun <T> javaBlocking(pool: WorkerPool, block: Supplier<T>): T =
       suspendCancellableCoroutine { cont ->
          pool.executeBlocking<T>({
-            metrics?.blockingBegin()
+            blockingBegin()
             try {
                val result = runBlocking { block.get() }
-               metrics?.blockingEnd()
-               eventLoop.execute { it.complete(result) }
+               blockingEnd()
+               it.complete(result)
             } catch (e: Throwable) {
-               metrics?.blockingEnd()
-               eventLoop.execute { it.fail(e) }
+               blockingEnd()
+               it.fail(e)
             }
          }, {
             if (it.failed()) {
@@ -814,7 +858,7 @@ abstract class JobAction<IN : Any, OUT : Any> :
     *
     */
    override fun invokeOnTimeout(time: Long, unit: TimeUnit, block: Runnable): DisposableHandle {
-      if (MoveEventLoopGroup.currentEventLoop === eventLoop) {
+      if (MoveThreadManager.currentEventLoop === eventLoop) {
          // Run directly.
          block.run()
          // Already disposed.
@@ -830,8 +874,8 @@ abstract class JobAction<IN : Any, OUT : Any> :
 
    /**
     * Schedule after delay.
-    * EventLoop has a WheelTimer with 100ms precision.
-    * Do not use "delay" if nanosecond precision is needed.
+    * EventLoop has a WheelTimer with TICK_MS precision.
+    * Do not use "delay" if a higher precision is needed.
     */
    override fun scheduleResumeAfterDelay(time: Long, unit: TimeUnit, continuation: CancellableContinuation<Unit>) {
       eventLoop.scheduleDelay(continuation, unit.toMillis(time))
@@ -928,6 +972,8 @@ abstract class JobAction<IN : Any, OUT : Any> :
       // !!! Important !!! Ensure we clean up reference to Parent
       eventLoop.job = parent
       parent = null
+
+      removeAllTimers()
 
       if (handle != null) {
          handle?.dispose()

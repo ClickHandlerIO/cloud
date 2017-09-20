@@ -6,7 +6,7 @@ import io.vertx.rxjava.core.Vertx
 import move.NUID
 
 class StreamConnector(val vertx: Vertx) {
-   val eventLoopGroup = MoveEventLoopGroup.get(vertx)
+   val eventLoopGroup = MoveThreadManager.get(vertx)
 }
 
 /**

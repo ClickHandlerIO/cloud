@@ -2,15 +2,11 @@ package move.presence;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.hazelcast.nio.ObjectDataInput;
-import com.hazelcast.nio.ObjectDataOutput;
-import com.hazelcast.nio.serialization.DataSerializable;
-import java.io.IOException;
 
 /**
  *
  */
-public class PresenceOccupant implements DataSerializable {
+public class PresenceOccupant {
 
   @JsonProperty
   public String userId;
@@ -75,31 +71,5 @@ public class PresenceOccupant implements DataSerializable {
   public PresenceOccupant lastPing(final long lastKeepAlive) {
     this.lastPing = lastKeepAlive;
     return this;
-  }
-
-  @Override
-  public void writeData(ObjectDataOutput out) throws IOException {
-    out.writeUTF(id);
-    out.writeUTF(userId);
-    out.writeUTF(name);
-    out.writeUTF(imageUrl);
-    out.writeUTF(nodeId);
-    out.writeLong(joined);
-    out.writeUTF(device);
-    out.writeUTF(state);
-    out.writeLong(lastPing);
-  }
-
-  @Override
-  public void readData(ObjectDataInput in) throws IOException {
-    id = in.readUTF();
-    userId = in.readUTF();
-    name = in.readUTF();
-    imageUrl = in.readUTF();
-    nodeId = in.readUTF();
-    joined = in.readLong();
-    device = in.readUTF();
-    state = in.readUTF();
-    lastPing = in.readLong();
   }
 }

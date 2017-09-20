@@ -30,8 +30,8 @@ val GATEWAY_BROKER
  * Each node has a single queue
  */
 class KernelBroker(val vertx: Vertx) {
-   val eventLoopGroup = MoveEventLoopGroup.get(vertx)
-   val eventLoops = eventLoopGroup.executors
+   val eventLoopGroup = MoveThreadManager.get(vertx)
+   val eventLoops = eventLoopGroup.eventLoops
 }
 
 /**
@@ -284,7 +284,7 @@ object LocalBroker : ActionBroker() {
       provider: InternalActionProvider<A, IN, OUT>,
       timeoutTicks: Long): OUT {
 
-      var eventLoop = MoveEventLoopGroup.currentEventLoop
+      var eventLoop = MoveThreadManager.currentEventLoop
       val action = provider.actionProvider.get()
 
       if (eventLoop == null) {
@@ -317,7 +317,7 @@ object LocalBroker : ActionBroker() {
       timeoutTicks: Long,
       delaySeconds: Int): OUT {
 
-      var eventLoop = MoveEventLoopGroup.currentEventLoop
+      var eventLoop = MoveThreadManager.currentEventLoop
       val action = provider.actionProvider.get()
 
       if (eventLoop == null) {
@@ -351,7 +351,7 @@ object LocalBroker : ActionBroker() {
       delaySeconds: Int,
       root: Boolean): DeferredAction<OUT> {
 
-      var eventLoop = MoveEventLoopGroup.currentEventLoop
+      var eventLoop = MoveThreadManager.currentEventLoop
       val action = provider.actionProvider.get()
 
       if (eventLoop == null) {
@@ -389,7 +389,7 @@ object LocalBroker : ActionBroker() {
       val eventLoop = provider.eventLoopGroup.next()
       val action = provider.actionProvider.get()
 
-      if (MoveEventLoopGroup.currentEventLoop !== eventLoop) {
+      if (MoveThreadManager.currentEventLoop !== eventLoop) {
          eventLoop.execute {
             action.launch(
                eventLoop,
@@ -425,7 +425,7 @@ object LocalBroker : ActionBroker() {
       val eventLoop = provider.eventLoopGroup.next()
       val action = provider.actionProvider.get()
 
-      if (MoveEventLoopGroup.currentEventLoop !== eventLoop) {
+      if (MoveThreadManager.currentEventLoop !== eventLoop) {
          eventLoop.execute {
             action.launch(
                eventLoop,
@@ -455,7 +455,7 @@ object LocalBroker : ActionBroker() {
       provider: WorkerActionProvider<A, IN, OUT>,
       timeoutTicks: Long): OUT {
 
-      var eventLoop = MoveEventLoopGroup.currentEventLoop
+      var eventLoop = MoveThreadManager.currentEventLoop
       val action = provider.actionProvider.get()
 
       if (eventLoop == null) {
@@ -488,7 +488,7 @@ object LocalBroker : ActionBroker() {
       timeoutTicks: Long,
       delaySeconds: Int): OUT {
 
-      var eventLoop = MoveEventLoopGroup.currentEventLoop
+      var eventLoop = MoveThreadManager.currentEventLoop
       val action = provider.actionProvider.get()
 
       if (eventLoop == null) {
@@ -522,7 +522,7 @@ object LocalBroker : ActionBroker() {
       delaySeconds: Int,
       root: Boolean): DeferredAction<OUT> {
 
-      var eventLoop = MoveEventLoopGroup.currentEventLoop
+      var eventLoop = MoveThreadManager.currentEventLoop
       val action = provider.actionProvider.get()
 
       if (eventLoop == null) {
@@ -560,7 +560,7 @@ object LocalBroker : ActionBroker() {
       val eventLoop = provider.eventLoopGroup.next()
       val action = provider.actionProvider.get()
 
-      if (MoveEventLoopGroup.currentEventLoop !== eventLoop) {
+      if (MoveThreadManager.currentEventLoop !== eventLoop) {
          eventLoop.execute {
             action.launch(
                eventLoop,
@@ -596,7 +596,7 @@ object LocalBroker : ActionBroker() {
       val eventLoop = provider.eventLoopGroup.next()
       val action = provider.actionProvider.get()
 
-      if (MoveEventLoopGroup.currentEventLoop !== eventLoop) {
+      if (MoveThreadManager.currentEventLoop !== eventLoop) {
          eventLoop.execute {
             action.launch(
                eventLoop,
@@ -625,7 +625,7 @@ object LocalBroker : ActionBroker() {
                                              provider: HttpActionProvider<A>,
                                              timeoutTicks: Long) {
 
-      var eventLoop = MoveEventLoopGroup.currentEventLoop
+      var eventLoop = MoveThreadManager.currentEventLoop
       val action = provider.actionProvider.get()
 
       if (eventLoop == null) {
@@ -657,7 +657,7 @@ object LocalBroker : ActionBroker() {
                             timeoutTicks: Long,
                             delaySeconds: Int) {
 
-      var eventLoop = MoveEventLoopGroup.currentEventLoop
+      var eventLoop = MoveThreadManager.currentEventLoop
       val action = provider.actionProvider.get()
 
       if (eventLoop == null) {
@@ -690,7 +690,7 @@ object LocalBroker : ActionBroker() {
                       delaySeconds: Int,
                       root: Boolean): DeferredAction<Unit> {
 
-      var eventLoop = MoveEventLoopGroup.currentEventLoop
+      var eventLoop = MoveThreadManager.currentEventLoop
       val action = provider.actionProvider.get()
 
       if (eventLoop == null) {
@@ -725,7 +725,7 @@ object LocalBroker : ActionBroker() {
                        delaySeconds: Int,
                        root: Boolean): DeferredAction<Unit> {
 
-      var eventLoop = MoveEventLoopGroup.currentEventLoop
+      var eventLoop = MoveThreadManager.currentEventLoop
       val action = provider.actionProvider.get()
 
       if (eventLoop == null) {

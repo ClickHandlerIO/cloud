@@ -46,7 +46,6 @@ import javax.lang.model.SourceVersion;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
-import javax.lang.model.element.PackageElement;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.TypeParameterElement;
 import javax.lang.model.element.VariableElement;
@@ -57,7 +56,6 @@ import javax.lang.model.util.ElementFilter;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
-import javax.tools.Diagnostic.Kind;
 import javax.tools.FileObject;
 import javax.tools.JavaFileObject;
 import move.action.ActionLocator;
@@ -283,7 +281,7 @@ public class ActionProcessor extends AbstractProcessor {
               Diagnostic.Kind.ERROR,
               element.getQualifiedName() +
                   "  has multiple Action annotations. Only one of the following may be used... " +
-                  "@Remote or @QueueAction or @Internal or @ActorAction"
+                  "@Worker or @Internal or @Actor or @Daemon"
           );
           continue;
         }

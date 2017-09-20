@@ -6,21 +6,32 @@ import io.vertx.core.Vertx
 import io.vertx.core.impl.ContextImpl
 import io.vertx.core.impl.VertxInternal
 import io.vertx.core.json.JsonObject
+import java.lang.management.ManagementFactory
 import java.util.concurrent.Executors
 import java.util.concurrent.ThreadLocalRandom
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  *
  */
-class MoveEventLoopGroup(private val vertxInternal: VertxInternal) {
-   val eventLoopDefault = vertxInternal.createEventLoopContext(null, null, JsonObject(), null)
-   val executors = vertxInternal.eventLoopGroup
+class MoveThreadManager(private val vertxInternal: VertxInternal) {
+   val eventLoopDefault = vertxInternal.createEventLoopContext(
+      null,
+      null,
+      JsonObject(),
+      null
+   )
+
+   // Build EventLoops.
+   val eventLoops = vertxInternal.eventLoopGroup
       .iterator()
       .asSequence()
       .map { MoveEventLoop(eventLoopDefault, vertxInternal, JsonObject(), it as EventLoop) }
       .toList()
-   val executorsByEventLoop = executors.map { it.eventLoop to it }.toMap()
+
+   // By Netty EventLoop.
+   val executorsByEventLoop = eventLoops.map { it.eventLoop to it }.toMap()
 
    // Application wide scheduled executor.
    // This is used to process ticks for each MoveEventLoop.
@@ -29,12 +40,24 @@ class MoveEventLoopGroup(private val vertxInternal: VertxInternal) {
    // This allows for a very scalable and predictable behavior when managing
    // large amounts of Timers. Millions of timers can effectively be managed
    // with minimal overhead at the cost of loss of precision.
+   // This same thread is also used to gather JVM metrics from EventLoops
+   // WorkerPools, etc.
    val scheduledExecutor = Executors.newSingleThreadScheduledExecutor()
 
+   // Thread monitoring.
+   val threadMX = ManagementFactory.getThreadMXBean()
+
+   // Blocking threads.
+
+   // Memory Management monitoring.
+   val memoryMX = ManagementFactory.getMemoryMXBean()
+
+   val ticks = AtomicLong(0L)
+
    init {
-      // Check for timeouts every 100ms
+      // Check for timeouts every TICK_MS
       scheduledExecutor.scheduleAtFixedRate(
-         { executors.forEach { it.tick() } },
+         this::tick,
          MoveEventLoop.TICK_MS,
          MoveEventLoop.TICK_MS,
          TimeUnit.MILLISECONDS
@@ -45,16 +68,33 @@ class MoveEventLoopGroup(private val vertxInternal: VertxInternal) {
       }
    }
 
-   fun nextRandom() = executors[ThreadLocalRandom.current().nextInt(0, executors.size)]
+   private fun tick() {
+      ticks.incrementAndGet()
 
+      // Determine event loops.
+      eventLoops.forEach {
+         val cpuTime = threadMX.getThreadCpuTime(it.id)
+         val userTime = threadMX.getThreadUserTime(it.id)
+
+         if (ticks.get() % 25 == 0L) {
+            println("Thread: ${it.id} CPU: $cpuTime")
+         }
+
+         // Tick
+         it.tick()
+      }
+   }
+
+   /**
+    *
+    */
    fun next(): MoveEventLoop {
       return next(io.vertx.core.Vertx.currentContext())
    }
 
-   fun nextBiased(context: Context?): MoveEventLoop {
-      return nextRandom()
-   }
-
+   /**
+    *
+    */
    fun next(context: Context?): MoveEventLoop {
       if (context == null)
          return nextRandom()
@@ -64,8 +104,13 @@ class MoveEventLoopGroup(private val vertxInternal: VertxInternal) {
       return executorsByEventLoop[eventLoop] ?: nextRandom()
    }
 
+   /**
+    *
+    */
+   fun nextRandom() = eventLoops[ThreadLocalRandom.current().nextInt(0, eventLoops.size)]
+
    companion object {
-      val instances = mutableMapOf<Vertx, MoveEventLoopGroup>()
+      val instances = mutableMapOf<Vertx, MoveThreadManager>()
 
       val currentEventLoop get() = local.get()
 
@@ -76,22 +121,22 @@ class MoveEventLoopGroup(private val vertxInternal: VertxInternal) {
       }
 
       @Synchronized
-      fun get(vertx: Vertx): MoveEventLoopGroup {
+      fun get(vertx: Vertx): MoveThreadManager {
          val i = instances[vertx]
          if (i != null) {
             return i
          }
 
-         val n = MoveEventLoopGroup(vertx as VertxInternal)
+         val n = MoveThreadManager(vertx as VertxInternal)
          instances[vertx] = n
          return n
       }
 
-      fun get(vertx: io.vertx.rxjava.core.Vertx): MoveEventLoopGroup {
+      fun get(vertx: io.vertx.rxjava.core.Vertx): MoveThreadManager {
          return get(vertx.delegate)
       }
 
-      fun get(vertxInternal: VertxInternal): MoveEventLoopGroup {
+      fun get(vertxInternal: VertxInternal): MoveThreadManager {
          return get(vertxInternal as Vertx)
       }
    }
