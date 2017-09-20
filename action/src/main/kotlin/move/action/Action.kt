@@ -22,6 +22,8 @@ interface HasTimers {
    fun addTimer(handle: TimerHandle)
 
    fun removeTimer(handle: TimerHandle)
+
+   fun onTimer(handle: TimerEventHandle)
 }
 
 
@@ -174,6 +176,8 @@ abstract class JobAction<IN : Any, OUT : Any> :
       get
       private set
 
+   var _actor: AbstractActorAction<*>? = null
+
    @Suppress("LeakingThis")
    var _context: CoroutineContext = this
       get
@@ -238,6 +242,9 @@ abstract class JobAction<IN : Any, OUT : Any> :
          _timers = null
    }
 
+   override fun onTimer(handle: TimerEventHandle) {
+   }
+
    private fun removeAllTimers() {
       _timers?.apply { forEach { it.remove() }; clear() }
       _timers = null
@@ -252,7 +259,7 @@ abstract class JobAction<IN : Any, OUT : Any> :
                             token: ActionToken,
                             timeoutTicks: Long = 0,
                             root: Boolean = false) {
-//      if (MoveThreadManager.currentEventLoop !== eventLoop) {
+//      if (MoveKernel.currentEventLoop !== eventLoop) {
 //         throw RuntimeException("Invoked from outside EventLoop thread.")
 //      }
 
@@ -315,7 +322,7 @@ abstract class JobAction<IN : Any, OUT : Any> :
                                       timeoutTicks: Long = 0,
                                       root: Boolean = false): OUT {
       // Thread check.
-//      if (MoveThreadManager.currentEventLoop !== eventLoop) {
+//      if (MoveKernel.currentEventLoop !== eventLoop) {
 //         throw RuntimeException("Invoked from outside EventLoop thread.")
 //      }
 
@@ -382,7 +389,7 @@ abstract class JobAction<IN : Any, OUT : Any> :
       override fun resume(value: T) {
          val job = action ?: eventLoop.job
 
-         if (MoveThreadManager.currentEventLoop !== eventLoop) {
+         if (MoveKernel.currentEventLoop !== eventLoop) {
             eventLoop.execute {
                eventLoop.job = job
 
@@ -437,15 +444,13 @@ abstract class JobAction<IN : Any, OUT : Any> :
          return continuation
       }
 
-      return continuation
+      val continuationContext = continuation.context
+      val job = eventLoop.job
 
-//      val continuationContext = continuation.context
-//      val job = eventLoop.job
-//
-//      val actionContinuation = ActionContinuation(job, continuation)
-//      job?.currentContinuation = actionContinuation
-//
-//      return actionContinuation
+      val actionContinuation = ActionContinuation(job, continuation)
+      job?.currentContinuation = actionContinuation
+
+      return actionContinuation
    }
 
    /**
@@ -858,7 +863,7 @@ abstract class JobAction<IN : Any, OUT : Any> :
     *
     */
    override fun invokeOnTimeout(time: Long, unit: TimeUnit, block: Runnable): DisposableHandle {
-      if (MoveThreadManager.currentEventLoop === eventLoop) {
+      if (MoveKernel.currentEventLoop === eventLoop) {
          // Run directly.
          block.run()
          // Already disposed.

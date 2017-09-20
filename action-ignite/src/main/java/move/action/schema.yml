@@ -1,4 +1,4 @@
-# Move Job Engine
+# A Job Engine
 # Designed for Redis Cluster
 # Can effectively manage Billions of Jobs / Actors
 # Only provides low level functionality

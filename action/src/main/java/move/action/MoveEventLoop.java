@@ -23,6 +23,7 @@ import io.vertx.core.Handler;
 import io.vertx.core.impl.ContextExt;
 import io.vertx.core.impl.EventLoopContext;
 import io.vertx.core.impl.VertxInternal;
+import io.vertx.core.impl.VertxThread;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
@@ -32,7 +33,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import kotlin.Unit;
-import kotlin.coroutines.experimental.CoroutineContext;
 import kotlin.jvm.functions.Function0;
 import kotlinx.coroutines.experimental.CancellableContinuation;
 import org.jetbrains.annotations.NotNull;
@@ -73,8 +73,8 @@ public class MoveEventLoop extends ContextExt {
                   ? 1000
                   : 10)
       / TICK_MS);
-
   public static final Logger log = LoggerFactory.getLogger(MoveEventLoop.class);
+  static final ThreadLocal<MoveEventLoop> THREAD_LOCAL = new ThreadLocal<>();
   // MoveApp kotlinx-coroutines Dispatcher.
   public final MoveDispatcher dispatcher = new MoveDispatcher(this);
   // Netty EventLoop.
@@ -90,14 +90,14 @@ public class MoveEventLoop extends ContextExt {
   long epoch;
   long epochTick;
   JobAction<?, ?> job;
-  private Thread thread;
+  private VertxThread thread;
   private long id;
   private long tick = 0;
   private int wheelIndex = 0;
   private long maxWheelEpoch;
   private long maxWheelEpochTick;
   private AtomicLong ticks = new AtomicLong(0L);
-  private Timer nonTimedTimmer = new Timer();
+  private Timer unlimitedTimer = new Timer();
 
   private Object actorStore;
   private Object counterStore;
@@ -119,17 +119,6 @@ public class MoveEventLoop extends ContextExt {
     epoch = System.currentTimeMillis();
     epochTick = epoch / TICK_MS;
     maxWheelEpochTick = epochTick + WHEEL_LENGTH - 1;
-
-    try {
-      nettyEventLoop().submit(() -> {
-        MoveThreadManager.Companion.setLocal(this);
-        setContextOnThread();
-        thread = Thread.currentThread();
-        id = thread.getId();
-      }).await();
-    } catch (InterruptedException e) {
-      throw new RuntimeException(e);
-    }
   }
 
   public static void main(String[] args) throws InterruptedException {
@@ -155,6 +144,20 @@ public class MoveEventLoop extends ContextExt {
     }
     final long ticks = millis / TICK_MS;
     return ticks < 1L ? 0L : ticks;
+  }
+
+  void init(Function0<Unit> block) {
+    try {
+      // Init thread.
+      nettyEventLoop().submit(() -> {
+        setContextOnThread();
+        thread = (VertxThread) Thread.currentThread();
+        id = thread.getId();
+        block.invoke();
+      }).await();
+    } catch (InterruptedException e) {
+      throw new RuntimeException(e);
+    }
   }
 
   public long getId() {
@@ -225,7 +228,7 @@ public class MoveEventLoop extends ContextExt {
    */
   JobTimerHandle registerJob(IJobAction action) {
     final JobTimerHandle handle = new JobTimerHandle(action);
-    nonTimedTimmer.add(handle);
+    unlimitedTimer.add(handle);
     return handle;
   }
 
@@ -292,8 +295,10 @@ public class MoveEventLoop extends ContextExt {
    * @param delayMillis
    * @return
    */
-  DelayHandle scheduleDelay(CancellableContinuation<Unit> continuation,
+  DelayHandle scheduleDelay(
+      CancellableContinuation<Unit> continuation,
       long delayMillis) {
+
     final long epochMillis = System.currentTimeMillis() + delayMillis;
     final DelayHandle handle = new DelayHandle(continuation);
 
@@ -315,14 +320,17 @@ public class MoveEventLoop extends ContextExt {
 
   /**
    *
-   * @param actor
+   * @param hasTimers
    * @param delayMillis
    * @return
    */
-  TimerEventHandle scheduleTimer(AbstractActorAction<?> actor,
+  TimerEventHandle scheduleTimer(
+      int type,
+      HasTimers hasTimers,
       long delayMillis) {
+
     final long epochMillis = System.currentTimeMillis() + delayMillis;
-    final TimerEventHandle handle = new TimerEventHandle(actor);
+    final TimerEventHandle handle = new TimerEventHandle(type, hasTimers);
 
     if (epochMillis < maxWheelEpoch) {
       timerWheel[wheelIndexFromEpoch(epochMillis)].add(handle);
@@ -344,7 +352,7 @@ public class MoveEventLoop extends ContextExt {
     if (millis < TICK_MS) {
       return 1;
     }
-    return (long)Math.ceil((double)millis / (double)TICK_MS);
+    return (long) Math.ceil((double) millis / (double) TICK_MS);
   }
 
   /**
@@ -354,7 +362,7 @@ public class MoveEventLoop extends ContextExt {
     // Cancels all running Actions and Timers and Rejects new tasks.
     eventLoop.execute(() -> {
       processFullWheel();
-      nonTimedTimmer.expired();
+      unlimitedTimer.expired();
     });
   }
 
@@ -463,187 +471,6 @@ public class MoveEventLoop extends ContextExt {
   public <T> void executeBlocking0(Handler<Future<T>> blockingCodeHandler,
       Handler<AsyncResult<T>> asyncResultHandler) {
     super.executeBlocking(blockingCodeHandler, asyncResultHandler);
-  }
-
-//  @Override
-//  public <T> void executeBlocking(Handler<Future<T>> blockingCodeHandler, TaskQueue queue,
-//      Handler<AsyncResult<T>> asyncResultHandler) {
-//    super.executeBlocking(blockingCodeHandler, queue, asyncResultHandler);
-//  }
-
-  /**
-   *
-   */
-  static class JobTimerHandle extends TimerHandle {
-
-    IJobAction action;
-
-    public JobTimerHandle(IJobAction action) {
-      this.action = action;
-    }
-
-    void expired() {
-      if (action == null) {
-        return;
-      }
-
-      try {
-        if (action.isActive()) {
-          action.doTimeout();
-        }
-      } finally {
-        unlink();
-        action = null;
-      }
-    }
-
-    void remove() {
-      if (action == null) {
-        return;
-      }
-
-      unlink();
-
-      // Maybe make it easier for GC.
-      action = null;
-    }
-
-    @Override
-    public void dispose() {
-      remove();
-    }
-  }
-
-  public static class TimerEventHandle extends TimerHandle {
-
-    AbstractActorAction<?> actor;
-
-    public TimerEventHandle(AbstractActorAction<?> actor) {
-      this.actor = actor;
-      actor.addTimer(this);
-    }
-
-    void expired() {
-      if (actor == null) {
-        unlink();
-        return;
-      }
-
-      if (actor.isCancelled() || actor.isCompleted()) {
-        unlink();
-        return;
-      }
-
-      try {
-        actor.onTimerEvent(this);
-      } catch (Throwable e) {
-        // Ignore.
-      } finally {
-        unlink();
-      }
-    }
-
-    @Override
-    void unlink() {
-      super.unlink();
-
-      if (actor != null) {
-        actor.removeTimer(this);
-        actor = null;
-      }
-    }
-
-    @Override
-    void remove() {
-      if (actor == null) {
-        return;
-      }
-
-      unlink();
-    }
-
-    @Override
-    public void dispose() {
-      remove();
-    }
-  }
-
-  /**
-   *
-   */
-  static class DelayHandle extends TimerHandle {
-
-    CancellableContinuation<Unit> continuation;
-
-    public DelayHandle(
-        CancellableContinuation<Unit> continuation) {
-      this.continuation = continuation;
-
-      final CoroutineContext ctx = continuation.getContext();
-      if (ctx instanceof HasTimers) {
-        ((HasTimers) ctx).addTimer(this);
-      }
-    }
-
-    void expired() {
-      if (continuation == null) {
-        unlink();
-        continuation = null;
-        return;
-      }
-
-      if (continuation.isCancelled() || continuation.isCompleted()) {
-        unlink();
-        continuation = null;
-        return;
-      }
-
-      try {
-        continuation.resume(Unit.INSTANCE);
-      } catch (Throwable e) {
-        // Ignore.
-      } finally {
-        unlink();
-        continuation = null;
-      }
-    }
-
-    @Override
-    void unlink() {
-      super.unlink();
-
-      final CoroutineContext ctx = continuation.getContext();
-      if (ctx instanceof HasTimers) {
-        ((HasTimers) ctx).removeTimer(this);
-      }
-    }
-
-    @Override
-    void remove() {
-      if (continuation == null) {
-        return;
-      }
-
-      if (continuation.isCancelled() || continuation.isCompleted()) {
-        unlink();
-        continuation = null;
-        return;
-      }
-
-      try {
-        continuation.cancel(null);
-      } catch (Throwable e) {
-        // Ignore.
-      } finally {
-        unlink();
-        continuation = null;
-      }
-    }
-
-    @Override
-    public void dispose() {
-      remove();
-    }
   }
 
   /**

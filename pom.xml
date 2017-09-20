@@ -12,12 +12,12 @@ http://www.w3.org/2001/XMLSchema-instance ">
   <packaging>pom</packaging>
 
   <name>Cloud</name>
-  <description>Move Cloud</description>
+  <description>A Cloud</description>
   <url>http://www.moveplatform.io/</url>
   <inceptionYear>2016</inceptionYear>
 
   <organization>
-    <name>Move Medical, Inc</name>
+    <name>A Medical, Inc</name>
     <url>http://www.moveplatform.io</url>
   </organization>
   <licenses>

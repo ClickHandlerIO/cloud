@@ -2,7 +2,6 @@ package move.action.inventory
 
 import move.action.Internal
 import move.action.InternalAction
-import move.action.Move
 
 //data class LoginRequest(val username: String, val email: String)
 data class LoginRequest(var username: String = "")
@@ -34,7 +33,7 @@ class Login : InternalAction<LoginRequest, LoginReply>() {
 //@Internal
 //class Login2 : InternalAction<LoginRequest, LoginReply>() {
 //   suspend override fun execute(): LoginReply {
-//      val reply = Move.inventory.Login3 ask {
+//      val reply = A.inventory.Login3 ask {
 //         username = ""
 //      }
 //
@@ -50,7 +49,7 @@ class Login : InternalAction<LoginRequest, LoginReply>() {
 @Internal
 class Login3 : InternalAction<LoginRequest, LoginReply>() {
    suspend override fun execute(): LoginReply {
-//      Move.AllocateInventory ask {
+//      A.AllocateInventory ask {
 //
 //      }
 

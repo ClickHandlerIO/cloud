@@ -7,15 +7,10 @@ import kotlinx.coroutines.experimental.CompletableDeferred
 import kotlinx.coroutines.experimental.channels.actor
 import kotlinx.coroutines.experimental.delay
 import org.slf4j.LoggerFactory
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 // Global convenience Variable.
-val Move = App.component.locator()
-
-sealed class ActorMsg
-
-sealed class ActorKil : ActorMsg()
+val A = App.component.locator()
 
 sealed class CounterMsg
 object IncCounter : CounterMsg() // one-way message to increment counter
@@ -70,16 +65,16 @@ object App : MoveApp<AppComponent>() {
 //      counter.send(IncCounter)
 
       val passes = 100
-      val parallelism = threadManager.eventLoops.size
+      val parallelism = MoveKernel.eventLoops.size
       val statsInternval = 1000L
       val invocationsPerPass = 1_000_000
       val actionsPerInvocation = 2
 
-      val dispatcher = threadManager.eventLoops[0].dispatcher
+      val dispatcher = MoveKernel.eventLoops[0].dispatcher
 
-      Move.AllocateInventory ask { id = "" }
+      A.AllocateInventory ask { id = "" }
 
-      Move.AllocateInventory.rxAsk { id = "" }.asSingle()
+      A.AllocateInventory.rxAsk { id = "" }.asSingle()
 
 
 //      async(dispatcher) {
@@ -113,7 +108,7 @@ object App : MoveApp<AppComponent>() {
 //      }.await()
 
       for (p in 0..10) {
-         val future = Move.Allocate rxAsk "Hi"
+         val future = A.Allocate rxAsk "Hi"
          future.invokeOnCompletion {
             println(Thread.currentThread().name)
             println("invokeOnCompletion")
@@ -127,13 +122,13 @@ object App : MoveApp<AppComponent>() {
 
 //      try {
 
-//      val result = Move.Allocate ask "HI"
+//      val result = A.Allocate ask "HI"
 //
 //
 //      val list = mutableListOf<Deferred<String>>()
 //      launch(dispatcher) {
 //         for (i in 1..5) {
-//            list += Move.Allocate rxAsk ""
+//            list += A.Allocate rxAsk ""
 //         }
 //      }
 //
@@ -174,12 +169,12 @@ object App : MoveApp<AppComponent>() {
          val start = System.currentTimeMillis()
          for (t in 0..parallelism - 1) {
             val single = Single.create<Unit> { subscriber ->
-               val eventLoop = threadManager.eventLoops[t]
+               val eventLoop = MoveKernel.eventLoops[t]
                eventLoop.runOnContext {
                   val counter = AtomicInteger(0)
                   try {
                      for (i in 1..invocationsPerPass) {
-                        val call = Move.Allocate.rxAsk("HI")
+                        val call = A.Allocate.rxAsk("HI")
                         call.invokeOnCompletion {
                            if (counter.incrementAndGet() == invocationsPerPass) {
                               subscriber.onSuccess(Unit)
@@ -194,7 +189,7 @@ object App : MoveApp<AppComponent>() {
 //                     try {
 //                        for (i in 1..invocationsPerPass) {
 ////                        AllocateInventory ask ""
-//                           Move.Allocate ask ""
+//                           A.Allocate ask ""
 //                        }
 //                     } catch (e: Throwable) {
 //                        e.printStackTrace()

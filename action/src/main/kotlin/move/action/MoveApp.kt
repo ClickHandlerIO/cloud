@@ -167,9 +167,6 @@ abstract class MoveApp<G : MoveComponent> {
    lateinit var vertx: Vertx
       get
       private set
-   lateinit var threadManager: MoveThreadManager
-      get
-      private set
    lateinit var component: G
       get
       private set
@@ -207,8 +204,8 @@ abstract class MoveApp<G : MoveComponent> {
          // Build Vertx.
          vertx = step5_CreateVertx()
 
-         // Init EventLoop Group.
-         threadManager = MoveThreadManager.Companion.get(vertx)
+         // Init MoveKernel
+         MoveKernel.init()
 
          // Invoke function before the object graph is built.
          step6_BeforeBuildComponent()

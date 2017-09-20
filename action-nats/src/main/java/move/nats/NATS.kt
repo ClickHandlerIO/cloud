@@ -7,7 +7,7 @@ import io.vertx.core.net.NetClientOptions
 import io.vertx.core.net.NetSocket
 import move.NUID
 import move.action.MoveEventLoop
-import move.action.MoveThreadManager
+import move.action.MoveKernel
 import move.common.WireFormat
 import rx.Single
 import java.nio.ByteBuffer
@@ -35,7 +35,6 @@ class NATSCluster(val vertx: Vertx,
    val context = vertx.orCreateContext
    var running = true
 
-   val eventLoopGroup = MoveThreadManager.get(vertx)
    val eventLoopCounter = AtomicInteger(0)
 
    var connections: ArrayList<Connection> = ArrayList(16)
@@ -77,7 +76,7 @@ class NATSCluster(val vertx: Vertx,
       if (eventLoopCounter.get() < 0)
          eventLoopCounter.set(0)
 
-      return eventLoopGroup.eventLoops[num % eventLoopGroup.eventLoops.size]
+      return MoveKernel.eventLoops[num % MoveKernel.eventLoops.size]
    }
 
    fun pub(subject: ByteArray, replyTo: ByteArray = EMPTY_BYTE_ARRAY, buffer: ByteArray) {

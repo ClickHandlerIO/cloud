@@ -14,8 +14,8 @@ import kotlin.coroutines.experimental.Continuation
 import kotlin.coroutines.experimental.ContinuationInterceptor
 import kotlin.coroutines.experimental.CoroutineContext
 
-class ActorProvider<E> {
-
+abstract class ActorProvider<E> {
+   open val daemon = false
 }
 
 class ActorProducer<E, P : ActorProvider<E>> {
@@ -62,62 +62,48 @@ object ActorPacker {
    }
 }
 
-data class TimerMessage(val handle: TimerHandle) : ActorMessage()
+const val TIMER_TYPE_INTERVAL = 0
 
 abstract class ActorAction : AbstractActorAction<ActorMessage>() {
-   open val millis: Long = 5000L
-   private var timerHandle: TimerHandle? = null
+   open val intervalMillis: Long = 5000L
+   open val intervalDelay: Boolean = true
 
    suspend override fun beforeExecute() {
       startUp()
 
-      if (millis > 0) {
-         scheduleTimer()
+      if (intervalMillis > 0) {
+         scheduleNextInterval()
       }
    }
 
-   fun scheduleTimer() {
+   fun scheduleNextInterval() {
       // Schedule timer.
       if (isActive && !isCancelled) {
-         eventLoop.scheduleTimer(this, millis)
+         eventLoop.scheduleTimer(TIMER_TYPE_INTERVAL, this, intervalMillis)
       }
    }
 
    suspend override fun afterExecute() {
-      timerHandle?.remove()
-      timerHandle = null
-
       shutdown()
    }
 
    suspend override fun process(msg: ActorMessage) {
-      // Force the timer event if necessary.
-      // If a queue is bounded then it's possible to
-      // starve the actor of it's timer message.
-      if (timerHandle != null) {
-         wrapTimerRun(TimerMessage(timerHandle!!))
-         timerHandle = null
-      }
-
       when (msg) {
-         is TimerMessage -> wrapTimerRun(msg)
          is ByteBufMessage -> onByteBuf(msg)
          is ActionAskMessage -> onAsk(msg)
          else -> handle(msg)
       }
    }
 
-   /**
-    *
-    */
-   override fun onTimerEvent(handle: TimerHandle) {
-      // Add to queue.
-      try {
-         offer(TimerMessage(handle))
-      } catch (e: Throwable) {
-         timerHandle = handle
-         // Maybe the queue is full
-         scheduleTimer()
+   fun onInterval(handle: TimerEventHandle) {
+      if (handle.type == TIMER_TYPE_INTERVAL) {
+
+      }
+   }
+
+   override fun onTimer(handle: TimerEventHandle) {
+      if (handle.type == TIMER_TYPE_INTERVAL) {
+
       }
    }
 
@@ -139,9 +125,9 @@ abstract class ActorAction : AbstractActorAction<ActorMessage>() {
    /**
     *
     */
-   suspend protected fun wrapTimerRun(msg: TimerMessage) {
+   suspend protected fun wrapInterval() {
       try {
-         onTimer(msg)
+         onInterval()
       } catch (e: Throwable) {
          try {
             onTimerException(e)
@@ -150,7 +136,7 @@ abstract class ActorAction : AbstractActorAction<ActorMessage>() {
       }
 
       // Schedule next timer event.
-      scheduleTimer()
+      scheduleNextInterval()
    }
 
    suspend protected fun onTimerException(e: Throwable) {
@@ -160,22 +146,22 @@ abstract class ActorAction : AbstractActorAction<ActorMessage>() {
    /**
     *
     */
-   suspend abstract fun startUp()
+   suspend open fun startUp() {}
 
    /**
     *
     */
-   suspend abstract fun shutdown()
+   suspend open fun shutdown() {}
 
    /**
     *
     */
-   suspend abstract fun onTimer(msg: TimerMessage)
+   suspend open fun onInterval() {}
 
    /**
     *
     */
-   suspend abstract fun handle(msg: ActorMessage)
+   suspend open fun handle(msg: ActorMessage) {}
 }
 
 abstract class AbstractActorAction<E> :
@@ -256,7 +242,12 @@ abstract class AbstractActorAction<E> :
          _timers = null
    }
 
-   protected open fun onTimerEvent(handle: TimerHandle) {
+   private fun removeAllTimers() {
+      _timers?.apply { forEach { it.remove() }; clear() }
+      _timers = null
+   }
+
+   override fun onTimer(handle: TimerEventHandle) {
    }
 
    /**
@@ -267,7 +258,7 @@ abstract class AbstractActorAction<E> :
                             id: String,
                             timeoutTicks: Long = 0,
                             root: Boolean = false) {
-//      if (MoveThreadManager.currentEventLoop !== eventLoop) {
+//      if (MoveKernel.currentEventLoop !== eventLoop) {
 //         throw RuntimeException("Invoked from outside EventLoop thread.")
 //      }
 
@@ -404,7 +395,7 @@ abstract class AbstractActorAction<E> :
          get() = continuation.context
 
       override fun resume(value: T) {
-         if (MoveThreadManager.currentEventLoop !== eventLoop) {
+         if (MoveKernel.currentEventLoop !== eventLoop) {
             eventLoop.execute {
                continuation.resume(value)
             }
@@ -414,7 +405,7 @@ abstract class AbstractActorAction<E> :
       }
 
       override fun resumeWithException(exception: Throwable) {
-         if (MoveThreadManager.currentEventLoop !== eventLoop) {
+         if (MoveKernel.currentEventLoop !== eventLoop) {
             eventLoop.execute {
                continuation.resumeWithException(exception)
             }
@@ -445,7 +436,7 @@ abstract class AbstractActorAction<E> :
     *
     */
    override fun invokeOnTimeout(time: Long, unit: TimeUnit, block: Runnable): DisposableHandle {
-      if (MoveThreadManager.currentEventLoop === eventLoop) {
+      if (MoveKernel.currentEventLoop === eventLoop) {
          // Run directly.
          block.run()
          // Already disposed.

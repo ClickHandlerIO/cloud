@@ -2,20 +2,27 @@ package move.action
 
 import io.netty.channel.EventLoop
 import io.vertx.core.Context
-import io.vertx.core.Vertx
 import io.vertx.core.impl.ContextImpl
 import io.vertx.core.impl.VertxInternal
 import io.vertx.core.json.JsonObject
+import kotlinx.coroutines.experimental.Unconfined
+import kotlinx.coroutines.experimental.async
+import move.hash.CRC16
 import java.lang.management.ManagementFactory
 import java.util.concurrent.Executors
 import java.util.concurrent.ThreadLocalRandom
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
+val CURRENT_LOOP = ThreadLocal<MoveEventLoop>()
+
 /**
  *
  */
-class MoveThreadManager(private val vertxInternal: VertxInternal) {
+object MoveKernel {
+   inline val currentEventLoop get() = CURRENT_LOOP.get()
+
+   val vertxInternal = VERTX.delegate as VertxInternal
    val eventLoopDefault = vertxInternal.createEventLoopContext(
       null,
       null,
@@ -29,6 +36,8 @@ class MoveThreadManager(private val vertxInternal: VertxInternal) {
       .asSequence()
       .map { MoveEventLoop(eventLoopDefault, vertxInternal, JsonObject(), it as EventLoop) }
       .toList()
+
+   val eventLoopCount = eventLoops.size
 
    // By Netty EventLoop.
    val executorsByEventLoop = eventLoops.map { it.eventLoop to it }.toMap()
@@ -55,6 +64,8 @@ class MoveThreadManager(private val vertxInternal: VertxInternal) {
    val ticks = AtomicLong(0L)
 
    init {
+      eventLoops.forEach { it.init { CURRENT_LOOP.set(it) } }
+
       // Check for timeouts every TICK_MS
       scheduledExecutor.scheduleAtFixedRate(
          this::tick,
@@ -67,6 +78,8 @@ class MoveThreadManager(private val vertxInternal: VertxInternal) {
          scheduledExecutor.shutdownNow()
       }
    }
+
+   fun init() {}
 
    private fun tick() {
       ticks.incrementAndGet()
@@ -83,6 +96,10 @@ class MoveThreadManager(private val vertxInternal: VertxInternal) {
          // Tick
          it.tick()
       }
+   }
+
+   fun forKey(bytes: ByteArray): MoveEventLoop {
+      return eventLoops[CRC16.calc(bytes) % eventLoopCount]
    }
 
    /**
@@ -109,35 +126,53 @@ class MoveThreadManager(private val vertxInternal: VertxInternal) {
     */
    fun nextRandom() = eventLoops[ThreadLocalRandom.current().nextInt(0, eventLoops.size)]
 
-   companion object {
-      val instances = mutableMapOf<Vertx, MoveThreadManager>()
+   fun getOrCreateContext() = CURRENT_LOOP.get() ?: nextRandom()
 
-      val currentEventLoop get() = local.get()
+   fun forEachExecute(action: (MoveEventLoop) -> Unit) {
+      eventLoops.forEach { it.execute { action(it) } }
+   }
 
-      internal val local = ThreadLocal<MoveEventLoop>()
+   fun forEach(action: (MoveEventLoop) -> Unit) {
+      eventLoops.forEach(action)
+   }
 
-      fun setLocal(eventLoop: MoveEventLoop) {
-         local.set(eventLoop)
-      }
-
-      @Synchronized
-      fun get(vertx: Vertx): MoveThreadManager {
-         val i = instances[vertx]
-         if (i != null) {
-            return i
-         }
-
-         val n = MoveThreadManager(vertx as VertxInternal)
-         instances[vertx] = n
-         return n
-      }
-
-      fun get(vertx: io.vertx.rxjava.core.Vertx): MoveThreadManager {
-         return get(vertx.delegate)
-      }
-
-      fun get(vertxInternal: VertxInternal): MoveThreadManager {
-         return get(vertxInternal as Vertx)
+   suspend fun initEventLoops(block: suspend (MoveEventLoop) -> Unit) {
+      eventLoops.forEach {
+         async(Unconfined) {
+            block(it)
+         }.await()
       }
    }
+
+//   companion object {
+//      val instances = mutableMapOf<Vertx, MoveKernel>()
+//
+//      val currentEventLoop get() = local.get()
+//
+//      internal val local = ThreadLocal<MoveEventLoop>()
+//
+//      protected fun setLocal(eventLoop: MoveEventLoop) {
+//         local.set(eventLoop)
+//      }
+//
+//      @Synchronized
+//      fun get(vertx: Vertx): MoveKernel {
+//         val i = instances[vertx]
+//         if (i != null) {
+//            return i
+//         }
+//
+//         val n = MoveKernel(vertx as VertxInternal)
+//         instances[vertx] = n
+//         return n
+//      }
+//
+//      fun get(vertx: io.vertx.rxjava.core.Vertx): MoveKernel {
+//         return get(vertx.delegate)
+//      }
+//
+//      fun get(vertxInternal: VertxInternal): MoveKernel {
+//         return get(vertxInternal as Vertx)
+//      }
+//   }
 }

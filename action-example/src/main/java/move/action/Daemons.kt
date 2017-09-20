@@ -15,10 +15,10 @@ import javax.inject.Singleton
 )
 @Singleton
 class WebServerDaemon : AbstractDaemon() {
-   lateinit var server: RemoteServerImpl
+   lateinit var server: RemotingServerImpl
 
    suspend override fun startUp() {
-      server = RemoteServerImpl()
+      server = RemotingServerImpl()
 
       // Start and wait.
       server.start()
@@ -28,12 +28,8 @@ class WebServerDaemon : AbstractDaemon() {
       server.stop()
    }
 
-   suspend override fun onTimer(msg: TimerMessage) {
-      // Clean WebSockets.
-   }
-
-   inner class RemoteServerImpl
-      : RemoteServer(auth = JWTAuth.create(VERTX.delegate, JsonObject())) {
+   inner class RemotingServerImpl
+      : RemotingServer(auth = JWTAuth.create(VERTX.delegate, JsonObject())) {
 
    }
 }

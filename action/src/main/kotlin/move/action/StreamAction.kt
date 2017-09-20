@@ -2,12 +2,7 @@ package move.action
 
 import com.sun.xml.internal.ws.message.stream.StreamMessage
 import io.vertx.core.buffer.Buffer
-import io.vertx.rxjava.core.Vertx
 import move.NUID
-
-class StreamConnector(val vertx: Vertx) {
-   val eventLoopGroup = MoveThreadManager.get(vertx)
-}
 
 /**
  * Reactive Stream Action core. Streams are bi-directional multiplexed virtual raw TCP
@@ -84,10 +79,10 @@ data class StreamFrame(
    val payload: Buffer
 )
 
-val STREAM_REPLY_STARTED = 1
-val STREAM_REPLY_STOPPED = 2
-val STREAM_REPLY_FAILED = 3
-val STREAM_REPLY_LOST_NODE_CONNECTION = 4
+const val STREAM_REPLY_STARTED = 1
+const val STREAM_REPLY_STOPPED = 2
+const val STREAM_REPLY_FAILED = 3
+const val STREAM_REPLY_LOST_NODE_CONNECTION = 4
 
 /**
  *

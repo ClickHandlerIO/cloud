@@ -49,10 +49,10 @@ import java.util.stream.Stream;
 import javaslang.Tuple2;
 import javaslang.control.Try;
 import javax.sql.DataSource;
-import move.action.JobAction;
 import move.action.ActionTimeoutException;
+import move.action.JobAction;
 import move.action.MoveEventLoop;
-import move.action.MoveThreadManager;
+import move.action.MoveKernel;
 import move.common.UID;
 import move.metrics.Metrics;
 import move.threading.WorkerPool;
@@ -1392,8 +1392,7 @@ public class SqlDatabase extends AbstractIdleService {
   }
 
   public <T> Single<move.sql.SqlResult<T>> rxWrite(SqlCallable<T> task, int timeoutMillis) {
-    final io.vertx.rxjava.core.Context context = vertx.currentContext();
-    final MoveEventLoop eventLoop = MoveThreadManager.Companion.getCurrentEventLoop();
+    final MoveEventLoop eventLoop = MoveKernel.INSTANCE.getOrCreateContext();
 
     final SqlAction action = new SqlAction(eventLoop, timeoutMillis);
 
@@ -1405,8 +1404,6 @@ public class SqlDatabase extends AbstractIdleService {
               final SqlResult<T> value = executeWrite(action, task);
               if (eventLoop != null) {
                 eventLoop.execute(() -> event.complete(value));
-              } else if (context != null) {
-                context.runOnContext(a -> event.complete(value));
               } else {
                 vertx.getOrCreateContext().runOnContext(a -> event.complete(value));
               }
@@ -1427,8 +1424,6 @@ public class SqlDatabase extends AbstractIdleService {
               } finally {
                 if (eventLoop != null) {
                   eventLoop.execute(() -> event.fail(e));
-                } else if (context != null) {
-                  context.runOnContext(a -> event.fail(e));
                 } else {
                   vertx.getOrCreateContext().runOnContext(a -> event.fail(e));
                 }
@@ -1469,8 +1464,7 @@ public class SqlDatabase extends AbstractIdleService {
   }
 
   public <T> Single<T> rxSingle(SqlReadCallable<T> task, int timeoutMillis) {
-    final io.vertx.rxjava.core.Context context = vertx.getOrCreateContext();
-    final MoveEventLoop eventLoop = MoveThreadManager.Companion.getCurrentEventLoop();
+    final MoveEventLoop eventLoop = MoveKernel.INSTANCE.getOrCreateContext();
 
     final SqlAction action = new SqlAction(eventLoop, timeoutMillis);
 
@@ -1481,8 +1475,6 @@ public class SqlDatabase extends AbstractIdleService {
           final T value = executeRead(action, task);
           if (eventLoop != null) {
             eventLoop.execute(() -> event.complete(value));
-          } else if (context != null) {
-            context.runOnContext(a -> event.complete(value));
           } else {
             vertx.getOrCreateContext().runOnContext(a -> event.complete(value));
           }
@@ -1501,7 +1493,11 @@ public class SqlDatabase extends AbstractIdleService {
               readExceptionsCounter.inc();
             }
           } finally {
-            event.fail(e);
+            if (eventLoop != null) {
+              eventLoop.execute(() -> event.fail(e));
+            } else {
+              vertx.getOrCreateContext().runOnContext(a -> event.fail(e));
+            }
           }
         }
       }
@@ -2277,7 +2273,6 @@ public class SqlDatabase extends AbstractIdleService {
         throw new RuntimeException(e);
       }
     }
-
 
     protected void run() throws Exception {
       while (isRunning()) {

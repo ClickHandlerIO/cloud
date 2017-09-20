@@ -30,8 +30,7 @@ val GATEWAY_BROKER
  * Each node has a single queue
  */
 class KernelBroker(val vertx: Vertx) {
-   val eventLoopGroup = MoveThreadManager.get(vertx)
-   val eventLoops = eventLoopGroup.eventLoops
+   val eventLoops = MoveKernel.eventLoops
 }
 
 /**
@@ -284,11 +283,11 @@ object LocalBroker : ActionBroker() {
       provider: InternalActionProvider<A, IN, OUT>,
       timeoutTicks: Long): OUT {
 
-      var eventLoop = MoveThreadManager.currentEventLoop
+      var eventLoop = MoveKernel.currentEventLoop
       val action = provider.actionProvider.get()
 
       if (eventLoop == null) {
-         eventLoop = provider.eventLoopGroup.next()
+         eventLoop = MoveKernel.nextRandom()
          eventLoop.execute {
             action.launch(
                eventLoop,
@@ -317,11 +316,11 @@ object LocalBroker : ActionBroker() {
       timeoutTicks: Long,
       delaySeconds: Int): OUT {
 
-      var eventLoop = MoveThreadManager.currentEventLoop
+      var eventLoop = MoveKernel.currentEventLoop
       val action = provider.actionProvider.get()
 
       if (eventLoop == null) {
-         eventLoop = provider.eventLoopGroup.next()
+         eventLoop = MoveKernel.nextRandom()
          eventLoop.execute {
             action.launch(
                eventLoop,
@@ -351,11 +350,11 @@ object LocalBroker : ActionBroker() {
       delaySeconds: Int,
       root: Boolean): DeferredAction<OUT> {
 
-      var eventLoop = MoveThreadManager.currentEventLoop
+      var eventLoop = MoveKernel.currentEventLoop
       val action = provider.actionProvider.get()
 
       if (eventLoop == null) {
-         eventLoop = provider.eventLoopGroup.next()
+         eventLoop = MoveKernel.nextRandom()
          eventLoop.execute {
             action.launch(
                eventLoop,
@@ -386,10 +385,10 @@ object LocalBroker : ActionBroker() {
       delaySeconds: Int,
       root: Boolean): DeferredAction<OUT> {
 
-      val eventLoop = provider.eventLoopGroup.next()
+      val eventLoop = MoveKernel.nextRandom()
       val action = provider.actionProvider.get()
 
-      if (MoveThreadManager.currentEventLoop !== eventLoop) {
+      if (MoveKernel.currentEventLoop !== eventLoop) {
          eventLoop.execute {
             action.launch(
                eventLoop,
@@ -422,10 +421,10 @@ object LocalBroker : ActionBroker() {
       delaySeconds: Int,
       root: Boolean): DeferredAction<OUT> {
 
-      val eventLoop = provider.eventLoopGroup.next()
+      val eventLoop = MoveKernel.nextRandom()
       val action = provider.actionProvider.get()
 
-      if (MoveThreadManager.currentEventLoop !== eventLoop) {
+      if (MoveKernel.currentEventLoop !== eventLoop) {
          eventLoop.execute {
             action.launch(
                eventLoop,
@@ -455,11 +454,11 @@ object LocalBroker : ActionBroker() {
       provider: WorkerActionProvider<A, IN, OUT>,
       timeoutTicks: Long): OUT {
 
-      var eventLoop = MoveThreadManager.currentEventLoop
+      var eventLoop = MoveKernel.currentEventLoop
       val action = provider.actionProvider.get()
 
       if (eventLoop == null) {
-         eventLoop = provider.eventLoopGroup.next()
+         eventLoop = MoveKernel.nextRandom()
          eventLoop.execute {
             action.launch(
                eventLoop,
@@ -488,11 +487,11 @@ object LocalBroker : ActionBroker() {
       timeoutTicks: Long,
       delaySeconds: Int): OUT {
 
-      var eventLoop = MoveThreadManager.currentEventLoop
+      var eventLoop = MoveKernel.currentEventLoop
       val action = provider.actionProvider.get()
 
       if (eventLoop == null) {
-         eventLoop = provider.eventLoopGroup.next()
+         eventLoop = MoveKernel.nextRandom()
          eventLoop.execute {
             action.launch(
                eventLoop,
@@ -522,11 +521,11 @@ object LocalBroker : ActionBroker() {
       delaySeconds: Int,
       root: Boolean): DeferredAction<OUT> {
 
-      var eventLoop = MoveThreadManager.currentEventLoop
+      var eventLoop = MoveKernel.currentEventLoop
       val action = provider.actionProvider.get()
 
       if (eventLoop == null) {
-         eventLoop = provider.eventLoopGroup.next()
+         eventLoop = MoveKernel.nextRandom()
          eventLoop.execute {
             action.launch(
                eventLoop,
@@ -557,10 +556,10 @@ object LocalBroker : ActionBroker() {
       delaySeconds: Int,
       root: Boolean): DeferredAction<OUT> {
 
-      val eventLoop = provider.eventLoopGroup.next()
+      val eventLoop = MoveKernel.nextRandom()
       val action = provider.actionProvider.get()
 
-      if (MoveThreadManager.currentEventLoop !== eventLoop) {
+      if (MoveKernel.currentEventLoop !== eventLoop) {
          eventLoop.execute {
             action.launch(
                eventLoop,
@@ -593,10 +592,10 @@ object LocalBroker : ActionBroker() {
       delaySeconds: Int,
       root: Boolean): DeferredAction<OUT> {
 
-      val eventLoop = provider.eventLoopGroup.next()
+      val eventLoop = MoveKernel.nextRandom()
       val action = provider.actionProvider.get()
 
-      if (MoveThreadManager.currentEventLoop !== eventLoop) {
+      if (MoveKernel.currentEventLoop !== eventLoop) {
          eventLoop.execute {
             action.launch(
                eventLoop,
@@ -625,11 +624,11 @@ object LocalBroker : ActionBroker() {
                                              provider: HttpActionProvider<A>,
                                              timeoutTicks: Long) {
 
-      var eventLoop = MoveThreadManager.currentEventLoop
+      var eventLoop = MoveKernel.currentEventLoop
       val action = provider.actionProvider.get()
 
       if (eventLoop == null) {
-         eventLoop = provider.eventLoopGroup.next()
+         eventLoop = MoveKernel.nextRandom()
          eventLoop.execute {
             action.launch(
                eventLoop,
@@ -657,11 +656,11 @@ object LocalBroker : ActionBroker() {
                             timeoutTicks: Long,
                             delaySeconds: Int) {
 
-      var eventLoop = MoveThreadManager.currentEventLoop
+      var eventLoop = MoveKernel.currentEventLoop
       val action = provider.actionProvider.get()
 
       if (eventLoop == null) {
-         eventLoop = provider.eventLoopGroup.next()
+         eventLoop = MoveKernel.nextRandom()
          eventLoop.execute {
             action.launch(
                eventLoop,
@@ -690,11 +689,11 @@ object LocalBroker : ActionBroker() {
                       delaySeconds: Int,
                       root: Boolean): DeferredAction<Unit> {
 
-      var eventLoop = MoveThreadManager.currentEventLoop
+      var eventLoop = MoveKernel.currentEventLoop
       val action = provider.actionProvider.get()
 
       if (eventLoop == null) {
-         eventLoop = provider.eventLoopGroup.next()
+         eventLoop = MoveKernel.nextRandom()
          eventLoop.execute {
             action.launch(
                eventLoop,
@@ -725,11 +724,11 @@ object LocalBroker : ActionBroker() {
                        delaySeconds: Int,
                        root: Boolean): DeferredAction<Unit> {
 
-      var eventLoop = MoveThreadManager.currentEventLoop
+      var eventLoop = MoveKernel.currentEventLoop
       val action = provider.actionProvider.get()
 
       if (eventLoop == null) {
-         eventLoop = provider.eventLoopGroup.next()
+         eventLoop = MoveKernel.nextRandom()
          eventLoop.execute {
             action.launch(
                eventLoop,

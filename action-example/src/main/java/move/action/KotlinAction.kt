@@ -76,8 +76,8 @@ class Allocate : InternalAction<String, String>() {
 //      delay(100)
 
 //      delay(1000)
-      var result = Move.MyAction ask "Hi2"
-//      var result2 = Move.MyAction ask "Hi2"
+      var result = A.MyAction ask "Hi2"
+//      var result2 = A.MyAction ask "Hi2"
 //      var result2 = "Direct"
 //
 //      val result3 = async(this) {
@@ -85,11 +85,11 @@ class Allocate : InternalAction<String, String>() {
 //         "Returned"
 //      }
 
-//      var result = Move.MyAction ask "Hi"
-//      result = Move.MyAction ask "Hi2"
+//      var result = A.MyAction ask "Hi"
+//      result = A.MyAction ask "Hi2"
 //      val result = "Hi"
 
-//      val result = tryWhile(Move.MyAction askBlock "Hi") {
+//      val result = tryWhile(A.MyAction askBlock "Hi") {
 //         it is SQLException
 //      }
 
