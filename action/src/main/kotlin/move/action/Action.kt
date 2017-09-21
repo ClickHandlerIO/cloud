@@ -63,45 +63,6 @@ class ActionTimeoutException(val action: IJobAction<*, *>) : CancellationExcepti
    }
 }
 
-class MoveDispatcher(val eventLoop: MEventLoop) : CoroutineDispatcher(), Delay {
-   fun execute(task: () -> Unit) = eventLoop.execute(task)
-
-   override fun dispatch(context: CoroutineContext, block: Runnable) {
-      if (Vertx.currentContext() === eventLoop) {
-         block.run()
-      } else {
-         execute {
-            block.run()
-         }
-      }
-   }
-
-   override fun scheduleResumeAfterDelay(time: Long, unit: TimeUnit, continuation: CancellableContinuation<Unit>) {
-      eventLoop.scheduleDelay(continuation, unit.toMillis(time))
-   }
-
-   override fun invokeOnTimeout(time: Long, unit: TimeUnit, block: Runnable): DisposableHandle {
-      if (Vertx.currentContext() === eventLoop) {
-         // Run directly.
-         block.run()
-         // Already disposed.
-         return EmptyDisposableHandle
-      } else {
-         val handle = MoveEventLoopDisposableHandle(block)
-         // Needs to run on EventLoop.
-         eventLoop.execute { handle.block?.run() }
-         // Return disposable handle.
-         return handle
-      }
-   }
-
-   override fun <T> interceptContinuation(continuation: Continuation<T>): Continuation<T> {
-      return super.interceptContinuation(continuation)
-   }
-
-
-}
-
 object EmptyDisposableHandle : DisposableHandle {
    override fun dispose() {
    }
@@ -133,10 +94,7 @@ abstract class JobAction<IN : Any, OUT : Any> :
    ContinuationInterceptor,
    HasTimers {
 
-   private var hasTimers = false
    private var _timers: ArrayList<TimerHandle>? = null
-   internal val timers
-      get() = _timers!!
 
    // The "root" action is the "Dispatcher".
    // The assigned MEventLoop is used.
@@ -168,7 +126,6 @@ abstract class JobAction<IN : Any, OUT : Any> :
    open val isFallbackEnabled: Boolean
       get() = false
 
-   var metrics: ActionMetrics? = null
    var parent: JobAction<*, *>? = null
       get
       private set
@@ -193,15 +150,14 @@ abstract class JobAction<IN : Any, OUT : Any> :
    var currentContinuation: Continuation<*>? = null
 
 
+   var metrics = false
    var tick: Boolean = true
    // Metrics.
    var begin: Long = 0
-   var beginTick: Long = 0
    var endTick: Long = 0
    var cpu: Long = 0
    var cpuBegin: Long = 0
    var blocking: Long = 0
-   var blockingBegin: Long = 0
    var child: Long = 0
    var childCpu: Long = 0
    var childBlocking: Long = 0
@@ -212,35 +168,48 @@ abstract class JobAction<IN : Any, OUT : Any> :
    var failed = false
 
    internal fun begin() {
-      begin = if (tick) eventLoop.epochTick else System.currentTimeMillis()
-   }
+//      if (!metrics)
+//         return
 
-   internal fun end() = if (tick) eventLoop.epochTick - begin else System.currentTimeMillis() - begin
-
-   internal fun blockingBegin() {
-      blockingBegin = if (tick) eventLoop.epochTick else System.currentTimeMillis()
-   }
-
-   internal fun blockingEnd() {
-      blocking += if (tick)
-         eventLoop.epochTick - blockingBegin
+      begin = if (tick)
+         eventLoop.epochTick
       else
-         System.currentTimeMillis() - blockingBegin
+         System.currentTimeMillis()
+   }
+
+   internal fun end() {
+//      if (!metrics)
+//         return
+
+      val elapsed = if (tick)
+         eventLoop.epochTick - begin
+      else
+         System.currentTimeMillis() - begin
+
+//      provider.durationMs.add(elapsed)
+   }
+
+   @Synchronized internal fun addBlockingTime(time: Long) {
+      blocking += time
    }
 
    override fun addTimer(handle: TimerHandle) {
-      hasTimers = true
+      val _timers = this._timers
       if (_timers == null) {
-         _timers = arrayListOf(handle)
+         this._timers = arrayListOf(handle)
+      } else {
+         _timers.add(handle)
       }
    }
 
    override fun removeTimer(handle: TimerHandle) {
-      if (_timers != null)
-         _timers!! -= handle
-      hasTimers = !timers.isEmpty()
-      if (!hasTimers)
-         _timers = null
+      val _timers = this._timers
+      if (_timers != null) {
+         _timers -= handle
+         if (_timers.isEmpty()) {
+            this._timers = null
+         }
+      }
    }
 
    override fun onTimer(handle: TimerEventHandle) {
@@ -264,7 +233,6 @@ abstract class JobAction<IN : Any, OUT : Any> :
 //         throw RuntimeException("Invoked from outside EventLoop thread.")
 //      }
 
-//      this.metrics = ActionMetrics()
       this.token = token
       this.eventLoop = eventLoop
       this.provider = provider
@@ -479,8 +447,7 @@ abstract class JobAction<IN : Any, OUT : Any> :
       eventLoop.job = this
 
       try {
-         metrics?.begin = System.currentTimeMillis()
-         metrics?.beginTick = eventLoop.epochTick
+         begin()
 
          // Do we have a deadline?
          if (_deadline > 0L)
@@ -528,17 +495,17 @@ abstract class JobAction<IN : Any, OUT : Any> :
             provider.failures.increment()
 
             if (e is CircuitOpenException) {
-               metrics?.shortCircuited = true
+               shortCircuited = true
 
                try {
                   if (isFallbackEnabled && shouldFallback(e, cause!!)) {
                      rep = executeFallback(reason, cause, true, 1)
-                     metrics?.fallbackSucceed = true
+                     fallbackSucceed = true
                      handle?.dispose()
                      handle = null
                      eventLoop.job = this
                   } else {
-                     metrics?.fallbackFailed = true
+                     fallbackFailed = true
                      handle?.dispose()
                      handle = null
                      eventLoop.job = this
@@ -566,11 +533,11 @@ abstract class JobAction<IN : Any, OUT : Any> :
                      if (retryCount <= maxRetries) {
                         try {
                            rep = executeFallback(reason, cause, false, retryCount)
-                           metrics?.fallbackSucceed = true
+                           fallbackSucceed = true
                            break@loop
                         } catch (e2: Throwable) {
                            provider.incrementFailures()
-                           metrics?.fallbackFailed = true
+                           fallbackFailed = true
                            reason = e2
                            cause = Throwables.getRootCause(e2)
                         }
@@ -666,15 +633,20 @@ abstract class JobAction<IN : Any, OUT : Any> :
    protected suspend fun <T> blocking(block: suspend () -> T): T =
       suspendCancellableCoroutine { cont ->
          eventLoop.executeBlocking<T>(Handler {
-            blockingBegin()
+            val begin = System.currentTimeMillis()
             try {
                val result = runBlocking { block() }
-               it.complete(result)
+               addBlockingTime(begin - System.currentTimeMillis())
+               try {
+                  it.complete(result)
+               } catch (e: Throwable) {
+                  // Ignore.
+               }
             } catch (e: Throwable) {
+               addBlockingTime(begin - System.currentTimeMillis())
                eventLoop.execute { it.fail(e) }
             }
          }, Handler {
-            blockingEnd()
             if (it.failed()) {
                eventLoop.execute { cont.resumeWithException(it.cause()) }
             } else {
@@ -689,15 +661,21 @@ abstract class JobAction<IN : Any, OUT : Any> :
    protected suspend fun <T> javaBlocking(block: Supplier<T>): T =
       suspendCancellableCoroutine { cont ->
          eventLoop.executeBlocking<T>(Handler {
-            blockingBegin()
+            val begin = System.currentTimeMillis()
             try {
                val result = runBlocking { block.get() }
-               it.complete(result)
+
+               addBlockingTime(begin - System.currentTimeMillis())
+               try {
+                  it.complete(result)
+               } catch (e: Throwable) {
+                  // Ignore.
+               }
             } catch (e: Throwable) {
+               addBlockingTime(begin - System.currentTimeMillis())
                eventLoop.execute { it.fail(e) }
             }
          }, Handler {
-            blockingEnd()
             if (it.failed()) {
                eventLoop.execute { cont.resumeWithException(it.cause()) }
             } else {
@@ -721,7 +699,8 @@ abstract class JobAction<IN : Any, OUT : Any> :
       suspendCancellableCoroutine { cont ->
          try {
             executor.execute {
-               blockingBegin()
+               val begin = System.currentTimeMillis()
+
                try {
                   val result = runBlocking {
                      try {
@@ -730,12 +709,16 @@ abstract class JobAction<IN : Any, OUT : Any> :
                         throw e
                      }
                   }
-                  blockingEnd()
-                  eventLoop.execute {
-                     cont.resume(result)
+
+                  addBlockingTime(begin - System.currentTimeMillis())
+
+                  try {
+                     eventLoop.execute { cont.resume(result) }
+                  } catch (e: Throwable) {
+                     // Ignore.
                   }
                } catch (e: Throwable) {
-                  blockingEnd()
+                  addBlockingTime(begin - System.currentTimeMillis())
                   eventLoop.execute {
                      cont.resumeWithException(e)
                   }
@@ -753,7 +736,7 @@ abstract class JobAction<IN : Any, OUT : Any> :
       suspendCancellableCoroutine { cont ->
          try {
             executor.execute {
-               blockingBegin()
+               val begin = System.currentTimeMillis()
                try {
                   val result = runBlocking {
                      try {
@@ -762,12 +745,14 @@ abstract class JobAction<IN : Any, OUT : Any> :
                         throw e
                      }
                   }
-                  blockingEnd()
-                  eventLoop.execute {
-                     cont.resume(result)
+                  addBlockingTime(begin - System.currentTimeMillis())
+                  try {
+                     eventLoop.execute { cont.resume(result) }
+                  } catch (e: Throwable) {
+                     // Ignore.
                   }
                } catch (e: Throwable) {
-                  blockingEnd()
+                  addBlockingTime(begin - System.currentTimeMillis())
                   eventLoop.execute {
                      cont.resumeWithException(e)
                   }
@@ -789,15 +774,21 @@ abstract class JobAction<IN : Any, OUT : Any> :
    protected suspend fun <T> blocking(pool: WorkerPool, block: suspend () -> T): T =
       suspendCancellableCoroutine { cont ->
          pool.executeBlocking<T>({
-            blockingBegin()
+            val begin = System.currentTimeMillis()
             try {
                val result = runBlocking { block() }
-               it.complete(result)
+
+               addBlockingTime(begin - System.currentTimeMillis())
+               try {
+                  it.complete(result)
+               } catch (e: Throwable) {
+                  // Ignore.
+               }
             } catch (e: Throwable) {
-               it.fail(e)
+               addBlockingTime(begin - System.currentTimeMillis())
+               eventLoop.execute { it.fail(e) }
             }
          }, {
-            blockingEnd()
             if (it.failed()) {
                eventLoop.execute { cont.resumeWithException(it.cause()) }
             } else {
@@ -812,14 +803,19 @@ abstract class JobAction<IN : Any, OUT : Any> :
    protected suspend fun <T> javaBlocking(pool: WorkerPool, block: Supplier<T>): T =
       suspendCancellableCoroutine { cont ->
          pool.executeBlocking<T>({
-            blockingBegin()
+            val begin = System.currentTimeMillis()
             try {
                val result = runBlocking { block.get() }
-               blockingEnd()
-               it.complete(result)
+
+               addBlockingTime(begin - System.currentTimeMillis())
+               try {
+                  it.complete(result)
+               } catch (e: Throwable) {
+                  // Ignore.
+               }
             } catch (e: Throwable) {
-               blockingEnd()
-               it.fail(e)
+               addBlockingTime(begin - System.currentTimeMillis())
+               eventLoop.execute { it.fail(e) }
             }
          }, {
             if (it.failed()) {
@@ -849,6 +845,10 @@ abstract class JobAction<IN : Any, OUT : Any> :
       }
 
       throw TryWhileException()
+   }
+
+   suspend fun sleep(millis: Long) {
+      delay(millis, TimeUnit.MILLISECONDS)
    }
 
    /**
@@ -986,12 +986,7 @@ abstract class JobAction<IN : Any, OUT : Any> :
          handle = null
       }
 
-      if (metrics != null) {
-         // Capture end tick.
-         val end = metrics?.end() ?: 0
-         if (metrics?.tick == false)
-            provider.durationMs.add(end)
-      }
+      end()
 
       if (state is CompletedExceptionally) {
          if (state.exception is ActionTimeoutException || state.cause is ActionTimeoutException) {

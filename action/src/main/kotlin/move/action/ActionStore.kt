@@ -13,75 +13,89 @@ class ActionStore
 @Inject
 constructor(val registry: ActionRegistry) {
 
-   val providers = registry.providers
-   val producers = registry.producers
-   val providersMap by lazy { registry.providers.map { it.actionClass to it }.toMap() }
-   val providersNameMap by lazy { registry.providers.map { it.actionClass.canonicalName to it }.toMap() }
-   val producersMap by lazy { registry.producers.map { it.provider.actionClass to it }.toMap() }
+   val actionProviders = registry.actionProviders
+   val actionProducers = registry.actionProducers
+   val providersMap by lazy { registry.actionProviders.map { it.actionClass to it }.toMap() }
+   val providersNameMap by lazy { registry.actionProviders.map { it.actionClass.canonicalName to it }.toMap() }
+   val producersMap by lazy { registry.actionProducers.map { it.provider.actionClass to it }.toMap() }
 
    val internal by lazy {
-      producers
+      actionProducers
          .filter { it is InternalActionProducer }
          .map { it as InternalActionProducer<*, *, *, *> }
    }
 
    val worker by lazy {
-      producers
+      actionProducers
          .filter { it is WorkerActionProducer }
          .map { it as WorkerActionProducer<*, *, *, *> }
    }
 
    val http by lazy {
-      producers
+      actionProducers
          .filter { it is HttpActionProducer }
          .map { it as HttpActionProducer<*, *> }
    }
 
+   val actors by lazy {
+      registry.actorProducers
+         .filter { it is ActorProducer<*, *> && it !is DaemonProducer<*, *> }
+         .map { it as ActorProducer<*, *> }
+   }
+
    val daemons by lazy {
-      producers
-         .filter { it is HttpActionProducer }
-         .map { it as HttpActionProducer<*, *> }
+      registry.actorProducers
+         .filter { it is DaemonProducer<*, *> }
+         .map { it as DaemonProducer<*, *> }
+         .filter {
+            when (it.provider.role) {
+               NodeRole.REMOTE -> ROLE_REMOTE
+               NodeRole.WORKER -> ROLE_WORKER
+               else -> true
+            }
+         }
+         .sortedBy { it.provider.sort }
    }
 
    val workersByClass by lazy {
       worker
-         .filter { !it.provider.annotation?.path.isNullOrBlank() }
+         .filter { !it.provider.annotation.path.isNullOrBlank() }
          .map { it.provider.actionClass to it }
          .toMap()
    }
 
    val publicWorkers by lazy {
       worker
-         .filter { !it.provider.annotation?.path.isNullOrBlank() }
-         .filter { it.provider.annotation?.visibility == ActionVisibility.PUBLIC }
+         .filter { !it.provider.annotation.path.isNullOrBlank() }
+         .filter { it.provider.annotation.visibility == ActionVisibility.PUBLIC }
    }
 
    val publicWorkersByClass by lazy {
       worker
-         .filter { !it.provider.annotation?.path.isNullOrBlank() }
-         .filter { it.provider.annotation?.visibility == ActionVisibility.PUBLIC }
+         .filter { !it.provider.annotation.path.isNullOrBlank() }
+         .filter { it.provider.annotation.visibility == ActionVisibility.PUBLIC }
          .map { it.provider.actionClass to it }
          .toMap()
    }
 
    val workersByRequestClass by lazy {
       worker
-         .filter { !it.provider.annotation?.path.isNullOrBlank() }
+         .filter { !it.provider.annotation.path.isNullOrBlank() }
          .map { it.provider.requestClass to it }
          .toMap()
    }
 
    val workersByReplyClass by lazy {
       worker
-         .filter { !it.provider.annotation?.path.isNullOrBlank() }
+         .filter { !it.provider.annotation.path.isNullOrBlank() }
          .map { it.provider.requestClass to it }
          .toMap()
    }
 
    val workersByPath by lazy {
       worker
-         .filter { !it.provider.annotation?.path.isNullOrBlank() }
-         .map { it.provider.annotation?.path to it }
+         .filter { !it.provider.annotation.path.isNullOrBlank() }
+         .map { it.provider.annotation.path to it }
          .toMap()
    }
 
@@ -93,8 +107,8 @@ constructor(val registry: ActionRegistry) {
 
    val httpByPath by lazy {
       http
-         .filter { !it.provider.annotation?.path.isNullOrBlank() }
-         .map { it.provider.annotation?.path to it }
+         .filter { !it.provider.annotation.path.isNullOrBlank() }
+         .map { it.provider.annotation.path to it }
          .toMap()
    }
 }

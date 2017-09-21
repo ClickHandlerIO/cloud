@@ -161,9 +161,9 @@ public class VertxImpl implements VertxInternal, MetricsProvider {
     checker = new BlockedThreadChecker(options.getBlockedThreadCheckInterval(),
         options.getWarningExceptionTime());
 
-    eventLoopThreadFactory = new VertxThreadFactory("move-eventloop-thread-", checker, false,
+    eventLoopThreadFactory = new VertxThreadFactory("eventloop-", checker, false,
         options.getMaxEventLoopExecuteTime());
-    ThreadFactory acceptorEventLoopThreadFactory = new VertxThreadFactory("move-acceptor-thread-",
+    ThreadFactory acceptorEventLoopThreadFactory = new VertxThreadFactory("acceptor-",
         checker, false, options.getMaxEventLoopExecuteTime());
 
     if (MoveAppKt.getNATIVE_TRANSPORT() && Epoll.isAvailable()) {
@@ -213,14 +213,14 @@ public class VertxImpl implements VertxInternal, MetricsProvider {
       case DEV:
         workerExec = new ThreadPoolExecutor(0, options.getWorkerPoolSize(), 5L, TimeUnit.SECONDS,
             new LinkedBlockingQueue<>(),
-            new VertxThreadFactory("move-worker-thread-", checker, true,
+            new VertxThreadFactory("worker-", checker, true,
                 options.getMaxWorkerExecuteTime())
         );
 
         internalBlockingExec = new ThreadPoolExecutor(0, options.getWorkerPoolSize(), 5L,
             TimeUnit.SECONDS,
             new LinkedBlockingQueue<>(),
-            new VertxThreadFactory("move-internal-blocking-", checker, true,
+            new VertxThreadFactory("internal-worker-", checker, true,
                 options.getMaxWorkerExecuteTime())
         );
         break;
@@ -228,19 +228,19 @@ public class VertxImpl implements VertxInternal, MetricsProvider {
       case PROD:
         // Create a fixed sized thread pool.
         workerExec = Executors.newFixedThreadPool(options.getWorkerPoolSize(),
-            new VertxThreadFactory("move-worker-thread-", checker, true,
+            new VertxThreadFactory("worker-", checker, true,
                 options.getMaxWorkerExecuteTime()));
         internalBlockingExec = Executors
             .newFixedThreadPool(options.getInternalBlockingPoolSize(),
-                new VertxThreadFactory("move-internal-blocking-", checker, true,
+                new VertxThreadFactory("internal-worker-", checker, true,
                     options.getMaxWorkerExecuteTime()));
         break;
     }
     PoolMetrics workerPoolMetrics = isMetricsEnabled() ? metrics
-        .createMetrics(workerExec, "worker", "move-worker-thread", options.getWorkerPoolSize())
+        .createMetrics(workerExec, "worker", "worker", options.getWorkerPoolSize())
         : null;
     PoolMetrics internalBlockingPoolMetrics = isMetricsEnabled() ? metrics
-        .createMetrics(internalBlockingExec, "worker", "move-internal-blocking",
+        .createMetrics(internalBlockingExec, "worker", "internal-worker",
             options.getInternalBlockingPoolSize()) : null;
 
     internalBlockingPool = new WorkerPool(internalBlockingExec, internalBlockingPoolMetrics);

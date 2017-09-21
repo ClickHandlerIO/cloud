@@ -123,6 +123,13 @@ abstract class MoveApp<G : MoveComponent> {
       .setRequired(false)
       .setFlag(true)
 
+   open val OPTION_DISABLE_NATIVE_TRANSPORT = Option()
+      .setLongName("!native")
+      .setShortName("!n")
+      .setDescription("Disable Native transport 'epoll' or 'kqueue' if available")
+      .setRequired(false)
+      .setFlag(true)
+
    open val OPTION_LIST_WORKERS = Option()
       .setLongName("list")
       .setShortName("l")
@@ -157,6 +164,10 @@ abstract class MoveApp<G : MoveComponent> {
       get
       private set
 
+   var transportName: String = "NIO"
+      get
+      private set
+
 
    lateinit var cli: CLI
       get
@@ -175,19 +186,27 @@ abstract class MoveApp<G : MoveComponent> {
       @Suppress("UNCHECKED_CAST")
       _MOVE = this as MoveApp<MoveComponent>
 
+      log.info("Begin Startup Sequence")
       runBlocking {
+         log.info("Received Args")
          val args = step1_ReceiveArgs(args)
 
+         log.info("Prepare Args")
          step2_PrepareArgs()
 
+         log.info("Build CLI")
          // Create CommandLine
          cli = step3_BuildCLI()
 
+         log.info("Parse CLI")
          // Parse CLI.
          line = cli.parse(args)
 
          // Exit if CLI is invalid
          if (!line.isValid || line.isAskingForHelp) {
+            if (!line.isValid)
+               log.error("CLI is Invalid")
+
             onInvalidCLI(line)
 
             val builder = StringBuilder()
@@ -198,21 +217,28 @@ abstract class MoveApp<G : MoveComponent> {
             return@runBlocking
          }
 
+         log.info("Parsed CLI Successfully")
          // After CLI
          step4_AfterCLI(line)
 
+         log.info("Creating Vert.x")
          // Build Vertx.
          vertx = step5_CreateVertx()
 
+         log.info("Initializing Kernel")
          // Init MKernel
          MKernel.init()
+         log.info("CPUs: ${Runtime.getRuntime().availableProcessors()}")
+         log.info("EventLoops: ${MKernel.eventLoopCount}")
 
+         log.info("Building App Component")
          // Invoke function before the object graph is built.
          step6_BeforeBuildComponent()
 
          // Build Dagger component.
          component = step7_BuildComponent()
 
+         log.info("Initialize Actions")
          // Init Actions.
          component.actions()
 
@@ -220,18 +246,16 @@ abstract class MoveApp<G : MoveComponent> {
          processInternalOptions(line)
 
          if (line.isOptionAssigned(OPTION_LIST_WORKERS)) {
-            component.actions().actions.producers
+            component.actions().actions.actionProducers
                .forEach { log.info(it.provider.actionClass.canonicalName) }
 
             System.exit(0)
             return@runBlocking
          }
 
+         log.info("Starting Daemons for role $role")
          // Start Daemons.
          step8_StartDeamons()
-
-         // onStarted()
-         onStarted()
 
          // Add shutdown hook.
          Runtime.getRuntime().addShutdownHook(Thread {
@@ -239,6 +263,11 @@ abstract class MoveApp<G : MoveComponent> {
                shutdown()
             }
          })
+
+         log.info("Finalizing Startup")
+         // onStarted()
+         onStarted()
+         log.info("Started :)")
       }
    }
 
@@ -293,17 +322,26 @@ abstract class MoveApp<G : MoveComponent> {
          val configFileContents = Files.readAllBytes(configFile.toPath())
 
          try {
-            return Wire.parseYAML(
+            val r = Wire.parseYAML(
                configClass,
                configFileContents
             )
+
+            log.info("Parsed config file using YAML parser")
+
+            return r
          } catch (e: Throwable) {
-            return Wire.parse(
+            val r = Wire.parse(
                configClass,
                configFileContents
             )
+
+            log.info("Parsed config file using JSON parser")
+
+            return r
          }
       } else {
+         log.info("Config file not specified. Using default.")
          return defaultValue()
       }
    }
@@ -349,9 +387,35 @@ abstract class MoveApp<G : MoveComponent> {
       else
          !cli.isOptionAssigned(OPTION_WORKER)
 
+      log.info("Mode: $mode")
+      log.info("Role: $role")
+      log.info("isWorker: $worker")
+      log.info("isRemote: $remote")
+
       if (cli.isOptionAssigned(OPTION_NODE_ID)) {
          nodeId = cli.getRawValueForOption(OPTION_NODE_ID)
+         log.info("Node UID: $nodeId")
+      } else {
+         log.info("Node UID not set. New ID is $nodeId")
       }
+
+      if (cli.isOptionAssigned(OPTION_NATIVE_TRANSPORT)) {
+         nativeTransport = true
+      }
+
+      if (nativeTransport) {
+         log.info("Native Transport is enabled")
+      }
+
+      if (NATIVE_TRANSPORT && Epoll.isAvailable()) {
+         transportName = "epoll (Linux)"
+      } else if (NATIVE_TRANSPORT && KQueue.isAvailable()) {
+         transportName = "kqueue (BSD)"
+      } else {
+         transportName = "NIO (JDK)"
+      }
+
+      log.info("Transport: $transportName")
    }
 
    suspend open fun configureVertx(): VertxOptions {
@@ -411,7 +475,19 @@ abstract class MoveApp<G : MoveComponent> {
          // can be started.
          // Daemons use the Actor model and can be communicated
          // with by passing messages.
+         val start = System.currentTimeMillis()
+         log.info("Starting [${it.actorClass.canonicalName}]")
+         try {
+            it.start()
+         } catch (e: Throwable) {
+            onDaemonFailed(it, e)
+         }
+         log.info("Started [${it.actorClass.canonicalName}] in ${System.currentTimeMillis() - start}ms")
       }
+   }
+
+   suspend open fun onDaemonFailed(producer: DaemonProducer<*, *>, e: Throwable) {
+      log.error("Failed to start ${producer.actorClass.canonicalName}", e)
    }
 
    suspend open fun onStarted() {
@@ -423,7 +499,9 @@ abstract class MoveApp<G : MoveComponent> {
    }
 
    suspend open fun stopDaemons() {
+      Actions.daemons.forEach {
 
+      }
    }
 }
 

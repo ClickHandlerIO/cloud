@@ -14,7 +14,12 @@ import javax.inject.Provider
  * Action Producers are in charge of dispatching an action request through
  * an Action Broker.
  */
-abstract class ActionProducer<A : Action<IN, OUT>, IN : Any, OUT : Any, P : ActionProvider<A, IN, OUT>> {
+abstract class ActionProducer
+<A : Action<IN, OUT>,
+   IN : Any,
+   OUT : Any,
+   P : ActionProvider<A, IN, OUT>> {
+
    private val entry: ProducerEntry<A, IN, OUT, P>
 
    lateinit var provider: P
@@ -38,6 +43,9 @@ abstract class ActionProducer<A : Action<IN, OUT>, IN : Any, OUT : Any, P : Acti
       this.provider = provider
    }
 
+   /**
+    *
+    */
    private class ProducerEntry
    <A : Action<IN, OUT>,
       IN : Any,
@@ -57,16 +65,21 @@ abstract class ActionProducer<A : Action<IN, OUT>, IN : Any, OUT : Any, P : Acti
    }
 
    companion object {
-      private val registry: MutableMap<Class<*>, ProducerEntry<*, *, *, *>> = mutableMapOf()
+      private val registry = mutableMapOf<Class<*>, ProducerEntry<*, *, *, *>>()
 
+      /**
+       *
+       */
       @Synchronized
       private fun
          <PRODUCER : ActionProducer<A, IN, OUT, P>,
             A : Action<IN, OUT>,
             IN : Any,
             OUT : Any,
-            P : ActionProvider<A, IN, OUT>> register(actionClass: Class<A>,
-                                                     producer: PRODUCER): ProducerEntry<A, IN, OUT, P> {
+            P : ActionProvider<A, IN, OUT>> register(
+         actionClass: Class<A>,
+         producer: PRODUCER): ProducerEntry<A, IN, OUT, P> {
+
          if (registry.containsKey(actionClass)) {
             @Suppress("UNCHECKED_CAST")
             val entry = registry[actionClass] as ProducerEntry<A, IN, OUT, P>
@@ -88,7 +101,10 @@ abstract class ActionProducer<A : Action<IN, OUT>, IN : Any, OUT : Any, P : Acti
  *
  */
 abstract class InternalActionProducer
-<A : JobAction<IN, OUT>, IN : Any, OUT : Any, P : InternalActionProvider<A, IN, OUT>>
+<A : JobAction<IN, OUT>,
+   IN : Any,
+   OUT : Any,
+   P : InternalActionProvider<A, IN, OUT>>
    : ActionProducer<A, IN, OUT, P>() {
 
    /**
@@ -325,6 +341,49 @@ abstract class WorkerActionProducer
       )
    }
 
+   fun rxAsk(request: IN,
+             timeout: Long = 0,
+             unit: TimeUnit = TimeUnit.MILLISECONDS): DeferredAction<OUT> {
+
+      return provider.broker.rxAsk(
+         request = request,
+         provider = provider,
+         timeoutTicks = when (timeout) {
+            -1L -> -1L
+            0L -> provider.timeoutTicks
+            else -> unit.toMillis(timeout)
+         }
+      )
+   }
+
+   fun askMessage(request: IN,
+                  timeout: Long = 0,
+                  unit: TimeUnit = TimeUnit.MILLISECONDS) =
+      AskMessage(
+         request,
+         ASK_ASYNC,
+         when (timeout) {
+            -1L -> -1L
+            0L -> provider.timeoutTicks
+            else -> unit.toMillis(timeout)
+         },
+         this
+      )
+
+   fun askFifoMessage(request: IN,
+                      timeout: Long = 0,
+                      unit: TimeUnit = TimeUnit.MILLISECONDS) =
+      AskMessage(
+         request,
+         ASK_FIFO,
+         when (timeout) {
+            -1L -> -1L
+            0L -> provider.timeoutTicks
+            else -> unit.toMillis(timeout)
+         },
+         this
+      )
+
    @Deprecated("", ReplaceWith("rxAsk"))
    open fun single(request: IN): Single<OUT> {
       return rxAsk(request).asSingle()
@@ -389,6 +448,18 @@ abstract class WorkerActionProducer
          request = request,
          provider = provider,
          token = NoToken,
+         timeoutTicks = provider.timeoutTicks
+      )
+   }
+
+   open fun launchFromJson(message: ByteArray,
+                           token: ActionToken? = NoToken): DeferredAction<OUT> {
+      val request = Wire.parse(provider.requestClass, message)
+
+      return provider.broker.launch(
+         request = request,
+         provider = provider,
+         token = token ?: NoToken,
          timeoutTicks = provider.timeoutTicks
       )
    }

@@ -1,8 +1,7 @@
 package move.hash;
 
 import io.netty.buffer.ByteBuf;
-import java.util.HashMap;
-import kotlin.text.Charsets;
+import move.NUIDString;
 import move.NUID;
 import move.action.LongSkipListMap;
 import net.openhft.smoothie.SmoothieMap;
@@ -57,6 +56,18 @@ public class CRC16 {
       crc = (crc >>> 8) ^ TABLE[(crc ^ bytes[i]) & 0xff];
     }
     return crc;
+  }
+
+  public static int calc(String value) {
+    int crc = 0x0000;
+    for (int i = 0; i < value.length(); i++) {
+      crc = (crc >>> 8) ^ TABLE[(crc ^ value.charAt(i)) & 0xff];
+    }
+    return crc;
+  }
+
+  public static int calc(NUIDString value) {
+    return calc(value.value);
   }
 
   public static int calc(ByteBuf buf, int length) {

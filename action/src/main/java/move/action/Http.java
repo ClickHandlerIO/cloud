@@ -16,12 +16,11 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
 public @interface Http {
-  int DEFAULT_TIMEOUT = 15_000;
+
+  int DEFAULT_TIMEOUT = 30_000;
 
   /**
    * Path expression.
-   *
-   * @return
    */
   String path() default "";
 
@@ -60,7 +59,7 @@ public @interface Http {
    */
   ActionVisibility visibility() default ActionVisibility.PUBLIC;
 
-  public enum Method {
+  enum Method {
     ALL,
     OPTIONS,
     GET,

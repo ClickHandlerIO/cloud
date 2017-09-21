@@ -62,7 +62,11 @@ import move.action.ActionLocator;
 import move.action.ActionProducer;
 import move.action.ActionProvider;
 import move.action.Actor;
+import move.action.ActorProducer;
+import move.action.ActorProvider;
 import move.action.Daemon;
+import move.action.DaemonProducer;
+import move.action.DaemonProvider;
 import move.action.Http;
 import move.action.HttpActionProducer;
 import move.action.HttpActionProvider;
@@ -104,11 +108,20 @@ public class ActionProcessor extends AbstractProcessor {
       WildcardTypeName.subtypeOf(TypeName.OBJECT),
       WildcardTypeName.subtypeOf(TypeName.OBJECT)
   );
+  static final ParameterizedTypeName ACTOR_PROVIDER_NAME = ParameterizedTypeName.get(
+      ClassName.bestGuess("move.action.ActorProvider"),
+      WildcardTypeName.subtypeOf(TypeName.OBJECT)
+  );
+  static final ParameterizedTypeName ACTOR_PRODUCER_NAME = ParameterizedTypeName.get(
+      ClassName.bestGuess("move.action.ActorProducer"),
+      WildcardTypeName.subtypeOf(TypeName.OBJECT),
+      WildcardTypeName.subtypeOf(TypeName.OBJECT)
+  );
   static ClassName VERTX_CLASSNAME = ClassName.bestGuess(
       "io.vertx.rxjava.core.Vertx"
   );
 
-  final TreeMap<String, ActionHolder> actionMap = new TreeMap<>();
+  final TreeMap<String, Holder> actionMap = new TreeMap<>();
   final ActionPackage rootPackage = new ActionPackage("Action", "");
   Types typeUtils;
   Elements elementUtils;
@@ -206,6 +219,42 @@ public class ActionProcessor extends AbstractProcessor {
             .getAnnotation(Daemon.class);
 
         final TypeElement element = elementUtils.getTypeElement(annotatedElement.toString());
+
+        int actionAnnotationCount = 0;
+        boolean isAction = false;
+        boolean isActor = false;
+
+        if (internal != null) {
+          isAction = true;
+          actionAnnotationCount++;
+        }
+        if (worker != null) {
+          isAction = true;
+          actionAnnotationCount++;
+        }
+        if (http != null) {
+          isAction = true;
+          actionAnnotationCount++;
+        }
+        if (actor != null) {
+          isActor = false;
+          actionAnnotationCount++;
+        }
+        if (daemon != null) {
+          isActor = true;
+          actionAnnotationCount++;
+        }
+
+        if (actionAnnotationCount > 1) {
+          messager.printMessage(
+              Diagnostic.Kind.ERROR,
+              element.getQualifiedName() +
+                  "  has multiple Action annotations. Only one of the following may be used... " +
+                  "@Worker or @Internal or @Actor or @Daemon"
+          );
+          continue;
+        }
+
 //        final PackageElement packageElement = elementUtils.getPackageOf(element);
 
 //        messager.printMessage(Kind.WARNING, element.getQualifiedName());
@@ -234,67 +283,93 @@ public class ActionProcessor extends AbstractProcessor {
 //          continue;
 //        }
 
-        ActionHolder holder = actionMap.get(element.getQualifiedName().toString());
+        final String qualifiedName = element.getQualifiedName().toString();
 
-        if (holder == null) {
-          final TypeParameterResolver typeParamResolver = resolve(element);
+        if (isAction) {
+          Object holderObj = actionMap.get(qualifiedName);
 
-          DeclaredTypeVar requestType = null;
-          try {
-            requestType = typeParamResolver.resolve(IJobAction.class, 0);
-          } catch (Throwable e) {
-            messager.printMessage(Diagnostic.Kind.ERROR, e.getMessage());
+          if (holderObj instanceof ActorHolder) {
+            messager.printMessage(
+                Diagnostic.Kind.ERROR,
+                qualifiedName +
+                    "  has multiple Action/Actor annotations. Only one of the following may be used... "
+                    +
+                    "@Worker or @Internal or @Http or @Actor or @Daemon"
+            );
+            continue;
           }
 
-          DeclaredTypeVar responseType = null;
-          try {
-            responseType = typeParamResolver.resolve(IJobAction.class, 1);
-          } catch (Throwable e) {
-            messager.printMessage(Diagnostic.Kind.ERROR, e.getMessage());
+          ActionHolder holder = holderObj != null ? (ActionHolder) holderObj : null;
+
+          if (holder == null) {
+            final TypeParameterResolver typeParamResolver = resolve(element);
+
+            DeclaredTypeVar requestType = null;
+            try {
+              requestType = typeParamResolver.resolve(IJobAction.class, 0);
+            } catch (Throwable e) {
+              messager.printMessage(Diagnostic.Kind.ERROR, e.getMessage());
+            }
+
+            DeclaredTypeVar responseType = null;
+            try {
+              responseType = typeParamResolver.resolve(IJobAction.class, 1);
+            } catch (Throwable e) {
+              messager.printMessage(Diagnostic.Kind.ERROR, e.getMessage());
+            }
+
+            holder = new ActionHolder(element, requestType, responseType, internal, worker, http);
           }
 
-          holder = new ActionHolder(element, requestType, responseType, internal, worker, http);
-        }
+          // Make sure it's concrete.
+          if (element.getModifiers().contains(Modifier.ABSTRACT)
+              || (element.getTypeParameters() != null && !element.getTypeParameters().isEmpty())) {
+            messager.printMessage(
+                Diagnostic.Kind.ERROR,
+                "@Remote was placed on a non-concrete class " +
+                    element.getQualifiedName() +
+                    " It cannot be abstract or have TypeParameters."
+            );
+          }
 
-        // Ensure only 1 action annotation was used.
-        int actionAnnotationCount = 0;
+          actionMap.put(element.getQualifiedName().toString(), holder);
+        } else if (isActor) {
+          Object holderObj = actionMap.get(qualifiedName);
 
-        if (holder.internal != null) {
-          actionAnnotationCount++;
-        }
-        if (holder.worker != null) {
-          actionAnnotationCount++;
-        }
-        if (holder.http != null) {
-          actionAnnotationCount++;
-        }
-        if (actionAnnotationCount > 1) {
-          messager.printMessage(
-              Diagnostic.Kind.ERROR,
-              element.getQualifiedName() +
-                  "  has multiple Action annotations. Only one of the following may be used... " +
-                  "@Worker or @Internal or @Actor or @Daemon"
-          );
-          continue;
-        }
+          if (holderObj instanceof ActionHolder) {
+            messager.printMessage(
+                Diagnostic.Kind.ERROR,
+                qualifiedName +
+                    "  has multiple Action/Actor annotations. Only one of the following may be used... "
+                    +
+                    "@Worker or @Internal or @Http or @Actor or @Daemon"
+            );
+            continue;
+          }
 
-        // Make sure it's concrete.
-        if (element.getModifiers().contains(Modifier.ABSTRACT)
-            || (element.getTypeParameters() != null && !element.getTypeParameters().isEmpty())) {
-          messager.printMessage(
-              Diagnostic.Kind.ERROR,
-              "@Remote was placed on a non-concrete class " +
-                  element.getQualifiedName() +
-                  " It cannot be abstract or have TypeParameters."
-          );
-        }
+          ActorHolder holder = holderObj != null ? (ActorHolder) holderObj : null;
 
-        actionMap.put(element.getQualifiedName().toString(), holder);
+          if (holder == null) {
+            holder = new ActorHolder(element, actor, daemon);
+          }
+
+          // Make sure it's concrete.
+          if (element.getModifiers().contains(Modifier.ABSTRACT)) {
+            messager.printMessage(
+                Diagnostic.Kind.ERROR,
+                "@Actor or @Deamon was placed on a non-concrete class " +
+                    qualifiedName +
+                    " It cannot be abstract."
+            );
+          }
+
+          actionMap.put(element.getQualifiedName().toString(), holder);
+        }
       }
 
       // Build Packages.
-      for (ActionHolder actionHolder : actionMap.values()) {
-        String packageName = actionHolder.packageName;
+      for (Holder holder : actionMap.values()) {
+        String packageName = holder.getPackageName();
 
         // Split package parts down.
         final String[] parts = packageName.split("[.]");
@@ -302,7 +377,11 @@ public class ActionProcessor extends AbstractProcessor {
 
         // Is it a Root Action?
         if (parts.length == 1 && firstName.isEmpty()) {
-          rootPackage.actions.put(actionHolder.name, actionHolder);
+          if (holder instanceof ActionHolder) {
+            rootPackage.actions.put(holder.getName(), (ActionHolder) holder);
+          } else if (holder instanceof ActorHolder) {
+            rootPackage.actors.put(holder.getName(), (ActorHolder) holder);
+          }
         } else {
           // Let's find it's Package and construct the tree as needed during the process.
           ActionPackage parent = rootPackage;
@@ -319,7 +398,11 @@ public class ActionProcessor extends AbstractProcessor {
           }
 
           // Add Descriptor.
-          parent.actions.put(actionHolder.name, actionHolder);
+          if (holder instanceof ActionHolder) {
+            parent.actions.put(holder.getName(), (ActionHolder) holder);
+          } else if (holder instanceof ActorHolder) {
+            parent.actors.put(holder.getName(), (ActorHolder) holder);
+          }
         }
       }
 
@@ -348,21 +431,136 @@ public class ActionProcessor extends AbstractProcessor {
     return resolver;
   }
 
-  public static class ActorHolder {
+  interface Holder {
+
+    String getName();
+
+    String getPackageName();
+  }
+
+  public static class ActorHolder implements Holder {
 
     final Actor actor;
     final Daemon daemon;
+    final ClassName className;
+    final TypeElement type;
+    final TypeName typeName;
+    final ClassName providerClassName;
+    final ParameterizedTypeName providerTypeName;
+    final String name;
+    final String simpleName;
+    final String fieldName;
+    final String packageName;
+    final String moduleName;
+    final String generatedProviderName;
+    final ClassName generatedProviderClassName;
+    final boolean hasParameterlessCtor;
+    final boolean hasInjectCtor;
+    final boolean hasFieldsInject;
+    final ClassName producerClassName;
+    final ParameterizedTypeName producerTypeName;
+    final String generatedProducerName;
+    final ClassName generatedProducerClassName;
+    boolean generated;
 
-    public ActorHolder(Actor actor, Daemon daemon) {
+    public ActorHolder(
+        TypeElement type,
+        Actor actor,
+        Daemon daemon) {
+      this.type = type;
       this.actor = actor;
       this.daemon = daemon;
+      this.className = ClassName.get(type);
+      this.name = type.getQualifiedName().toString();
+      this.simpleName = type.getSimpleName().toString();
+      final String f = type.getSimpleName().toString();
+      this.fieldName = Character.toLowerCase(f.charAt(0)) + f.substring(1);
+      this.moduleName = simpleName + MODULE_SUFFIX;
+      this.generatedProviderName = simpleName + PROVIDER_SUFFIX;
+      this.generatedProducerName = simpleName + PRODUCER_SUFFIX;
+
+      typeName = ClassName.get(type);
+
+      boolean parameterlessCtor = false;
+      boolean hasInjectCtor = false;
+      boolean hasFieldsInject = false;
+
+      for (VariableElement field : ElementFilter.fieldsIn(type.getEnclosedElements())) {
+        if (field.getAnnotation(Inject.class) != null) {
+          hasFieldsInject = true;
+          break;
+        }
+      }
+      this.hasFieldsInject = hasFieldsInject;
+
+      for (ExecutableElement cons :
+          ElementFilter.constructorsIn(type.getEnclosedElements())) {
+        if (cons.getParameters() == null || cons.getParameters().isEmpty()) {
+          parameterlessCtor = true;
+        }
+
+        if (cons.getAnnotation(Inject.class) != null) {
+          hasInjectCtor = true;
+        }
+      }
+
+      this.hasParameterlessCtor = parameterlessCtor;
+      this.hasInjectCtor = hasInjectCtor;
+      this.packageName = packageName(name);
+
+      generatedProviderClassName = ClassName.bestGuess(packageName + "." + generatedProviderName);
+      generatedProducerClassName = ClassName.bestGuess(packageName + "." + generatedProducerName);
+
+      if (daemon != null) {
+        providerClassName = ClassName.get(DaemonProvider.class);
+        producerClassName = ClassName.get(DaemonProducer.class);
+
+        // Provider Type.
+        providerTypeName = ParameterizedTypeName.get(
+            providerClassName,
+            className
+        );
+
+        // Producer Type.
+        producerTypeName = ParameterizedTypeName.get(
+            producerClassName,
+            className,
+            generatedProviderClassName
+        );
+      } else {
+        providerClassName = ClassName.get(ActorProvider.class);
+        producerClassName = ClassName.get(ActorProducer.class);
+
+        // Provider Type.
+        providerTypeName = ParameterizedTypeName.get(
+            providerClassName,
+            className
+        );
+
+        // Producer Type.
+        producerTypeName = ParameterizedTypeName.get(
+            producerClassName,
+            className,
+            generatedProviderClassName
+        );
+      }
+    }
+
+    @Override
+    public String getName() {
+      return name;
+    }
+
+    @Override
+    public String getPackageName() {
+      return packageName;
     }
   }
 
   /**
    *
    */
-  public static class ActionHolder {
+  public static class ActionHolder implements Holder {
 
     // Configure Remote options
     final Internal internal;
@@ -549,6 +747,16 @@ public class ActionProcessor extends AbstractProcessor {
             generatedProviderClassName
         );
       }
+    }
+
+    @Override
+    public String getName() {
+      return name;
+    }
+
+    @Override
+    public String getPackageName() {
+      return packageName;
     }
 
     boolean isInternal() {
@@ -809,6 +1017,7 @@ public class ActionProcessor extends AbstractProcessor {
   /**
    *
    */
+  @SuppressWarnings("all")
   public class ActionPackage {
 
     final String name;
@@ -817,6 +1026,7 @@ public class ActionProcessor extends AbstractProcessor {
     final ActionPackage parent;
     final TreeMap<String, ActionPackage> children = new TreeMap<>();
     final TreeMap<String, ActionHolder> actions = new TreeMap<>();
+    final TreeMap<String, ActorHolder> actors = new TreeMap<>();
     final boolean root;
     final ClassName moduleName;
     public String path;
@@ -905,6 +1115,13 @@ public class ActionProcessor extends AbstractProcessor {
         generateModule(action);
       });
 
+      actors.values().stream().filter(a -> !a.generated).forEach(actor -> {
+        actor.generated = true;
+        generateProvider(actor);
+        generateProducer(actor);
+        generateModule(actor);
+      });
+
       // Package module.
       final FileObject packageModuleSource = getModuleFile();
       final List<ClassName> classNames = new ArrayList<>();
@@ -923,6 +1140,12 @@ public class ActionProcessor extends AbstractProcessor {
           .map(p -> p.moduleName)
           .collect(Collectors.toList());
 
+      final List<ClassName> actorClasses = actors
+          .values()
+          .stream()
+          .map(a -> ClassName.bestGuess(path + "." + a.moduleName)).collect(
+              Collectors.toList());
+
       final List<ClassName> actionClasses = actions
           .values()
           .stream()
@@ -930,6 +1153,7 @@ public class ActionProcessor extends AbstractProcessor {
               Collectors.toList());
 
       classNames.addAll(subModuleClasses);
+      classNames.addAll(actorClasses);
       classNames.addAll(actionClasses);
 
       for (int i = 0; i < classNames.size(); i++) {
@@ -1165,6 +1389,131 @@ public class ActionProcessor extends AbstractProcessor {
       }
     }
 
+
+    private void generateProvider(ActorHolder actor) {
+      final MethodSpec.Builder providerCtor = MethodSpec.constructorBuilder()
+          .addAnnotation(Inject.class)
+          .addParameter(ParameterSpec
+              .builder(
+                  ParameterizedTypeName.get(ClassName.get(Provider.class), actor.className),
+                  "actorProvider").build())
+          .addStatement("super(actorProvider)");
+
+      final TypeSpec.Builder providerType = TypeSpec
+          .classBuilder(actor.generatedProviderName)
+          .addModifiers(Modifier.PUBLIC)
+          .superclass(actor.providerTypeName)
+          .addAnnotation(Singleton.class);
+
+      providerType.addMethod(providerCtor.build());
+
+      providerType.addMethod(MethodSpec.methodBuilder("getActorClass")
+          .addAnnotation(NotNull.class)
+          .addAnnotation(Override.class)
+          .addModifiers(Modifier.PUBLIC)
+          .returns(ParameterizedTypeName.get(ClassName.get(Class.class), actor.className))
+          .addStatement("return $T.class", actor.className)
+          .build());
+
+      // Build java file.
+      final JavaFile providerJavaFile = JavaFile.builder(path, providerType.build()).build();
+
+      try {
+        // Write .java source code file.
+        providerJavaFile.writeTo(filer);
+      } catch (Throwable e) {
+        // Ignore.
+        messager.printMessage(Diagnostic.Kind.ERROR,
+            "Failed to generate Source File: " + e.getMessage());
+      }
+    }
+
+    private void generateProducer(ActorHolder actor) {
+      final MethodSpec.Builder providerCtor = MethodSpec.constructorBuilder()
+          .addAnnotation(Inject.class)
+          .addModifiers(Modifier.PUBLIC);
+
+      final TypeSpec.Builder producerType = TypeSpec
+          .classBuilder(actor.generatedProducerName)
+          .addModifiers(Modifier.PUBLIC)
+          .superclass(actor.producerTypeName)
+          .addAnnotation(Singleton.class);
+
+      producerType.addMethod(providerCtor.build());
+
+      producerType.addMethod(MethodSpec.methodBuilder("getActorClass")
+          .addAnnotation(NotNull.class)
+          .addAnnotation(Override.class)
+          .addModifiers(Modifier.PUBLIC)
+          .returns(ParameterizedTypeName.get(ClassName.get(Class.class), actor.className))
+          .addStatement("return $T.class", actor.className)
+          .build());
+
+      // Build java file.
+      final JavaFile providerJavaFile = JavaFile.builder(path, producerType.build()).build();
+
+      try {
+        // Write .java source code file.
+        providerJavaFile.writeTo(filer);
+      } catch (Throwable e) {
+        // Ignore.
+        messager.printMessage(Diagnostic.Kind.ERROR,
+            "Failed to generate Source File: " + e.getMessage());
+      }
+    }
+
+    private void generateModule(ActorHolder actor) {
+      final TypeSpec.Builder actorModuleType = TypeSpec
+          .classBuilder(actor.moduleName)
+          .addModifiers(Modifier.PUBLIC)
+          .addAnnotation(Module.class);
+
+      if (actor.hasParameterlessCtor && !actor.hasInjectCtor) {
+        final MethodSpec.Builder provideActionMethod = MethodSpec.methodBuilder("_1")
+            .addAnnotation(Provides.class)
+            .returns(actor.className)
+            .addStatement("return new $T()", actor.className);
+        actorModuleType.addMethod(provideActionMethod.build());
+      }
+
+      actorModuleType.addMethod(
+          MethodSpec.methodBuilder("_2")
+              .addAnnotation(Provides.class)
+              .addAnnotation(IntoSet.class)
+              .returns(ACTOR_PROVIDER_NAME)
+              .addParameter(ParameterSpec
+                  .builder(actor.generatedProviderClassName, "provider")
+                  .build()
+              )
+              .addStatement("return provider")
+              .build());
+
+      actorModuleType.addMethod(
+          MethodSpec.methodBuilder("_3")
+              .addAnnotation(Provides.class)
+              .addAnnotation(IntoSet.class)
+              .returns(ACTOR_PRODUCER_NAME)
+              .addParameter(ParameterSpec
+                  .builder(actor.generatedProducerClassName, "producer")
+                  .build()
+              )
+              .addStatement("return producer")
+              .build());
+
+      // Build java file.
+      final JavaFile moduleFile = JavaFile.builder(path, actorModuleType.build())
+          .build();
+
+      try {
+        // Write .java source code file.
+        moduleFile.writeTo(filer);
+      } catch (Throwable e) {
+        // Ignore.
+        messager.printMessage(Diagnostic.Kind.ERROR,
+            "Failed to generate Source File: " + e.getMessage());
+      }
+    }
+
     private void generateLocator() {
       // Build empty @Inject constructor.
       final MethodSpec.Builder ctor = MethodSpec.constructorBuilder()
@@ -1231,6 +1580,37 @@ public class ActionProcessor extends AbstractProcessor {
                 .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                 .returns(action.generatedProducerClassName)
                 .addStatement("return " + action.fieldName)
+                .build()
+        );
+      });
+
+      // Go through all actions.
+      actors.forEach((classPath, actor) -> {
+        type.addField(
+            FieldSpec.builder(actor.generatedProducerClassName, actor.fieldName)
+                .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                .build()
+        );
+        type.addField(
+            FieldSpec.builder(actor.generatedProducerClassName, capitalize(actor.fieldName))
+                .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                .build()
+        );
+
+        ctor.addParameter(
+            ParameterSpec
+                .builder(actor.generatedProducerClassName, actor.fieldName, Modifier.FINAL)
+                .build()
+        );
+
+        ctor.addStatement("this.$L = $L", actor.fieldName, actor.fieldName);
+        ctor.addStatement("this.$L = $L", capitalize(actor.fieldName), actor.fieldName);
+
+        type.addMethod(
+            MethodSpec.methodBuilder(actor.fieldName)
+                .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                .returns(actor.generatedProducerClassName)
+                .addStatement("return " + actor.fieldName)
                 .build()
         );
       });

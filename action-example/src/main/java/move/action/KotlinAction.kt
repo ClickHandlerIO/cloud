@@ -1,5 +1,6 @@
 package move.action
 
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 //
@@ -27,7 +28,9 @@ class Ping : HttpAction() {
    suspend override fun execute() {
       param("")
 
-      resp.setStatusCode(200).end("PONG")
+//      sleep(1000)
+
+      resp.setStatusCode(200).end("PONG ${System.currentTimeMillis()}")
    }
 }
 
@@ -77,6 +80,7 @@ class Allocate : InternalAction<String, String>() {
 
 //      delay(1000)
       var result = A.MyAction ask "Hi2"
+
 //      var result2 = A.MyAction ask "Hi2"
 //      var result2 = "Direct"
 //

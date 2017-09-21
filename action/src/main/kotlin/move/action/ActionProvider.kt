@@ -36,7 +36,6 @@ constructor(val vertx: Vertx, val actionProvider: Provider<A>) {
    open val isInternal = false
    open val isWorker = false
    open val isHttp = false
-   open val isDaemon = false
 
    val vertxCore: io.vertx.core.Vertx = vertx.delegate
    var executionTimeoutEnabled: Boolean = false

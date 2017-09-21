@@ -5,10 +5,11 @@ package move.action;
  */
 public class TimerEventHandle extends TimerHandle {
 
-  int type;
-  HasTimers hasTimers;
+  public final int type;
+  private HasTimers hasTimers;
 
   public TimerEventHandle(int type, HasTimers hasTimers) {
+    this.type = type;
     this.hasTimers = hasTimers;
     hasTimers.addTimer(this);
   }

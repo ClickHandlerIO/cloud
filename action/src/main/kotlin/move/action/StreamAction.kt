@@ -1,6 +1,5 @@
 package move.action
 
-import com.sun.xml.internal.ws.message.stream.StreamMessage
 import io.vertx.core.buffer.Buffer
 import move.NUID
 
@@ -51,7 +50,7 @@ data class StreamRequest<T>(
    // PubSub channel to publish messages on
    val channel: String = "",
    // Local lambda
-   val local: suspend (StreamMessage) -> Unit,
+//   val local: suspend (StreamMessage) -> Unit,
    // Try to compress payload
    val gzip: Boolean = true,
    // Args for setup

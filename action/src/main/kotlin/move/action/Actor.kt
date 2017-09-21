@@ -1,6 +1,7 @@
 package move.action
 
 import io.netty.buffer.ByteBuf
+import io.netty.buffer.Unpooled
 import io.vertx.core.Handler
 import kotlinx.coroutines.experimental.*
 import kotlinx.coroutines.experimental.channels.*
@@ -8,66 +9,283 @@ import kotlinx.coroutines.experimental.selects.SelectClause1
 import kotlinx.coroutines.experimental.selects.SelectClause2
 import move.threading.WorkerPool
 import java.util.*
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.TimeUnit
 import java.util.function.Supplier
+import javax.inject.Inject
+import javax.inject.Provider
 import kotlin.coroutines.experimental.Continuation
 import kotlin.coroutines.experimental.ContinuationInterceptor
 import kotlin.coroutines.experimental.CoroutineContext
 
-abstract class ActorProvider<E> {
-   open val daemon = false
-}
+typealias ActorID = io.netty.util.AsciiString
+//typealias ActorID = String
 
-class ActorProducer<E, P : ActorProvider<E>> {
+object LocalActorStore {
+   val map = ConcurrentHashMap<ActorID, AbstractActorAction<*>>(10_000)
 
-}
-
-abstract class ActorMessage {
-   open val name = javaClass.canonicalName
-}
-
-data class ByteBufMessage(val buffer: ByteBuf) : ActorMessage() {
-   override val name: String
-      get() = "ByteBuf"
-}
-
-data class ActionAskMessage(val request: Any,
-                            val producer: ActionProducer<*, *, *, *>,
-                            val response: (Any) -> Unit) : ActorMessage() {
-   override val name: String
-      get() = "Ask"
+   fun get(id: ActorID) = map.get(id)
 }
 
 
 /**
- * Number
+ *
  */
-data class ActorFrame(val reqId: String,
-                      val id: String,
-                      val seq: Int = 0,
-                      val size: Int = 0,
-                      val needsAck: Boolean = true) {
+class DuplicateActorIDException(
+   val id: ActorID,
+   val producer: ActorProducer<*, *>,
+   val producer2: ActorProducer<*, *>
+) : RuntimeException("ActorID [$id] not unique. Used for types [$producer] and [$producer2]")
 
-   companion object {
-      fun unpack(buf: ByteBuf) {
-         // <ActorFrame> reqId someId -1 9000
+
+/**
+ *
+ */
+abstract class ActorProxy
+<A : ActorAction, P : ActorProvider<A>, PRODUCER : ActorProducer<A, P>>(val producer: PRODUCER) {
+   abstract val id: ActorID
+
+   abstract fun send(message: ActorMessage)
+
+   abstract fun <A : JobAction<IN, OUT>,
+      IN : Any,
+      OUT : Any,
+      P : WorkerActionProvider<A, IN, OUT>> ask(message: AskMessage<A, IN, OUT, P>)
+}
+
+/**
+ *
+ */
+class LocalActorProxy
+<A : ActorAction, P : ActorProvider<A>, PRODUCER : ActorProducer<A, P>>(
+   internal val actor: ActorAction, producer: PRODUCER) : ActorProxy<A, P, PRODUCER>(producer) {
+   override val id: ActorID
+      get() = actor.id
+
+   val eventLoop get() = actor.eventLoop
+
+   override fun send(message: ActorMessage) {
+      actor.offer(message)
+   }
+
+   override fun <A : JobAction<IN, OUT>,
+      IN : Any,
+      OUT : Any,
+      P : WorkerActionProvider<A, IN, OUT>> ask(message: AskMessage<A, IN, OUT, P>) {
+      actor.offer(message)
+   }
+}
+
+/**
+ *
+ */
+class RemoteActorProxy
+<A : ActorAction, P : ActorProvider<A>, PRODUCER : ActorProducer<A, P>>(
+   override val id: ActorID,
+   producer: PRODUCER) : ActorProxy<A, P, PRODUCER>(producer) {
+
+   override fun send(message: ActorMessage) {
+      producer.send(id, message)
+   }
+
+   override fun <A : JobAction<IN, OUT>,
+      IN : Any,
+      OUT : Any,
+      P : WorkerActionProvider<A, IN, OUT>> ask(message: AskMessage<A, IN, OUT, P>) {
+      // Go through Broker.
+      producer.ask(id, message)
+   }
+}
+
+/**
+ *
+ */
+abstract class ActorProvider<A : ActorAction>(val provider: Provider<A>) {
+   open val daemon = false
+
+   abstract val actorClass: Class<A>
+}
+
+
+/**
+ *
+ */
+abstract class ActorProducer<A : ActorAction, P : ActorProvider<A>>() {
+   lateinit var provider: P
+   abstract val actorClass: Class<A>
+
+   @Inject
+   protected fun inject(provider: P) {
+      this.provider = provider
+   }
+
+   open fun of(id: ActorID): ActorProxy<A, P, ActorProducer<A, P>> {
+      val actor = LocalActorStore.map.get(id)
+
+      if (actor != null) {
+         return LocalActorProxy(actor as A, this)
+      } else {
+         val newActor = LocalActorStore.map.computeIfAbsent(id, { provider.provider.get() })
+
+         return LocalActorProxy(newActor as A, this)
+//         return RemoteActorProxy(id, this)
+      }
+   }
+
+   fun <A : JobAction<IN, OUT>,
+      IN : Any,
+      OUT : Any,
+      P : WorkerActionProvider<A, IN, OUT>> ask(id: ActorID, message: AskMessage<A, IN, OUT, P>) {
+   }
+
+   fun send(id: ActorID, message: ActorMessage) {
+      of(id).send(message)
+   }
+}
+
+/**
+ *
+ */
+abstract class DaemonProvider<T : ActorAction>(provider: Provider<T>) : ActorProvider<T>(provider) {
+   override val daemon = true
+
+   val sort: Int
+   val role: NodeRole
+
+   init {
+      val annotation = actorClass.getAnnotation(Daemon::class.java)!!
+
+      sort = annotation.order
+      role = annotation.role
+   }
+}
+
+/**
+ *
+ */
+abstract class DaemonProducer<A : ActorAction, P : DaemonProvider<A>>()
+   : ActorProducer<A, P>() {
+
+   private var _instance: A? = null
+   private var _proxy: LocalActorProxy<A, P, ActorProducer<A, P>>? = null
+
+   val instance get() = _proxy!!
+
+   operator fun invoke() = _proxy!!
+
+   override fun of(id: ActorID): ActorProxy<A, P, ActorProducer<A, P>> {
+      return _proxy!!
+   }
+
+   @Synchronized
+   suspend fun start() {
+      if (_instance != null) {
+         return
       }
 
+      _instance = provider.provider.get().apply {
+         val id = ActorID(javaClass.canonicalName)
+
+         // Launch
+         launch(
+            MKernel.forKey(id),
+            this@DaemonProducer,
+            id
+         ).await()?.apply { throw this }
+      }
+      _proxy = LocalActorProxy(
+         _instance!!,
+         this
+      )
+   }
+
+   fun <A : JobAction<IN, OUT>,
+      IN : Any,
+      OUT : Any,
+      P : WorkerActionProvider<A, IN, OUT>> ask(message: AskMessage<A, IN, OUT, P>) {
+      _proxy?.ask(message)
    }
 }
 
-object ActorPacker {
-   fun pack(id: String) {
+/**
+ *
+ */
+abstract class ActorMessage {
+   open val name = javaClass.canonicalName
 
+   open fun pack(): ByteBuf {
+      return Unpooled.EMPTY_BUFFER
+   }
+
+   open fun pack(buffer: ByteBuf) {
    }
 }
+
+/**
+ *
+ */
+data class ByteBufMessage(val buffer: ByteBuf) : ActorMessage() {
+   override val name: String
+      get() = "ByteBuf"
+
+   override fun pack(): ByteBuf {
+      return Unpooled.EMPTY_BUFFER
+   }
+
+   override fun pack(buffer: ByteBuf) {
+      super.pack(buffer)
+   }
+}
+
+const val ASK_ASYNC = 1
+const val ASK_FIFO = 2
+
+/**
+ *
+ */
+data class AskMessage
+<A : JobAction<IN, OUT>,
+   IN : Any,
+   OUT : Any,
+   P : WorkerActionProvider<A, IN, OUT>>(
+   val request: IN,
+   val type: Int,
+   val timeout: Long,
+   val producer: WorkerActionProducer<A, IN, OUT, P>) : ActorMessage() {
+
+   internal var callback: CompletableDeferred<OUT>? = null
+
+   override val name: String
+      get() = "Ask"
+
+   suspend fun execute(): OUT {
+      return producer.ask(request, timeout, TimeUnit.MILLISECONDS)
+   }
+
+   fun rxExecute(): DeferredAction<OUT> {
+      return producer.rxAsk(request, timeout)
+   }
+
+   override fun pack(): ByteBuf {
+      return super.pack()
+   }
+
+   override fun pack(buffer: ByteBuf) {
+      super.pack(buffer)
+   }
+}
+
+data class TimerMessage(val handle: TimerEventHandle) : ActorMessage()
+
 
 const val TIMER_TYPE_INTERVAL = 0
 
 abstract class ActorAction : AbstractActorAction<ActorMessage>() {
    open val intervalMillis: Long = 5000L
    open val intervalDelay: Boolean = true
+
+   private var inFlight = 0
 
    suspend override fun beforeExecute() {
       startUp()
@@ -90,8 +308,9 @@ abstract class ActorAction : AbstractActorAction<ActorMessage>() {
 
    suspend override fun process(msg: ActorMessage) {
       when (msg) {
-         is ByteBufMessage -> onByteBuf(msg)
-         is ActionAskMessage -> onAsk(msg)
+         is ByteBufMessage -> handleBuffer(msg)
+         is AskMessage<*, *, *, *> -> handleAsk(msg)
+         is TimerMessage -> handleTimer(msg)
          else -> handle(msg)
       }
    }
@@ -103,24 +322,43 @@ abstract class ActorAction : AbstractActorAction<ActorMessage>() {
    }
 
    override fun onTimer(handle: TimerEventHandle) {
-      if (handle.type == TIMER_TYPE_INTERVAL) {
+      offer(TimerMessage(handle))
+   }
 
+   suspend protected fun handleTimer(msg: TimerMessage) {
+      if (msg.handle.type == TIMER_TYPE_INTERVAL) {
+         wrapInterval()
       }
    }
 
    /**
     *
     */
-   suspend protected fun onByteBuf(msg: ByteBufMessage) {
+   suspend protected fun handleBuffer(msg: ByteBufMessage) {
       // Inspect.
-
    }
 
    /**
     *
     */
-   suspend protected fun onAsk(msg: ActionAskMessage) {
+   suspend protected fun handleAsk(msg: AskMessage<*, *, *, *>) {
+      asyncAsk(msg)
+   }
 
+   suspend protected fun globalFifoAsk(msg: AskMessage<*, *, *, *>) {
+
+   }
+
+   suspend protected fun fifoAsk(msg: AskMessage<*, *, *, *>) {
+
+   }
+
+   protected fun asyncAsk(msg: AskMessage<*, *, *, *>) {
+      inFlight++
+      val future = msg.rxExecute()
+      future.invokeOnCompletion {
+         inFlight--
+      }
    }
 
    /**
@@ -162,7 +400,9 @@ abstract class ActorAction : AbstractActorAction<ActorMessage>() {
    /**
     *
     */
-   suspend open fun handle(msg: ActorMessage) {}
+   suspend open fun handle(msg: ActorMessage) {
+
+   }
 }
 
 abstract class AbstractActorAction<E> :
@@ -180,12 +420,15 @@ abstract class AbstractActorAction<E> :
    internal val timers
       get() = _timers!!
 
-   lateinit var id: String
+   lateinit var id: ActorID
    var created = 0L
    var ended = 0L
+   private var starting = true
    private var uncaughtExceptionCount = 0L
 
+   private var _onStarted: CompletableDeferred<Throwable?>? = null
    lateinit var eventLoop: MEventLoop
+   lateinit var producer: ActorProducer<*, *>
    lateinit var _channel: Channel<E>
    override val channel: Channel<E>
       get() = _channel
@@ -196,15 +439,16 @@ abstract class AbstractActorAction<E> :
 
    override val hasCancellingState: Boolean get() = true
 
-   protected var tick = true
-
+   var tick: Boolean = true
+   // Metrics.
    var begin: Long = 0
-   var beginTick: Long = 0
    var endTick: Long = 0
    var cpu: Long = 0
    var cpuBegin: Long = 0
    var blocking: Long = 0
-   var blockingBegin: Long = 0
+   var child: Long = 0
+   var childCpu: Long = 0
+   var childBlocking: Long = 0
 
    var shortCircuited = false
    var fallbackSucceed = false
@@ -212,35 +456,42 @@ abstract class AbstractActorAction<E> :
    var failed = false
 
    internal fun begin() {
-      begin = if (tick) eventLoop.epochTick else System.currentTimeMillis()
-   }
-
-   internal fun end() = if (tick) eventLoop.epochTick - begin else System.currentTimeMillis() - begin
-
-   internal fun blockingBegin() {
-      blockingBegin = if (tick) eventLoop.epochTick else System.currentTimeMillis()
-   }
-
-   internal fun blockingEnd() {
-      blocking += if (tick)
-         eventLoop.epochTick - blockingBegin
+      begin = if (tick)
+         eventLoop.epochTick
       else
-         System.currentTimeMillis() - blockingBegin
+         System.currentTimeMillis()
+   }
+
+   internal fun end() {
+      val elapsed = if (tick)
+         eventLoop.epochTick - begin
+      else
+         System.currentTimeMillis() - begin
+
+//      provider.durationMs.add(elapsed)
+   }
+
+   @Synchronized internal fun addBlockingTime(time: Long) {
+      blocking += time
    }
 
    override fun addTimer(handle: TimerHandle) {
-      hasTimers = true
+      val _timers = this._timers
       if (_timers == null) {
-         _timers = arrayListOf(handle)
+         this._timers = arrayListOf(handle)
+      } else {
+         _timers.add(handle)
       }
    }
 
    override fun removeTimer(handle: TimerHandle) {
-      if (_timers != null)
-         _timers!! -= handle
-      hasTimers = !timers.isEmpty()
-      if (!hasTimers)
-         _timers = null
+      val _timers = this._timers
+      if (_timers != null) {
+         _timers -= handle
+         if (_timers.isEmpty()) {
+            this._timers = null
+         }
+      }
    }
 
    private fun removeAllTimers() {
@@ -254,23 +505,33 @@ abstract class AbstractActorAction<E> :
    /**
     * Launches action as the root coroutine.
     */
-   internal open fun launch(eventLoop: MEventLoop,
-      //                            provider: ActionProvider<*, IN, OUT>,
-                            id: String,
-                            timeoutTicks: Long = 0,
-                            root: Boolean = false) {
-//      if (MKernel.currentEventLoop !== eventLoop) {
-//         throw RuntimeException("Invoked from outside EventLoop thread.")
-//      }
+   internal open fun launch(
+      eventLoop: MEventLoop,
+      producer: ActorProducer<*, *>,
+      id: ActorID): CompletableDeferred<Throwable?> {
 
-//      this.metrics = ActionMetrics()
+      this._onStarted = CompletableDeferred()
       this.id = id
+      this.producer = producer
       this.eventLoop = eventLoop
       this.created = System.currentTimeMillis()
-      this.created = eventLoop.epoch
-      this._channel = LinkedListChannel()
+//      this.created = eventLoop.epoch
 
-      CoroutineStart.DEFAULT({ internalExecute() }, this, this)
+      try {
+         LocalActorStore.map.put(id, this)
+         if (MKernel.currentEventLoop !== eventLoop) {
+            eventLoop.execute {
+               CoroutineStart.DEFAULT({ internalExecute() }, this, this)
+            }
+         } else {
+            CoroutineStart.DEFAULT({ internalExecute() }, this, this)
+         }
+      } catch (e: Throwable) {
+         LocalActorStore.map.remove(id)
+         throw e
+      }
+
+      return _onStarted!!
    }
 
    suspend protected open fun beforeExecute() {
@@ -280,32 +541,65 @@ abstract class AbstractActorAction<E> :
    }
 
    suspend internal fun internalExecute() {
-      beforeExecute()
-
-      // Iterate over messages in the channel.
-      for (msg in channel) {
+      begin()
+      try {
          try {
-            process(msg)
-         } catch (e: Throwable) {
-            uncaughtExceptionCount++
+            // Create channel.
+            _channel = createChannel()
 
+            // Invoke beforeExecute()
+            beforeExecute()
+
+            _onStarted?.complete(null)
+            _onStarted = null
+         } catch (e: Throwable) {
+            _channel.close(e)
+            // Ignore.
+            _onStarted?.complete(e)
+            _onStarted = null
+            return
+         }
+
+         // Iterate over messages in the channel.
+         for (msg in _channel) {
             try {
-               onProcessException(msg, e)
-            } catch (e2: Throwable) {
+               process(msg)
+            } catch (e: Throwable) {
                uncaughtExceptionCount++
+
+               try {
+                  onProcessException(msg, e)
+               } catch (e2: Throwable) {
+                  uncaughtExceptionCount++
+               }
+            }
+         }
+
+         try {
+            if (!_channel.isClosedForSend || !_channel.isClosedForReceive) {
+               _channel.close()
+            }
+         } catch (e: Throwable) {
+         }
+
+         afterExecute()
+      } finally {
+         try {
+            // Remove timers.
+            removeAllTimers()
+         } finally {
+            try {
+               end()
+            } finally {
+               // Remove from LocalActorStore
+               LocalActorStore.map.remove(id)
             }
          }
       }
+   }
 
-      // Remove timers.
-      if (hasTimers) {
-         timers.forEach { it.remove() }
-         timers.clear()
-      }
-
-      ended = System.currentTimeMillis()
-
-      afterExecute()
+   suspend protected fun createChannel(): Channel<E> {
+      return LinkedListChannel()
    }
 
    suspend protected abstract fun process(msg: E)
@@ -397,6 +691,7 @@ abstract class AbstractActorAction<E> :
 
       override fun resume(value: T) {
          if (MKernel.currentEventLoop !== eventLoop) {
+            // Run it on the correct event loop.
             eventLoop.execute {
                continuation.resume(value)
             }
@@ -407,6 +702,7 @@ abstract class AbstractActorAction<E> :
 
       override fun resumeWithException(exception: Throwable) {
          if (MKernel.currentEventLoop !== eventLoop) {
+            // Run it on the correct event loop.
             eventLoop.execute {
                continuation.resumeWithException(exception)
             }
@@ -420,8 +716,7 @@ abstract class AbstractActorAction<E> :
     *
     */
    override fun <T> interceptContinuation(continuation: Continuation<T>): Continuation<T> {
-      val actorContinuation = ActorContinuation(continuation)
-      return actorContinuation
+      return ActorContinuation(continuation)
    }
 
    /**
@@ -456,7 +751,9 @@ abstract class AbstractActorAction<E> :
     * EventLoop has a WheelTimer with 100ms precision.
     * Do not use "delay" if nanosecond precision is needed.
     */
-   override fun scheduleResumeAfterDelay(time: Long, unit: TimeUnit, continuation: CancellableContinuation<Unit>) {
+   override fun scheduleResumeAfterDelay(time: Long,
+                                         unit: TimeUnit,
+                                         continuation: CancellableContinuation<Unit>) {
       eventLoop.scheduleDelay(continuation, unit.toMillis(time))
    }
 
@@ -467,15 +764,20 @@ abstract class AbstractActorAction<E> :
    protected suspend fun <T> blocking(block: suspend () -> T): T =
       suspendCancellableCoroutine { cont ->
          eventLoop.executeBlocking<T>(Handler {
-            blockingBegin()
+            val begin = System.currentTimeMillis()
             try {
                val result = runBlocking { block() }
-               it.complete(result)
+               addBlockingTime(begin - System.currentTimeMillis())
+               try {
+                  it.complete(result)
+               } catch (e: Throwable) {
+                  // Ignore.
+               }
             } catch (e: Throwable) {
+               addBlockingTime(begin - System.currentTimeMillis())
                eventLoop.execute { it.fail(e) }
             }
          }, Handler {
-            blockingEnd()
             if (it.failed()) {
                eventLoop.execute { cont.resumeWithException(it.cause()) }
             } else {
@@ -490,15 +792,21 @@ abstract class AbstractActorAction<E> :
    protected suspend fun <T> javaBlocking(block: Supplier<T>): T =
       suspendCancellableCoroutine { cont ->
          eventLoop.executeBlocking<T>(Handler {
-            blockingBegin()
+            val begin = System.currentTimeMillis()
             try {
                val result = runBlocking { block.get() }
-               it.complete(result)
+
+               addBlockingTime(begin - System.currentTimeMillis())
+               try {
+                  it.complete(result)
+               } catch (e: Throwable) {
+                  // Ignore.
+               }
             } catch (e: Throwable) {
+               addBlockingTime(begin - System.currentTimeMillis())
                eventLoop.execute { it.fail(e) }
             }
          }, Handler {
-            blockingEnd()
             if (it.failed()) {
                eventLoop.execute { cont.resumeWithException(it.cause()) }
             } else {
@@ -522,7 +830,8 @@ abstract class AbstractActorAction<E> :
       suspendCancellableCoroutine { cont ->
          try {
             executor.execute {
-               blockingBegin()
+               val begin = System.currentTimeMillis()
+
                try {
                   val result = runBlocking {
                      try {
@@ -531,12 +840,16 @@ abstract class AbstractActorAction<E> :
                         throw e
                      }
                   }
-                  blockingEnd()
-                  eventLoop.execute {
-                     cont.resume(result)
+
+                  addBlockingTime(begin - System.currentTimeMillis())
+
+                  try {
+                     eventLoop.execute { cont.resume(result) }
+                  } catch (e: Throwable) {
+                     // Ignore.
                   }
                } catch (e: Throwable) {
-                  blockingEnd()
+                  addBlockingTime(begin - System.currentTimeMillis())
                   eventLoop.execute {
                      cont.resumeWithException(e)
                   }
@@ -554,7 +867,7 @@ abstract class AbstractActorAction<E> :
       suspendCancellableCoroutine { cont ->
          try {
             executor.execute {
-               blockingBegin()
+               val begin = System.currentTimeMillis()
                try {
                   val result = runBlocking {
                      try {
@@ -563,12 +876,14 @@ abstract class AbstractActorAction<E> :
                         throw e
                      }
                   }
-                  blockingEnd()
-                  eventLoop.execute {
-                     cont.resume(result)
+                  addBlockingTime(begin - System.currentTimeMillis())
+                  try {
+                     eventLoop.execute { cont.resume(result) }
+                  } catch (e: Throwable) {
+                     // Ignore.
                   }
                } catch (e: Throwable) {
-                  blockingEnd()
+                  addBlockingTime(begin - System.currentTimeMillis())
                   eventLoop.execute {
                      cont.resumeWithException(e)
                   }
@@ -590,15 +905,21 @@ abstract class AbstractActorAction<E> :
    protected suspend fun <T> blocking(pool: WorkerPool, block: suspend () -> T): T =
       suspendCancellableCoroutine { cont ->
          pool.executeBlocking<T>({
-            blockingBegin()
+            val begin = System.currentTimeMillis()
             try {
                val result = runBlocking { block() }
-               it.complete(result)
+
+               addBlockingTime(begin - System.currentTimeMillis())
+               try {
+                  it.complete(result)
+               } catch (e: Throwable) {
+                  // Ignore.
+               }
             } catch (e: Throwable) {
-               it.fail(e)
+               addBlockingTime(begin - System.currentTimeMillis())
+               eventLoop.execute { it.fail(e) }
             }
          }, {
-            blockingEnd()
             if (it.failed()) {
                eventLoop.execute { cont.resumeWithException(it.cause()) }
             } else {
@@ -613,14 +934,19 @@ abstract class AbstractActorAction<E> :
    protected suspend fun <T> javaBlocking(pool: WorkerPool, block: Supplier<T>): T =
       suspendCancellableCoroutine { cont ->
          pool.executeBlocking<T>({
-            blockingBegin()
+            val begin = System.currentTimeMillis()
             try {
                val result = runBlocking { block.get() }
-               blockingEnd()
-               it.complete(result)
+
+               addBlockingTime(begin - System.currentTimeMillis())
+               try {
+                  it.complete(result)
+               } catch (e: Throwable) {
+                  // Ignore.
+               }
             } catch (e: Throwable) {
-               blockingEnd()
-               it.fail(e)
+               addBlockingTime(begin - System.currentTimeMillis())
+               eventLoop.execute { it.fail(e) }
             }
          }, {
             if (it.failed()) {
@@ -630,41 +956,4 @@ abstract class AbstractActorAction<E> :
             }
          })
       }
-
-   inner class Metrics {
-      var tick: Boolean = true
-      // Metrics.
-      var begin: Long = 0
-      var beginTick: Long = 0
-      var endTick: Long = 0
-      var cpu: Long = 0
-      var cpuBegin: Long = 0
-      var blocking: Long = 0
-      var blockingBegin: Long = 0
-      var child: Long = 0
-      var childCpu: Long = 0
-      var childBlocking: Long = 0
-
-      var shortCircuited = false
-      var fallbackSucceed = false
-      var fallbackFailed = false
-      var failed = false
-
-      fun begin() {
-         begin = if (tick) eventLoop.epochTick else System.currentTimeMillis()
-      }
-
-      fun end() = if (tick) eventLoop.epochTick - begin else System.currentTimeMillis() - begin
-
-      fun blockingBegin() {
-         blockingBegin = if (tick) eventLoop.epochTick else System.currentTimeMillis()
-      }
-
-      fun blockingEnd() {
-         blocking += if (tick)
-            eventLoop.epochTick - blockingBegin
-         else
-            System.currentTimeMillis() - blockingBegin
-      }
-   }
 }

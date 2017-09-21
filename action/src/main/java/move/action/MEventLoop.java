@@ -17,8 +17,6 @@
 package move.action;
 
 import io.netty.channel.EventLoop;
-import io.vertx.core.AsyncResult;
-import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.impl.ContextExt;
 import io.vertx.core.impl.EventLoopContext;
@@ -76,7 +74,7 @@ public class MEventLoop extends ContextExt {
   public static final Logger log = LoggerFactory.getLogger(MEventLoop.class);
   static final ThreadLocal<MEventLoop> THREAD_LOCAL = new ThreadLocal<>();
   // MoveApp kotlinx-coroutines Dispatcher.
-  public final MoveDispatcher dispatcher = new MoveDispatcher(this);
+  public final MEventLoopDispatcher dispatcher = new MEventLoopDispatcher(this);
   // Netty EventLoop.
   final EventLoop eventLoop;
   // Processing tick flag.

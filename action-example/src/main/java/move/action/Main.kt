@@ -7,6 +7,7 @@ import kotlinx.coroutines.experimental.CompletableDeferred
 import kotlinx.coroutines.experimental.channels.actor
 import kotlinx.coroutines.experimental.delay
 import org.slf4j.LoggerFactory
+import sun.misc.Unsafe
 import java.util.concurrent.atomic.AtomicInteger
 
 // Global convenience Variable.
@@ -52,7 +53,11 @@ object App : MoveApp<AppComponent>() {
    }
 
    suspend override fun onStarted() {
-//      val counter = counterActor()
+
+   }
+
+   suspend fun benchmark() {
+      //      val counter = counterActor()
 //
 //      for (i in 1..10) {
 //         counter.send(IncCounter)
@@ -75,6 +80,8 @@ object App : MoveApp<AppComponent>() {
       A.AllocateInventory ask { id = "" }
 
       A.AllocateInventory.rxAsk { id = "" }.asSingle()
+
+//      A.WebServerDaemon().ask(A.Allocate.ask)
 
 
 //      async(dispatcher) {
@@ -118,6 +125,8 @@ object App : MoveApp<AppComponent>() {
          val futureResult = future.await()
          println("Finished with $futureResult")
       }
+
+
 
 
 //      try {
@@ -170,7 +179,7 @@ object App : MoveApp<AppComponent>() {
          for (t in 0..parallelism - 1) {
             val single = Single.create<Unit> { subscriber ->
                val eventLoop = MKernel.eventLoops[t]
-               eventLoop.runOnContext {
+               eventLoop.execute {
                   val counter = AtomicInteger(0)
                   try {
                      for (i in 1..invocationsPerPass) {
@@ -182,7 +191,7 @@ object App : MoveApp<AppComponent>() {
                         }
                      }
                   } catch (e: Throwable) {
-                     e.printStackTrace()
+//                     e.printStackTrace()
                   }
 
 //                  launch(eventLoop.dispatcher) {
