@@ -66,7 +66,10 @@ open class RemotingServer(val port: Int = 15000,
    }
 
    suspend fun stop() {
+      LOG.info("Closing HTTP Server $host:$port")
+      httpServer?.listen()
       awaitEvent<AsyncResult<Void>> { r -> httpServer?.close { r.handle(it) } }
+      LOG.info("Closed HTTP Server $host:$port")
    }
 
    suspend fun buildHttpServer(): HttpServer {

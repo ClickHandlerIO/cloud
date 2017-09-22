@@ -12,6 +12,7 @@ import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 import java.util.function.Supplier
 import javax.inject.Inject
 import javax.inject.Provider
@@ -19,7 +20,7 @@ import kotlin.coroutines.experimental.Continuation
 import kotlin.coroutines.experimental.ContinuationInterceptor
 import kotlin.coroutines.experimental.CoroutineContext
 
-typealias ActorID = io.netty.util.AsciiString
+//typealias ActorID = io.netty.util.AsciiString
 //typealias ActorID = String
 
 object LocalActorStore {
@@ -152,14 +153,22 @@ abstract class DaemonProvider<T : ActorAction>(provider: Provider<T>) : ActorPro
 
    val sort: Int
    val role: NodeRole
+   val name: String
 
    init {
       val annotation = actorClass.getAnnotation(Daemon::class.java)!!
 
       sort = annotation.order
       role = annotation.role
+
+      if (annotation.value.isNotBlank()) {
+         name = annotation.value.trim()
+      } else {
+         name = actorClass.canonicalName
+      }
    }
 }
+
 
 /**
  *
@@ -185,11 +194,12 @@ abstract class DaemonProducer<A : ActorAction, P : DaemonProvider<A>>()
       }
 
       _instance = provider.provider.get().apply {
-         val id = ActorID(javaClass.canonicalName)
+         val id = ActorID(provider.name)
 
          // Launch
          launch(
-            MKernel.forKey(id),
+            // Evenly spread daemons across all EventLoops
+            MKernel.nextOrdered(),
             this@DaemonProducer,
             id
          ).await()?.apply { throw this }
@@ -205,6 +215,10 @@ abstract class DaemonProducer<A : ActorAction, P : DaemonProvider<A>>()
       OUT : Any,
       P : WorkerActionProvider<A, IN, OUT>> ask(message: AskMessage<A, IN, OUT, P>) {
       _proxy?.ask(message)
+   }
+
+   companion object {
+      private val daemonCounter = AtomicLong(0)
    }
 }
 

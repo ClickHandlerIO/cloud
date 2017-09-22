@@ -119,13 +119,6 @@ abstract class MoveApp<G : MoveComponent> {
    open val OPTION_NATIVE_TRANSPORT = Option()
       .setLongName("native")
       .setShortName("n")
-      .setDescription("Use Native transport 'epoll' or 'kqueue' if available")
-      .setRequired(false)
-      .setFlag(true)
-
-   open val OPTION_DISABLE_NATIVE_TRANSPORT = Option()
-      .setLongName("!native")
-      .setShortName("!n")
       .setDescription("Disable Native transport 'epoll' or 'kqueue' if available")
       .setRequired(false)
       .setFlag(true)
@@ -186,19 +179,19 @@ abstract class MoveApp<G : MoveComponent> {
       @Suppress("UNCHECKED_CAST")
       _MOVE = this as MoveApp<MoveComponent>
 
-      log.info("Begin Startup Sequence")
+//      log.info("Begin Startup Sequence")
       runBlocking {
-         log.info("Received Args")
+         //         log.info("Received Args")
          val args = step1_ReceiveArgs(args)
 
-         log.info("Prepare Args")
+//         log.info("Prepare Args")
          step2_PrepareArgs()
 
-         log.info("Build CLI")
+//         log.info("Build CLI")
          // Create CommandLine
          cli = step3_BuildCLI()
 
-         log.info("Parse CLI")
+//         log.info("Parse CLI")
          // Parse CLI.
          line = cli.parse(args)
 
@@ -217,7 +210,7 @@ abstract class MoveApp<G : MoveComponent> {
             return@runBlocking
          }
 
-         log.info("Parsed CLI Successfully")
+         log.info("CLI Valid")
          // After CLI
          step4_AfterCLI(line)
 
@@ -258,11 +251,11 @@ abstract class MoveApp<G : MoveComponent> {
          step8_StartDeamons()
 
          // Add shutdown hook.
-         Runtime.getRuntime().addShutdownHook(Thread {
+         Runtime.getRuntime().addShutdownHook(Thread({
             runBlocking {
                shutdown()
             }
-         })
+         }, "shutdown"))
 
          log.info("Finalizing Startup")
          // onStarted()
@@ -400,7 +393,7 @@ abstract class MoveApp<G : MoveComponent> {
       }
 
       if (cli.isOptionAssigned(OPTION_NATIVE_TRANSPORT)) {
-         nativeTransport = true
+         nativeTransport = false
       }
 
       if (nativeTransport) {
@@ -476,7 +469,8 @@ abstract class MoveApp<G : MoveComponent> {
          // Daemons use the Actor model and can be communicated
          // with by passing messages.
          val start = System.currentTimeMillis()
-         log.info("Starting [${it.actorClass.canonicalName}]")
+
+         log.info("Starting ${it.provider.role} Daemon [${it.actorClass.canonicalName}]")
          try {
             it.start()
          } catch (e: Throwable) {
@@ -500,7 +494,10 @@ abstract class MoveApp<G : MoveComponent> {
 
    suspend open fun stopDaemons() {
       Actions.daemons.forEach {
-
+         val start = System.currentTimeMillis()
+         log.info("Stopping [${it.actorClass.canonicalName}]")
+         it.invoke().actor.channel.close()
+         log.info("Stopped [${it.actorClass.canonicalName}] in ${System.currentTimeMillis() - start}ms")
       }
    }
 }

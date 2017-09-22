@@ -91,6 +91,8 @@ object MKernel {
    // Tick count.
    val ticks = AtomicLong(0L)
 
+   val counter = AtomicLong(0L)
+
    init {
       // Setup event loops and populate thread local.
       eventLoops.forEach { it.init { CURRENT_LOOP.set(it) } }
@@ -158,6 +160,8 @@ object MKernel {
 
       return executorsByEventLoop[eventLoop] ?: nextRandom()
    }
+
+   fun nextOrdered() = eventLoops[(counter.getAndIncrement() % eventLoopCount).toInt()]
 
    /**
     *
