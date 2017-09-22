@@ -52,9 +52,7 @@ constructor(val vertx: Vertx, val actionProvider: Provider<A>) {
       0
 
    // Name
-   var name: String = findName("")
-      get
-      internal set
+   open val name: ActionName = findName(actionClass.canonicalName)
 
    // Broker
    var broker: ActionBroker = ActionBroker.DEFAULT
@@ -75,15 +73,15 @@ constructor(val vertx: Vertx, val actionProvider: Provider<A>) {
       init()
    }
 
-   fun findName(fromAnnotation: String?): String {
+   fun findName(fromAnnotation: String?): ActionName {
       if (fromAnnotation?.isNotBlank() == true) {
-         return fromAnnotation.trim()
+         return ActionName(fromAnnotation.trim())
       }
       val n = actionClass.canonicalName
       if (n.startsWith("action.")) {
-         return n.substring("action.".length)
+         return ActionName(n.substring("action.".length))
       }
-      return n
+      return ActionName(n)
    }
 
    protected open fun init() {
@@ -174,10 +172,6 @@ constructor(val vertx: Vertx, val actionProvider: Provider<A>) {
          state = CircuitBreakerState.HALF_OPEN
          halfOpenHandler.handle(null)
       }
-   }
-
-   fun name(): String {
-      return name
    }
 
    internal fun incrementFailures() {
@@ -487,6 +481,11 @@ constructor(vertx: Vertx,
    override var timeoutMillis: Long = annotationTimeout.toLong()
       get
       internal set
+
+   override val name: ActionName = if (annotation.value.isBlank())
+      ActionName(actionClass.canonicalName)
+   else
+      ActionName(annotation.value.trim())
 }
 
 
@@ -515,6 +514,11 @@ constructor(vertx: Vertx,
       "/${actionClass.canonicalName.replace(".", "/")}"
    else
       cleanPath(annotation.path.trim())
+
+   override val name: ActionName = if (annotation.value.isBlank())
+      ActionName(actionClass.canonicalName)
+   else
+      ActionName(annotation.value.trim())
 
    private fun cleanPath(path: String): String {
       if (!path.startsWith("/")) {

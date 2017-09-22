@@ -580,7 +580,7 @@ abstract class WorkerActionProducer
    }
 
    open fun launchFromMsgPack(message: ByteBuf,
-                              token: ActionToken?,
+                              token: ActionToken,
                               timeout: Long,
                               unit: TimeUnit = TimeUnit.MILLISECONDS): DeferredAction<OUT> {
       val request = Wire.unpack(provider.requestClass, message)
@@ -588,10 +588,24 @@ abstract class WorkerActionProducer
       return provider.broker.launch(
          request = request,
          provider = provider,
-         token = token ?: NoToken,
+         token = token,
          timeoutTicks = MEventLoop.calculateTicks(timeout, unit)
       )
    }
+
+//   open fun launchFromMsgPackToMsgPack(message: ByteBuf,
+//                              token: ActionToken,
+//                              timeout: Long,
+//                              unit: TimeUnit = TimeUnit.MILLISECONDS): DeferredAction<ByteBuf> {
+//      val request = Wire.unpack(provider.requestClass, message)
+//
+//      return provider.broker.launch(
+//         request = request,
+//         provider = provider,
+//         token = token,
+//         timeoutTicks = MEventLoop.calculateTicks(timeout, unit)
+//      )
+//   }
 
 //   /**
 //    * Fire and Forget
@@ -806,7 +820,7 @@ abstract class WorkerActionProducerWithBuilder
    }
 
    override fun launchFromMsgPack(message: ByteBuf,
-                                  token: ActionToken?,
+                                  token: ActionToken,
                                   timeout: Long,
                                   unit: TimeUnit): DeferredAction<OUT> {
       val request = Wire.unpack(provider.requestClass, message)
@@ -814,7 +828,7 @@ abstract class WorkerActionProducerWithBuilder
       return provider.broker.launch(
          request = request,
          provider = provider,
-         token = token ?: NoToken,
+         token = token,
          timeoutTicks = MEventLoop.calculateTicks(timeout, unit)
       )
    }

@@ -61,19 +61,17 @@ import java.util.Random;
 import java.util.function.Consumer;
 
 /**
- * Modified version of ConcurrentSkipListMap. The "Concurrent" part was removed
- * and the Key is a primitive long which should reduce memory and increase performance.
+ * Modified version of ConcurrentSkipListMap. The "Concurrent" pieces were mostly removed or
+ * simplified and the key is a "long" primitive to save boxing operations and memory
+ * and GC pressure. This class is "Not" Thread-Safe.
  *
- * This Map is intended to be used within a single thread and can efficiently keep keys
- * in ascending sorted order. Descending or "tail" operations are much more expensive
- * and not advised. If descending order is desired perhaps create another instance
- * and invert the keys.
+ * This Map is intended to be used within a single thread and can efficiently keep keys in ascending
+ * sorted order. Descending or "tail" operations are much more expensive and not advised. If
+ * descending order is desired perhaps create another instance and invert the keys.
  *
  * This map is extremely efficient at removing the first key based on a simple compare.
- * This collection does not natively support serialization. For In-Memory uses only.
  *
  * @param <V> Value Type
- *
  * @author Clay Molocznik
  */
 public class LongSkipListMap<V> {
@@ -90,9 +88,41 @@ public class LongSkipListMap<V> {
    * different threads don't see updates.
    */
   private transient int randomSeed;
-
   public LongSkipListMap() {
     initialize();
+  }
+
+  public static void main(String[] args) {
+//    {
+//      final LongSkipListMap<Long> cMap = new LongSkipListMap<>();
+//
+//      long start = System.currentTimeMillis();
+//      for (int x = 0; x < 100; x++) {
+//        long _start = System.currentTimeMillis();
+//        cMap.clear();
+//        for (long i = 0; i < 1000000; i++) {
+//          cMap.put(i, i);
+//        }
+//        System.out.println(System.currentTimeMillis() - _start);
+//      }
+//      long end = System.currentTimeMillis() - start;
+//    }
+    {
+      final LongHashMap<Long> cMap = new LongHashMap<>();
+
+      final Long value = new Long(0L);
+      long start = System.currentTimeMillis();
+      for (int x = 0; x < 100; x++) {
+        long _start = System.currentTimeMillis();
+        cMap.clear();
+        for (long i = 0; i < 1000000; i++) {
+          cMap.put(i, value);
+        }
+        System.out.println(System.currentTimeMillis() - _start);
+      }
+      long end = System.currentTimeMillis() - start;
+    }
+
   }
 
     /* ---------------- Nodes -------------- */

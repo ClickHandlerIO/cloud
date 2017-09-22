@@ -170,8 +170,8 @@ abstract class SomeJobAction<REQUEST : Any> : InternalAction<REQUEST, AllocateIn
 
 }
 
-@Internal
-class AllocateInventory @Inject constructor() : SomeJobAction<AllocateInventory.Request>() {
+@Worker
+class AllocateInventory @Inject constructor() : WorkerAction<AllocateInventory.Request, AllocateInventory.Reply>() {
    companion object : AllocateInventory_Producer()
 
    data class Request(var id: String = "")

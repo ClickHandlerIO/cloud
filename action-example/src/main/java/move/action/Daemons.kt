@@ -18,11 +18,11 @@ import javax.inject.Singleton
 class WebServerDaemon : AbstractDaemon() {
    val log = LoggerFactory.getLogger(javaClass)
 
-   lateinit var server: RemotingServerImpl
+   lateinit var server: RemoteServerImpl
 
    suspend override fun startUp() {
       log.info("starting")
-      server = RemotingServerImpl()
+      server = RemoteServerImpl()
 
       // Start and wait.
       server.start()
@@ -33,8 +33,8 @@ class WebServerDaemon : AbstractDaemon() {
       server.stop()
    }
 
-   inner class RemotingServerImpl
-      : RemotingServer(auth = JWTAuth.create(VERTX.delegate, JsonObject())) {
+   inner class RemoteServerImpl
+      : RemoteServer() {
 
    }
 }

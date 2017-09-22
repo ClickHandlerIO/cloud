@@ -1,271 +1,234 @@
 package move.action;
 
-import java.util.ConcurrentModificationException;
+import java.util.Arrays;
 
-public class LongHashMap {
-  transient LongHashMap.Entry[] table;
-  transient int size;
-  int threshold;
-  final float loadFactor;
-  transient int modCount;
+/**
+ * An minimalistic hash map optimized for long keys. The default implementation is not thread-safe,
+ * but you can get a synchronized variant using one of the static createSynchronized methods.
+ *
+ * @param <T> The value class to store.
+ */
+public class LongHashMap<T> {
 
-  public LongHashMap(int initialCapacity, float loadFactor) {
-    this.modCount = 0;
-    if (initialCapacity < 0) {
-      throw new IllegalArgumentException("Illegal Initial Capacity: " + initialCapacity);
-    } else if (loadFactor > 0.0F && !Float.isNaN(loadFactor)) {
-      if (initialCapacity == 0) {
-        initialCapacity = 1;
-      }
-
-      this.loadFactor = loadFactor;
-      this.table = new LongHashMap.Entry[initialCapacity];
-      this.threshold = (int)((float)initialCapacity * loadFactor);
-    } else {
-      throw new IllegalArgumentException("Illegal Load factor: " + loadFactor);
-    }
-  }
-
-  public LongHashMap(int initialCapacity) {
-    this(initialCapacity, 0.75F);
-  }
-
+  protected static final int DEFAULT_CAPACITY = 16;
+  private Entry<T>[] table;
+  private int capacity;
+  private int threshold;
+  private volatile int size;
   public LongHashMap() {
-    this(11, 0.75F);
+    this(16);
+  }
+  @SuppressWarnings("unchecked")
+  public LongHashMap(int capacity) {
+    this.capacity = capacity;
+    this.threshold = capacity * 4 / 3;
+    this.table = new Entry[capacity];
   }
 
-  public int size() {
-    return this.size;
+  /**
+   * Creates a synchronized (thread-safe) LongHashSet.
+   */
+  public static <T> LongHashMap<T> createSynchronized() {
+    return new Synchronized<>(DEFAULT_CAPACITY);
   }
 
-  public boolean isEmpty() {
-    return this.size == 0;
-  }
-
-  public Object get(long key) {
-    LongHashMap.Entry e = this.getEntry(key);
-    return e == null ? null : e.value;
+  /**
+   * Creates a synchronized (thread-safe) LongHashSet using the given initial capacity.
+   */
+  public static <T> LongHashMap<T> createSynchronized(int capacity) {
+    return new Synchronized<>(capacity);
   }
 
   public boolean containsKey(long key) {
-    return this.getEntry(key) != null;
-  }
+    final int index = ((((int) (key >>> 32)) ^ ((int) (key))) & 0x7fffffff) % capacity;
 
-  LongHashMap.Entry getEntry(long key) {
-    LongHashMap.Entry[] tab = this.table;
-    int hash = (int)key;
-    int index = (hash & 2147483647) % tab.length;
-
-    for(LongHashMap.Entry e = tab[index]; e != null; e = e.next) {
-      if (e.hash == hash && e.key == key) {
-        return e;
+    for (Entry<T> entry = table[index]; entry != null; entry = entry.next) {
+      if (entry.key == key) {
+        return true;
       }
     }
-
-    return null;
-  }
-
-  public boolean containsValue(Object value) {
-    LongHashMap.Entry[] tab = this.table;
-    int i;
-    LongHashMap.Entry e;
-    if (value == null) {
-      i = tab.length;
-
-      while(i-- > 0) {
-        for(e = tab[i]; e != null; e = e.next) {
-          if (e.value == null) {
-            return true;
-          }
-        }
-      }
-    } else {
-      i = tab.length;
-
-      while(i-- > 0) {
-        for(e = tab[i]; e != null; e = e.next) {
-          if (value.equals(e.value)) {
-            return true;
-          }
-        }
-      }
-    }
-
     return false;
   }
 
-  public Object put(long key, Object value) {
-    LongHashMap.Entry[] tab = this.table;
-    int hash = (int)key;
-    int index = (hash & 2147483647) % tab.length;
+  public T get(long key) {
+    final int index = ((((int) (key >>> 32)) ^ ((int) (key))) & 0x7fffffff) % capacity;
+    for (Entry<T> entry = table[index]; entry != null; entry = entry.next) {
+      if (entry.key == key) {
+        return entry.value;
+      }
+    }
+    return null;
+  }
 
-    for(LongHashMap.Entry e = tab[index]; e != null; e = e.next) {
-      if (e.hash == hash && e.key == key) {
-        Object oldValue = e.value;
-        e.value = value;
+  public T put(long key, T value) {
+    final int index = ((((int) (key >>> 32)) ^ ((int) (key))) & 0x7fffffff) % capacity;
+    final Entry<T> entryOriginal = table[index];
+    for (Entry<T> entry = entryOriginal; entry != null; entry = entry.next) {
+      if (entry.key == key) {
+        T oldValue = entry.value;
+        entry.value = value;
         return oldValue;
       }
     }
-
-    ++this.modCount;
-    if (this.size >= this.threshold) {
-      this.rehash();
-      tab = this.table;
-      index = (hash & 2147483647) % tab.length;
+    table[index] = new Entry<>(key, value, entryOriginal);
+    size++;
+    if (size > threshold) {
+      setCapacity(2 * capacity);
     }
-
-    ++this.size;
-    tab[index] = this.newEntry(hash, key, value, tab[index]);
     return null;
   }
 
-  public Object remove(long key) {
-    LongHashMap.Entry e = this.removeEntryForKey(key);
-    return e == null ? null : e.value;
-  }
-
-  LongHashMap.Entry removeEntryForKey(long key) {
-    LongHashMap.Entry[] tab = this.table;
-    int hash = (int)key;
-    int index = (hash & 2147483647) % tab.length;
-    LongHashMap.Entry e = tab[index];
-
-    for(LongHashMap.Entry prev = null; e != null; e = e.next) {
-      if (e.hash == hash && e.key == key) {
-        ++this.modCount;
-        if (prev != null) {
-          prev.next = e.next;
+  public T remove(long key) {
+    int index = ((((int) (key >>> 32)) ^ ((int) (key))) & 0x7fffffff) % capacity;
+    Entry<T> previous = null;
+    Entry<T> entry = table[index];
+    while (entry != null) {
+      Entry<T> next = entry.next;
+      if (entry.key == key) {
+        if (previous == null) {
+          table[index] = next;
         } else {
-          tab[index] = e.next;
+          previous.next = next;
         }
-
-        --this.size;
-        return e;
+        size--;
+        return entry.value;
       }
-
-      prev = e;
+      previous = entry;
+      entry = next;
     }
-
     return null;
   }
 
-  void removeEntry(LongHashMap.Entry doomed) {
-    LongHashMap.Entry[] tab = this.table;
-    int index = (doomed.hash & 2147483647) % tab.length;
-    LongHashMap.Entry e = tab[index];
-
-    for(LongHashMap.Entry prev = null; e != null; e = e.next) {
-      if (e == doomed) {
-        ++this.modCount;
-        if (prev == null) {
-          tab[index] = e.next;
-        } else {
-          prev.next = e.next;
-        }
-
-        --this.size;
-        return;
+  /**
+   * Returns all keys in no particular order.
+   */
+  public long[] keys() {
+    long[] values = new long[size];
+    int idx = 0;
+    for (Entry entry : table) {
+      while (entry != null) {
+        values[idx++] = entry.key;
+        entry = entry.next;
       }
-
-      prev = e;
     }
+    return values;
+  }
 
-    throw new ConcurrentModificationException();
+  /**
+   * Returns all entries in no particular order.
+   */
+  public Entry<T>[] entries() {
+    @SuppressWarnings("unchecked")
+    Entry<T>[] entries = new Entry[size];
+    int idx = 0;
+    for (Entry entry : table) {
+      while (entry != null) {
+        entries[idx++] = entry;
+        entry = entry.next;
+      }
+    }
+    return entries;
   }
 
   public void clear() {
-    LongHashMap.Entry[] tab = this.table;
-    ++this.modCount;
-    int index = tab.length;
-
-    while(true) {
-      --index;
-      if (index < 0) {
-        this.size = 0;
-        return;
-      }
-
-      tab[index] = null;
-    }
+    size = 0;
+    Arrays.fill(table, null);
   }
 
-  void rehash() {
-    LongHashMap.Entry[] oldTable = this.table;
-    int oldCapacity = oldTable.length;
-    int newCapacity = oldCapacity * 2 + 1;
-    LongHashMap.Entry[] newTable = new LongHashMap.Entry[newCapacity];
-    ++this.modCount;
-    this.threshold = (int)((float)newCapacity * this.loadFactor);
-    this.table = newTable;
-    int i = oldCapacity;
+  public int size() {
+    return size;
+  }
 
-    LongHashMap.Entry e;
-    int index;
-    while(i-- > 0) {
-      for(LongHashMap.Entry old = oldTable[i]; old != null; newTable[index] = e) {
-        e = old;
-        old = old.next;
-        index = (e.hash & 2147483647) % newCapacity;
-        e.next = newTable[index];
+  public void setCapacity(int newCapacity) {
+    @SuppressWarnings("unchecked")
+    Entry<T>[] newTable = new Entry[newCapacity];
+    int length = table.length;
+    for (int i = 0; i < length; i++) {
+      Entry<T> entry = table[i];
+      while (entry != null) {
+        long key = entry.key;
+        int index = ((((int) (key >>> 32)) ^ ((int) (key))) & 0x7fffffff) % newCapacity;
+
+        Entry<T> originalNext = entry.next;
+        entry.next = newTable[index];
+        newTable[index] = entry;
+        entry = originalNext;
       }
     }
-
+    table = newTable;
+    capacity = newCapacity;
+    threshold = newCapacity * 4 / 3;
   }
 
-  static boolean eq(Object o1, Object o2) {
-    return o1 == null ? o2 == null : o1.equals(o2);
+  /**
+   * Target load: 0,6
+   */
+  public void reserveRoom(int entryCount) {
+    setCapacity(entryCount * 5 / 3);
   }
 
-  LongHashMap.Entry newEntry(int hash, long key, Object value, LongHashMap.Entry next) {
-    return new LongHashMap.Entry(hash, key, value, next);
-  }
+  public final static class Entry<T> {
 
-  int capacity() {
-    return this.table.length;
-  }
+    public final long key;
+    public T value;
+    Entry<T> next;
 
-  float loadFactor() {
-    return this.loadFactor;
-  }
-
-  static class Entry {
-    private int hash;
-    private long key;
-    private Object value;
-    private LongHashMap.Entry next;
-
-    Entry(int hash, long key, Object value, LongHashMap.Entry next) {
-      this.hash = hash;
+    Entry(long key, T value, Entry<T> next) {
       this.key = key;
       this.value = value;
       this.next = next;
     }
+  }
 
-    long getKey() {
-      return this.key;
+  protected static class Synchronized<T> extends LongHashMap<T> {
+
+    public Synchronized(int capacity) {
+      super(capacity);
     }
 
-    Object getValue() {
-      return this.value;
+    @Override
+    public synchronized boolean containsKey(long key) {
+      return super.containsKey(key);
     }
 
-    Object setValue(Object value) {
-      Object oldValue = this.value;
-      this.value = value;
-      return oldValue;
+    @Override
+    public synchronized T get(long key) {
+      return super.get(key);
     }
 
-    public boolean equals(Object o) {
-      if (!(o instanceof LongHashMap.Entry)) {
-        return false;
-      } else {
-        LongHashMap.Entry e = (LongHashMap.Entry)o;
-        return this.key == e.getKey() && LongHashMap.eq(this.value, e.getValue());
-      }
+    @Override
+    public synchronized T put(long key, T value) {
+      return super.put(key, value);
     }
 
-    public int hashCode() {
-      return this.hash ^ (this.value == null ? 0 : this.value.hashCode());
+    @Override
+    public synchronized T remove(long key) {
+      return super.remove(key);
+    }
+
+    @Override
+    public synchronized long[] keys() {
+      return super.keys();
+    }
+
+    @Override
+    public synchronized Entry<T>[] entries() {
+      return super.entries();
+    }
+
+    @Override
+    public synchronized void clear() {
+      super.clear();
+    }
+
+    @Override
+    public synchronized void setCapacity(int newCapacity) {
+      super.setCapacity(newCapacity);
+    }
+
+    @Override
+    public synchronized void reserveRoom(int entryCount) {
+      super.reserveRoom(entryCount);
     }
   }
 }

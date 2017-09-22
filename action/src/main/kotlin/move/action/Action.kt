@@ -39,18 +39,12 @@ enum class CircuitBreakerState {
    OPEN,
 }
 
-interface ActionToken
+interface ActionToken {
+   val secured: Boolean
+}
 
-object NoToken : ActionToken
-
-data class AnyToken(val token: Any) : ActionToken
-
-data class StringToken(val token: String) : ActionToken
-
-data class BytesToken(val token: ByteArray) : ActionToken
-
-data class BufferToken(val token: ByteBuf) : ActionToken {
-   fun isReadable() = token.isReadable
+object NoToken : ActionToken {
+   override val secured: Boolean = false
 }
 
 interface DeferredAction<T> : Deferred<T> {
