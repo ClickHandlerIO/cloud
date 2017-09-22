@@ -49,7 +49,7 @@ abstract class ActorProxy
 
    abstract fun send(message: ActorMessage)
 
-   abstract fun <A : JobAction<IN, OUT>,
+   abstract infix fun <A : JobAction<IN, OUT>,
       IN : Any,
       OUT : Any,
       P : WorkerActionProvider<A, IN, OUT>> ask(message: AskMessage<A, IN, OUT, P>)
@@ -70,7 +70,7 @@ class LocalActorProxy
       actor.offer(message)
    }
 
-   override fun <A : JobAction<IN, OUT>,
+   override infix fun <A : JobAction<IN, OUT>,
       IN : Any,
       OUT : Any,
       P : WorkerActionProvider<A, IN, OUT>> ask(message: AskMessage<A, IN, OUT, P>) {
@@ -87,15 +87,15 @@ class RemoteActorProxy
    producer: PRODUCER) : ActorProxy<A, P, PRODUCER>(producer) {
 
    override fun send(message: ActorMessage) {
-      producer.send(id, message)
+//      producer.send(id, message)
    }
 
-   override fun <A : JobAction<IN, OUT>,
+   override infix fun <A : JobAction<IN, OUT>,
       IN : Any,
       OUT : Any,
       P : WorkerActionProvider<A, IN, OUT>> ask(message: AskMessage<A, IN, OUT, P>) {
       // Go through Broker.
-      producer.ask(id, message)
+//      producer.ask(id, message)
    }
 }
 
@@ -121,7 +121,10 @@ abstract class ActorProducer<A : ActorAction, P : ActorProvider<A>>() {
       this.provider = provider
    }
 
-   open fun of(id: ActorID): ActorProxy<A, P, ActorProducer<A, P>> {
+   open operator fun invoke(id: String): ActorProxy<A, P, ActorProducer<A, P>> =
+      invoke(ActorID(id))
+
+   open operator fun invoke(id: ActorID): ActorProxy<A, P, ActorProducer<A, P>> {
       val actor = LocalActorStore.map.get(id)
 
       if (actor != null) {
@@ -134,15 +137,15 @@ abstract class ActorProducer<A : ActorAction, P : ActorProvider<A>>() {
       }
    }
 
-   fun <A : JobAction<IN, OUT>,
-      IN : Any,
-      OUT : Any,
-      P : WorkerActionProvider<A, IN, OUT>> ask(id: ActorID, message: AskMessage<A, IN, OUT, P>) {
-   }
-
-   fun send(id: ActorID, message: ActorMessage) {
-      of(id).send(message)
-   }
+//   fun <A : JobAction<IN, OUT>,
+//      IN : Any,
+//      OUT : Any,
+//      P : WorkerActionProvider<A, IN, OUT>> ask(id: ActorID, message: AskMessage<A, IN, OUT, P>) {
+//   }
+//
+//   fun send(id: ActorID, message: ActorMessage) {
+//      invoke(id).send(message)
+//   }
 }
 
 /**
@@ -183,7 +186,7 @@ abstract class DaemonProducer<A : ActorAction, P : DaemonProvider<A>>()
 
    operator fun invoke() = _proxy!!
 
-   override fun of(id: ActorID): ActorProxy<A, P, ActorProducer<A, P>> {
+   override operator fun invoke(id: ActorID): ActorProxy<A, P, ActorProducer<A, P>> {
       return _proxy!!
    }
 
@@ -210,11 +213,22 @@ abstract class DaemonProducer<A : ActorAction, P : DaemonProvider<A>>()
       )
    }
 
-   fun <A : JobAction<IN, OUT>,
+   infix fun <A : JobAction<IN, OUT>,
       IN : Any,
       OUT : Any,
       P : WorkerActionProvider<A, IN, OUT>> ask(message: AskMessage<A, IN, OUT, P>) {
       _proxy?.ask(message)
+   }
+
+   infix fun <A : JobAction<IN, OUT>,
+      IN : Any,
+      OUT : Any,
+      P : WorkerActionProvider<A, IN, OUT>> tell(message: AskMessage<A, IN, OUT, P>) {
+      _proxy?.ask(message)
+   }
+
+   fun send(message: ActorMessage) {
+      _proxy?.send(message)
    }
 
    companion object {

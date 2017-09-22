@@ -356,9 +356,9 @@ abstract class WorkerActionProducer
       )
    }
 
-   fun askMessage(request: IN,
-                  timeout: Long = 0,
-                  unit: TimeUnit = TimeUnit.MILLISECONDS) =
+   fun request(request: IN,
+               timeout: Long = 0,
+               unit: TimeUnit = TimeUnit.MILLISECONDS) =
       AskMessage(
          request,
          ASK_ASYNC,
@@ -370,9 +370,31 @@ abstract class WorkerActionProducer
          this
       )
 
-   fun askFifoMessage(request: IN,
-                      timeout: Long = 0,
-                      unit: TimeUnit = TimeUnit.MILLISECONDS) =
+   open operator fun invoke(request: IN) =
+      AskMessage(
+         request,
+         ASK_ASYNC,
+         provider.timeoutTicks,
+         this
+      )
+
+   open operator fun invoke(request: IN,
+                            timeout: Long = 0,
+                            unit: TimeUnit = TimeUnit.MILLISECONDS) =
+      AskMessage(
+         request,
+         ASK_ASYNC,
+         when (timeout) {
+            -1L -> -1L
+            0L -> provider.timeoutTicks
+            else -> unit.toMillis(timeout)
+         },
+         this
+      )
+
+   fun fifo(request: IN,
+            timeout: Long = 0,
+            unit: TimeUnit = TimeUnit.MILLISECONDS) =
       AskMessage(
          request,
          ASK_FIFO,
@@ -686,6 +708,10 @@ abstract class WorkerActionProducerWithBuilder
 <A : JobAction<IN, OUT>, IN : Any, OUT : Any, P : WorkerActionProvider<A, IN, OUT>>
    : WorkerActionProducer<A, IN, OUT, P>() {
    abstract fun createRequest(): IN
+
+   operator fun invoke(block: IN.() -> Unit): AskMessage<A, IN, OUT, P> {
+      return super.invoke(createRequest().apply(block))
+   }
 
    suspend infix open fun ask(block: IN.() -> Unit): OUT {
       return ask(createRequest().apply(block))

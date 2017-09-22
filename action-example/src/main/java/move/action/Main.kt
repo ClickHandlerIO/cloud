@@ -2,12 +2,12 @@ package move.action
 
 import io.reactivex.Single
 import io.vertx.core.VertxOptions
+import io.vertx.core.buffer.Buffer
 import kotlinx.coroutines.experimental.CommonPool
 import kotlinx.coroutines.experimental.CompletableDeferred
 import kotlinx.coroutines.experimental.channels.actor
 import kotlinx.coroutines.experimental.delay
 import org.slf4j.LoggerFactory
-import sun.misc.Unsafe
 import java.util.concurrent.atomic.AtomicInteger
 
 // Global convenience Variable.
@@ -53,7 +53,11 @@ object App : MoveApp<AppComponent>() {
    }
 
    suspend override fun onStarted() {
+//      A.WebServerDaemon.send(ByteBufMessage(Buffer.buffer().byteBuf))
 
+//      val result2 = A.WebServerDaemon("") ask A.AllocateInventory {
+//         id = ""
+//      }
    }
 
    suspend fun benchmark() {
@@ -125,8 +129,6 @@ object App : MoveApp<AppComponent>() {
          val futureResult = future.await()
          println("Finished with $futureResult")
       }
-
-
 
 
 //      try {

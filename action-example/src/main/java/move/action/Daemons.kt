@@ -1,7 +1,5 @@
 package move.action
 
-import io.vertx.core.json.JsonObject
-import io.vertx.ext.auth.jwt.JWTAuth
 import org.slf4j.LoggerFactory
 import javax.inject.Singleton
 
