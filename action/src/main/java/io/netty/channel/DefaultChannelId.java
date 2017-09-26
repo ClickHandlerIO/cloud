@@ -20,7 +20,6 @@ import static io.netty.util.internal.MacAddressUtil.defaultMachineId;
 import static io.netty.util.internal.MacAddressUtil.parseMAC;
 
 import io.netty.buffer.ByteBufUtil;
-import io.netty.util.internal.EmptyArrays;
 import io.netty.util.internal.MacAddressUtil;
 import io.netty.util.internal.PlatformDependent;
 import io.netty.util.internal.SystemPropertyUtil;
@@ -30,8 +29,6 @@ import java.lang.management.ManagementFactory;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicInteger;
-import jnr.posix.JavaLibCHelper;
-import jnr.posix.LibC;
 
 /**
  * The default {@link ChannelId} implementation.

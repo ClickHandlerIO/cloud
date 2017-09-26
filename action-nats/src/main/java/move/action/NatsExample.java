@@ -27,7 +27,7 @@ public class NatsExample {
 // Connect to default URL ("nats://localhost:4222")
     int total = 10_000_000;
     int connCount = 10;
-    int max_per_conn = 5_000;
+    int max_per_conn = 10_000;
     int iterations = total / max_per_conn;
 
     final List<NConn> connections = new ArrayList<>(connCount);

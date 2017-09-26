@@ -969,6 +969,9 @@ abstract class JobAction<IN : Any, OUT : Any> :
 //   }
 
    override fun afterCompletion(state: Any?, mode: Int) {
+      // Decrement inFlight
+      eventLoop.decrementInFlight()
+
       // !!! Important !!! Ensure we clean up reference to Parent
       eventLoop.job = parent
       parent = null

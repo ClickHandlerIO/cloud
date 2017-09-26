@@ -3,10 +3,7 @@ package move.action
 import io.reactivex.Single
 import io.vertx.core.VertxOptions
 import io.vertx.core.buffer.Buffer
-import kotlinx.coroutines.experimental.CommonPool
 import kotlinx.coroutines.experimental.CompletableDeferred
-import kotlinx.coroutines.experimental.channels.actor
-import kotlinx.coroutines.experimental.delay
 import org.slf4j.LoggerFactory
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -36,28 +33,20 @@ object App : MoveApp<AppComponent>() {
 //         .setEventLoopPoolSize(4)
    }
 
-   // This function launches a new counter actor
-   fun counterActor() = actor<CounterMsg>(CommonPool, capacity = 1) {
-      var counter = 0 // actor state
-      for (msg in channel) { // iterate over incoming messages
-         when (msg) {
-            is IncCounter -> {
-               delay(1)
-               counter++
-               println("IncCounter on Thread ${Thread.currentThread().name}")
-            }
-            is GetCounter -> msg.response.complete(counter)
-         }
-      }
-      println("Finished Actor")
-   }
-
    suspend override fun onStarted() {
-//      A.WebServerDaemon.send(ByteBufMessage(Buffer.buffer().byteBuf))
+      val actionConsumers = MCluster.consumers[A.AllocateInventory.provider.name]
 
-//      val result2 = A.WebServerDaemon("") ask A.AllocateInventory {
-//         id = ""
-//      }
+      if (actionConsumers == null) {
+         return
+      }
+
+      if (actionConsumers.local.isEmpty()) {
+
+      }
+
+      A.WebServerDaemon.send(ByteBufMessage(Buffer.buffer().byteBuf))
+
+      val result2 = A.WebServerDaemon("") ask A.AllocateInventory.fifo(AllocateInventory.Request())
    }
 
    suspend fun benchmark() {

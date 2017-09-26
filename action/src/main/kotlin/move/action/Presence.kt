@@ -2,7 +2,6 @@ package move.action
 
 import io.netty.buffer.ByteBuf
 import move.Wire
-import org.apache.commons.collections4.list.TreeList
 
 /**
  *
@@ -45,7 +44,7 @@ class PresenceActor : ActorAction() {
    var participant3: Participant? = null
 
    // Use TreeList
-   var particpantLargeList: TreeList<Participant>? = null
+//   var particpantLargeList: TreeList<Participant>? = null
 
    suspend override fun onInterval() {
    }
@@ -57,9 +56,9 @@ class PresenceActor : ActorAction() {
    }
 
    private fun evict() {
-      if (participant == null) {
-         particpantLargeList?.forEach { }
-      }
+//      if (participant == null) {
+//         particpantLargeList?.forEach { }
+//      }
    }
 
    suspend override fun handle(msg: ActorMessage) {

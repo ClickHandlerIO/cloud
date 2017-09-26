@@ -4,7 +4,7 @@ import io.netty.buffer.ByteBuf;
 import move.NUIDString;
 import move.NUID;
 import move.action.LongSkipListMap;
-import net.openhft.smoothie.SmoothieMap;
+//import net.openhft.smoothie.SmoothieMap;
 
 /**
  *
@@ -79,19 +79,19 @@ public class CRC16 {
   }
 
   public static void main(String[] args) {
-    System.out.println("SmoothieMap Based:");
-    for (int x = 0; x < 10; x++) {
-      final SmoothieMap<Long, String> map = new SmoothieMap<>(1);
-      String bytes = NUID.nextGlobal();
-
-      long start = System.currentTimeMillis();
-      for (long i = 0; i < 1000000; i++) {
-//        for (long p = 0; p < 6; p++) {
-          map.put(i, bytes);
-//        }
-      }
-      System.out.println(System.currentTimeMillis() - start);
-    }
+//    System.out.println("SmoothieMap Based:");
+//    for (int x = 0; x < 10; x++) {
+//      final SmoothieMap<Long, String> map = new SmoothieMap<>(1);
+//      String bytes = NUID.nextGlobal();
+//
+//      long start = System.currentTimeMillis();
+//      for (long i = 0; i < 1000000; i++) {
+////        for (long p = 0; p < 6; p++) {
+//          map.put(i, bytes);
+////        }
+//      }
+//      System.out.println(System.currentTimeMillis() - start);
+//    }
 
     System.out.println("LongSkipList Based:");
     for (int x = 0; x < 10; x++) {

@@ -34,7 +34,7 @@ abstract class ActionProducer
    abstract val actionClass: Class<A>
 
    @Inject
-   internal fun injectProvider(provider: P) {
+   protected fun injectProvider(provider: P) {
       entry.injectProvider(provider)
       onProviderSet(provider)
    }

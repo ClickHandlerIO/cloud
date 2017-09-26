@@ -25,8 +25,8 @@ import io.vertx.core.impl.VertxThread;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
-import java.lang.management.ManagementFactory;
-import java.lang.management.ThreadMXBean;
+import io.vertx.core.net.NetServer;
+import io.vertx.core.net.NetServerOptions;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -84,7 +84,8 @@ public class MEventLoop extends ContextExt {
   private final LongSkipListMap<Timer> timers = new LongSkipListMap<>();
   // Wheel timer related.
   private final Timer[] timerWheel = new Timer[WHEEL_LENGTH];
-  private final ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
+  private final AtomicLong cpuTime = new AtomicLong(0L);
+  private final AtomicLong inFlight = new AtomicLong(0L);
   long epoch;
   long epochTick;
   JobAction<?, ?> job;
@@ -96,12 +97,11 @@ public class MEventLoop extends ContextExt {
   private long maxWheelEpochTick;
   private AtomicLong ticks = new AtomicLong(0L);
   private Timer unlimitedTimer = new Timer();
-
   private Object actorStore;
   private Object counterStore;
   private Object bus;
-
-  private AtomicLong cpuTime = new AtomicLong(0L);
+  private NetServer server;
+  private NetServerOptions serverOptions;
 
   public MEventLoop(
       @NotNull EventLoopContext eventLoopDefault,
@@ -109,6 +109,7 @@ public class MEventLoop extends ContextExt {
       @NotNull JsonObject config,
       @NotNull EventLoop eventLoop) {
     super(eventLoopDefault, vertxInternal, config, eventLoop);
+
     this.eventLoop = eventLoop;
     this.wheelIndex = wheelIndexFromEpoch(System.currentTimeMillis());
 
@@ -117,6 +118,8 @@ public class MEventLoop extends ContextExt {
     epoch = System.currentTimeMillis();
     epochTick = epoch / TICK_MS;
     maxWheelEpochTick = epochTick + WHEEL_LENGTH - 1;
+
+    server = vertxInternal.createNetServer(MoveAppKt.getNETSERVER_OPTIONS());
   }
 
   public static void main(String[] args) throws InterruptedException {
@@ -142,6 +145,21 @@ public class MEventLoop extends ContextExt {
     }
     final long ticks = millis / TICK_MS;
     return ticks < 1L ? 0L : ticks;
+  }
+
+  void listen(NetServerOptions options) {
+    this.serverOptions = options;
+    server = MoveAppKt.locateVertx().getDelegate().createNetServer(options);
+    server.connectHandler(event -> {
+      event.exceptionHandler(e -> {});
+      event.handler(buffer -> {});
+    });
+    server.close(event -> {});
+    server.listen();
+  }
+
+  void decrementInFlight() {
+    inFlight.decrementAndGet();
   }
 
   void init(Function0<Unit> block) {
@@ -225,6 +243,7 @@ public class MEventLoop extends ContextExt {
    * @return
    */
   JobTimerHandle registerJob(IJobAction action) {
+    inFlight.incrementAndGet();
     final JobTimerHandle handle = new JobTimerHandle(action);
     unlimitedTimer.add(handle);
     return handle;
@@ -241,6 +260,7 @@ public class MEventLoop extends ContextExt {
       return null;
     }
 
+    inFlight.incrementAndGet();
     final JobTimerHandle handle = new JobTimerHandle(action);
 
     if (tickEpoch < maxWheelEpochTick) {

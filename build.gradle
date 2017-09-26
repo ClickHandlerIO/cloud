@@ -1,9 +1,10 @@
 buildscript {
-    ext.kotlin_version = '1.1.4-3'
+    ext.kotlin_version = '1.1.50'
     ext.dagger_version = '2.11'
 
     repositories {
         jcenter()
+        maven { url "https://kotlin.bintray.com/kotlinx" }
     }
     dependencies {
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
@@ -62,6 +63,7 @@ subprojects {
         maven { url "https://oss.sonatype.org/content/repositories/google-snapshots/" }
         maven { url "http://maven.aspose.com/artifactory/simple/ext-release-local/" }
         maven { url "https://jcenter.bintray.com" }
+        maven { url "https://kotlin.bintray.com/kotlinx" }
     }
 }
 

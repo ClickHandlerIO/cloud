@@ -10,6 +10,9 @@ import io.vertx.core.VertxOptions
 import io.vertx.core.cli.Argument
 import io.vertx.core.cli.Option
 import io.vertx.core.metrics.MetricsOptions
+import io.vertx.core.net.NetClient
+import io.vertx.core.net.NetClientOptions
+import io.vertx.core.net.NetServerOptions
 import io.vertx.rxjava.core.Vertx
 import io.vertx.rxjava.core.cli.CLI
 import io.vertx.rxjava.core.cli.CommandLine
@@ -70,6 +73,14 @@ fun locateVertx(): Vertx {
 //   if (_MOVE!!.lo)
    return _MOVE!!.vertx
 }
+
+val NETSERVER_STARTING_PORT = 16000
+val NETSERVER_OPTIONS = NetServerOptions()
+   .setTcpNoDelay(true)
+   .setTcpKeepAlive(true)
+
+internal val INTERNAL_NET_CLIENT get() =
+   MOVE.internalNetClient
 
 /**
  *
@@ -161,7 +172,6 @@ abstract class MoveApp<G : MoveComponent> {
       get
       private set
 
-
    lateinit var cli: CLI
       get
       private set
@@ -174,6 +184,8 @@ abstract class MoveApp<G : MoveComponent> {
    lateinit var component: G
       get
       private set
+
+   lateinit var internalNetClient: NetClient
 
    fun start(args: Array<String>) {
       @Suppress("UNCHECKED_CAST")
@@ -217,6 +229,14 @@ abstract class MoveApp<G : MoveComponent> {
          log.info("Creating Vert.x")
          // Build Vertx.
          vertx = step5_CreateVertx()
+
+         // Internal NET client
+         internalNetClient = vertx.delegate.createNetClient(NetClientOptions()
+            .setTcpNoDelay(true)
+            .setTcpKeepAlive(true)
+            .setUsePooledBuffers(true)
+            .setReceiveBufferSize(1024 * 1024 * 2)
+         )
 
          log.info("Initializing Kernel")
          // Init MKernel
@@ -447,6 +467,15 @@ abstract class MoveApp<G : MoveComponent> {
     * Construct Vertx.
     */
    suspend open fun step5_CreateVertx() = Vertx.vertx(configureVertx())
+
+   suspend open fun configureInternalNetClient() = NetClientOptions()
+      .setTcpNoDelay(true)
+      .setTcpKeepAlive(true)
+      .setUsePooledBuffers(true)
+      // Set the buffers pretty high since this is using
+      // the internal network and we want max throughput.
+      .setReceiveBufferSize(1024 * 1024 * 2)
+      .setSendBufferSize(1024 * 1024 * 2)
 
    /**
     * Intercept before "build()"

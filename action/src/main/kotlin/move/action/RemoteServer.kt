@@ -350,8 +350,8 @@ open class RemoteServer(val port: Int = 15000,
       val COMPRESSION_LEVEL = 6
 
       val WS_MANAGERS = ThreadLocal<WSManager>()
-      val PING_BUFFER = ByteArray(1, { PING })
-      val PONG_BUFFER = ByteArray(1, { PONG })
+      val PING_BUFFER = ByteArray(1, { REMOTING_PING })
+      val PONG_BUFFER = ByteArray(1, { REMOTING_PONG })
    }
 
    inner class WSManager(val eventLoop: MEventLoop) {
@@ -552,8 +552,8 @@ open class RemoteServer(val port: Int = 15000,
 
                val type = unpacker.unpackByte()
 
-               if (type != CONNECT) {
-                  onBinaryProtocolError(PROTOCOL_ERROR_EXPECT_CONNECT)
+               if (type != REMOTING_MSG_CONNECT) {
+                  onBinaryProtocolError(REMOTING_MSG_PROTOCOL_EXPECT_CONNECT)
                   return
                }
             } catch (e: Throwable) {
@@ -579,18 +579,18 @@ open class RemoteServer(val port: Int = 15000,
                try {
 
                   when (messageType) {
-                     ASK_REPLY, ASK_ACK, ASK_ACK_AND_REPLY, ASK_PUSH -> {
+                     REMOTING_MSG_ASK_REPLY, REMOTING_MSG_ASK_ACK, REMOTING_MSG_ASK_ACK_AND_REPLY, REMOTING_MSG_ASK_PUSH -> {
                         val requestId = unpacker.unpackLong()
 
                         if (requestId <= latestId) {
-                           onBinaryProtocolError(ASK_REQUEST_ID_REUSED)
+                           onBinaryProtocolError(REMOTING_MSG_REQUEST_ID_REUSED)
                            return
                         }
 
                         val typeLength = unpacker.unpackInt()
 
                         if (typeLength > MAX_TYPE_LENGTH) {
-                           onBinaryProtocolError(ASK_TYPE_LENGTH_EXCEEDED)
+                           onBinaryProtocolError(REMOTING_MSG_TYPE_LENGTH_EXCEEDED)
                            return
                         }
 
@@ -601,7 +601,7 @@ open class RemoteServer(val port: Int = 15000,
                         val actionName = ActionName(NAME_BUFFER, 0, typeLength, false)
 
                         // Find Producer.
-                        val producer = workerMap[actionName] ?: // Return ASK_ERROR_NOT_FOUND
+                        val producer = workerMap[actionName] ?: // Return REMOTING_MSG_ERROR_NOT_FOUND
                            return
 
                         // Read timeout.
@@ -627,21 +627,21 @@ open class RemoteServer(val port: Int = 15000,
                                  decInFlight()
 
                                  // Ignore Reply if client doesn't care about it.
-                                 if (messageType == ASK_PUSH) {
+                                 if (messageType == REMOTING_MSG_ASK_PUSH) {
                                     return@execute
                                  }
 
                                  if (exception != null) {
                                     if (exception is ActionTimeoutException) {
                                        sendBinaryAskError(
-                                          ASK_ERROR_TIMEOUT,
+                                          REMOTING_MSG_ERROR_TIMEOUT,
                                           requestId,
                                           ""
                                        )
                                     } else {
                                        // Return internal error.
                                        sendBinaryAskError(
-                                          ASK_ERROR_INTERNAL,
+                                          REMOTING_MSG_ERROR_INTERNAL,
                                           requestId,
                                           exception.localizedMessage
                                        )
@@ -655,21 +655,21 @@ open class RemoteServer(val port: Int = 15000,
                               decInFlight()
 
                               // Ignore Reply if client doesn't care about it.
-                              if (messageType == ASK_PUSH) {
+                              if (messageType == REMOTING_MSG_ASK_PUSH) {
                                  return@invokeOnCompletion
                               }
 
                               if (exception != null) {
                                  if (exception is ActionTimeoutException) {
                                     sendBinaryAskError(
-                                       ASK_ERROR_TIMEOUT,
+                                       REMOTING_MSG_ERROR_TIMEOUT,
                                        requestId,
                                        ""
                                     )
                                  } else {
                                     // Return internal error.
                                     sendBinaryAskError(
-                                       ASK_ERROR_INTERNAL,
+                                       REMOTING_MSG_ERROR_INTERNAL,
                                        requestId,
                                        exception.localizedMessage
                                     )
@@ -681,23 +681,23 @@ open class RemoteServer(val port: Int = 15000,
                         }
                      }
 
-                     ACK, REPLY, PUSH, PUSH_ASK -> {
+                     REMOTING_MSG_ACK, REMOTING_MSG_REPLY, REMOTING_MSG_PUSH, REMOTING_MSG_PUSH_ASK -> {
                         // Ignore. For Client!
                      }
 
-                     PING -> {
+                     REMOTING_PING -> {
                         // Send PONG
                         webSocket.writeFinalBinaryFrame(Buffer.buffer(PONG_BUFFER))
                      }
 
-                     PONG -> {
+                     REMOTING_PONG -> {
                         receivePong()
                      }
                      else -> {
                      }
                   }
                } catch (e: Throwable) {
-                  onBinaryProtocolError(PROTOCOL_INCOMPLETE, "Message was incomplete")
+                  onBinaryProtocolError(REMOTING_MSG_PROTOCOL_INCOMPLETE, "Message was incomplete")
                } finally {
                   unpacker.close()
                }
@@ -731,7 +731,7 @@ open class RemoteServer(val port: Int = 15000,
 
          private fun sendBinaryAskError(error: Byte, requestId: Long, msg: String) {
             val packer = MessagePack.newDefaultBufferPacker()
-            packer.packByte(ASK_ERROR)
+            packer.packByte(REMOTING_MSG_ERROR_ASK)
             packer.packLong(requestId)
             packer.packByte(error)
             if (!msg.isEmpty()) {
@@ -749,7 +749,7 @@ open class RemoteServer(val port: Int = 15000,
             val packer = MessagePack.newDefaultBufferPacker()
 
             try {
-               packer.packByte(REPLY)
+               packer.packByte(REMOTING_MSG_REPLY)
                packer.packLong(requestId)
 
                if (payload !is ByteArray) {
@@ -831,73 +831,92 @@ open class VerifyResult(
 private const val INVALID: Byte = -1
 
 // Connect
-private const val CONNECT: Byte = 0
-private const val READY: Byte = 1
+private const val REMOTING_MSG_CONNECT: Byte = 0
+private const val REMOTING_MSG_CONNECTED: Byte = 1
 
 // Ping-Pong
-private const val PING: Byte = 2
-private const val PONG: Byte = 3
+private const val REMOTING_PING: Byte = 2
+private const val REMOTING_PONG: Byte = 3
 
 // Ask Upstream Messages
-private const val ASK_REPLY: Byte = 4
-private const val ASK_ACK: Byte = 5
-private const val ASK_ACK_AND_REPLY: Byte = 6
-private const val ASK_PUSH: Byte = 7
+private const val REMOTING_MSG_ASK_REPLY: Byte = 4
+private const val REMOTING_MSG_ASK_ACK: Byte = 5
+private const val REMOTING_MSG_ASK_ACK_AND_REPLY: Byte = 6
+private const val REMOTING_MSG_ASK_PUSH: Byte = 7
 
 // Ask Downstream Messages
-private const val ACK: Byte = 8 // ACK message for an ASK - Final if ASK_ACK
-private const val REPLY: Byte = 9  // Reply to ASK - Final
-private const val PUSH_ASK: Byte = 10 // Optional ASK updates
+private const val REMOTING_MSG_ACK: Byte = 8 // ACK message for an ASK - Final if ASK_ACK
+private const val REMOTING_MSG_REPLY: Byte = 9  // Reply to ASK - Final
+private const val REMOTING_MSG_PUSH_ASK: Byte = 10 // Optional ASK updates
 
-// Push
-private const val PUSH: Byte = 15
-
-// Streams
-private const val STREAM_OPENED: Byte = 20
-private const val STREAM_PING: Byte = 21
-private const val STREAM_PONG: Byte = 22
-private const val STREAM_CLOSE: Byte = 23
-private const val STREAM_CLOSED: Byte = 24
-private const val STREAM_FRAME: Byte = 25
-private const val STREAM_PAUSE: Byte = 26
-private const val STREAM_RESUME: Byte = 27
-
-// Presence
-private const val PRESENCE_LEAVE: Byte = 30
-private const val PRESENCE_GET: Byte = 31
-private const val PRESENCE_UPDATE_STATUS: Byte = 32
-private const val PRESENCE_CHANGE: Byte = 33 // Multiple Changes
-private const val PRESENCE_CHANGE_JOIN: Byte = 34 // Single Join
-private const val PRESENCE_CHANGE_REMOVED: Byte = 35 // Single Remove
 
 // Ask Error
-private const val ASK_ERROR: Byte = 40
-private const val ASK_ERROR_NOT_FOUND: Byte = 41
-private const val ASK_ERROR_TIMEOUT: Byte = 42
-private const val ASK_ERROR_INTERNAL: Byte = 43
-private const val ASK_REQUEST_ID_REUSED: Byte = 44
-private const val ASK_TYPE_LENGTH_EXCEEDED: Byte = 45
+private const val REMOTING_MSG_ERROR_ASK: Byte = 40
+private const val REMOTING_MSG_ERROR_NOT_FOUND: Byte = 41
+private const val REMOTING_MSG_ERROR_TIMEOUT: Byte = 42
+private const val REMOTING_MSG_ERROR_INTERNAL: Byte = 43
+private const val REMOTING_MSG_REQUEST_ID_REUSED: Byte = 44
+private const val REMOTING_MSG_TYPE_LENGTH_EXCEEDED: Byte = 45
+
+
+// Push
+private const val REMOTING_MSG_PUSH: Byte = 15
+
+// Streams
+private const val REMOTING_MSG_STREAM_OPENED: Byte = 20
+private const val REMOTING_MSG_STREAM_PING: Byte = 21
+private const val REMOTING_MSG_STREAM_PONG: Byte = 22
+private const val REMOTING_MSG_STREAM_CLOSE: Byte = 23
+private const val REMOTING_MSG_STREAM_CLOSED: Byte = 24
+private const val REMOTING_MSG_STREAM_FRAME: Byte = 25
+private const val REMOTING_MSG_STREAM_PAUSE: Byte = 26
+private const val REMOTING_MSG_STREAM_RESUME: Byte = 27
+
+// Presence
+private const val REMOTING_MSG_PRESENCE_LEAVE: Byte = 30
+private const val REMOTING_MSG_PRESENCE_GET: Byte = 31
+private const val REMOTING_MSG_PRESENCE_UPDATE_STATUS: Byte = 32
+private const val REMOTING_MSG_PRESENCE_CHANGE: Byte = 33 // Multiple Changes
+private const val REMOTING_MSG_PRESENCE_CHANGE_JOIN: Byte = 34 // Single Join
+private const val PRESENCE_CHANGE_REMOVED: Byte = 35 // Single Remove
+
 
 // Token
-private const val UPDATE_TOKEN: Byte = 50
-private const val TOKEN_EXPIRED: Byte = 51
-private const val TOKEN_TOO_MANY_CONNECTIONS: Byte = 52
-private const val TOKEN_EXPIRING_SOON: Byte = 52
+private const val REMOTING_MSG_UPDATE_TOKEN: Byte = 50
+private const val REMOTING_MSG_ERROR_TOKEN_EXPIRED: Byte = 51
+private const val REMOTING_MSG_ERROR_TOKEN_TOO_MANY_CONNECTIONS: Byte = 52
+private const val REMOTING_MSG_INFO_TOKEN_EXPIRING_SOON: Byte = 52
 
 // Close
-private const val CLOSE: Byte = 60
-private const val CLOSE_EXPIRED: Byte = 61
-private const val CLOSE_INACTIVE: Byte = 62
-private const val CONNECTION_ERROR: Byte = 64
+private const val REMOTING_MSG_CLOSE: Byte = 60
+private const val REMOTING_MSG_CLOSE_EXPIRED: Byte = 61
+private const val REMOTING_MSG_CLOSE_INACTIVE: Byte = 62
+private const val REMOTING_MSG_CONNECTION_ERROR: Byte = 64
 
 // Protocol Error
-private const val PROTOCOL_ERROR_EXPECT_CONNECT: Byte = 80
-private const val PROTOCOL_INCOMPLETE: Byte = 81
-private const val PROTOCOL_INVALID_TYPE: Byte = 82
-private const val PROTOCOL_TYPE_RESERVED_FOR_SERVER: Byte = 83
+private const val REMOTING_MSG_PROTOCOL_EXPECT_CONNECT: Byte = 80
+private const val REMOTING_MSG_PROTOCOL_INCOMPLETE: Byte = 81
+private const val REMOTING_MSG_PROTOCOL_INVALID_TYPE: Byte = 82
+private const val REMOTING_MSG_PROTOCOL_TYPE_RESERVED_FOR_SERVER: Byte = 83
+
+// Tell the client to open a new connection
+// and to stop sending requests through this one
+// since the server wants to shutdown or a re-balance is
+// happening.
+private const val REMOTING_MSG_INITIATE_HANDOFF: Byte = 90
 
 
-data class ConnectServer(
+// [Encoding] [Compression] [TokenLength][Token]
+data class Connect(
+   val format: Byte,
+   val compression: Byte,
+   val token: String
+)
+
+/**
+ *
+ */
+data class Connected(
    val version: String,
    val expires: Long,
    val maxInFlight: Int,
@@ -906,12 +925,17 @@ data class ConnectServer(
    val hasPresence: Boolean,
    val maxPresence: Int,
    val hasStreams: Boolean,
-   val maxStreams: Int
+   val maxStreams: Int,
+   val compression: Byte
 )
 
-data class ConnectClient(
-   val token: String
-)
+const val REMOTING_FORMAT_JSON: Byte = 1
+const val REMOTING_FORMAT_CBOR: Byte = 2
+const val REMOTING_FORMAT_MSGPACK: Byte = 3
+
+const val REMOTING_COMPRESSION_LZ4: Byte = 1
+const val REMOTING_COMPRESSION_GZIP: Byte = 2
+const val REMOTING_COMPRESSION_DEFLATE: Byte = 3
 
 /**
  *

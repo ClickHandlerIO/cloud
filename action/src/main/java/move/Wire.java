@@ -5,6 +5,10 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.dataformat.cbor.CBORFactory;
+import com.fasterxml.jackson.dataformat.ion.IonObjectMapper;
+import com.fasterxml.jackson.dataformat.protobuf.ProtobufFactory;
+import com.fasterxml.jackson.dataformat.smile.SmileFactory;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -37,53 +41,29 @@ public class Wire {
   public static final Logger LOG = LoggerFactory.getLogger(Wire.class);
   public static final ObjectMapper MAPPER = new ObjectMapper();
   public static final ObjectMapper MSGPACK_MAPPER = new ObjectMapper(new MessagePackFactory());
+  public static final ObjectMapper CBOR_MAPPER = new ObjectMapper(new CBORFactory());
   public static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory());
 
   static {
-    MAPPER.registerModule(new JavaTimeModule());
-    MAPPER.registerModule(new Jdk8Module());
-    MAPPER.registerModule(new KotlinModule());
+    configure(MAPPER);
+    configure(MSGPACK_MAPPER);
+    configure(CBOR_MAPPER);
+    configure(YAML_MAPPER);
+  }
 
-    MSGPACK_MAPPER.registerModule(new JavaTimeModule());
-    MSGPACK_MAPPER.registerModule(new Jdk8Module());
-    MSGPACK_MAPPER.registerModule(new KotlinModule());
-
-    YAML_MAPPER.registerModule(new JavaTimeModule());
-    YAML_MAPPER.registerModule(new Jdk8Module());
-    YAML_MAPPER.registerModule(new KotlinModule());
-
-    MAPPER.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-    MAPPER.configure(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES, false);
-    MAPPER.configure(DeserializationFeature.FAIL_ON_IGNORED_PROPERTIES, false);
-    MAPPER.configure(DeserializationFeature.FAIL_ON_NUMBERS_FOR_ENUMS, true);
-
-    MSGPACK_MAPPER.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-    MSGPACK_MAPPER.configure(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES, false);
-    MSGPACK_MAPPER.configure(DeserializationFeature.FAIL_ON_IGNORED_PROPERTIES, false);
-    MSGPACK_MAPPER.configure(DeserializationFeature.FAIL_ON_NUMBERS_FOR_ENUMS, true);
-
-    YAML_MAPPER.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-    YAML_MAPPER.configure(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES, false);
-    YAML_MAPPER.configure(DeserializationFeature.FAIL_ON_IGNORED_PROPERTIES, false);
-    YAML_MAPPER.configure(DeserializationFeature.FAIL_ON_NUMBERS_FOR_ENUMS, true);
-
-    MAPPER.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
-    MAPPER.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
-    MAPPER.configure(SerializationFeature.FAIL_ON_SELF_REFERENCES, true);
-    MAPPER.configure(SerializationFeature.FAIL_ON_UNWRAPPED_TYPE_IDENTIFIERS, true);
-    MAPPER.setSerializationInclusion(JsonInclude.Include.NON_NULL);
-
-    MSGPACK_MAPPER.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
-    MSGPACK_MAPPER.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
-    MSGPACK_MAPPER.configure(SerializationFeature.FAIL_ON_SELF_REFERENCES, true);
-    MSGPACK_MAPPER.configure(SerializationFeature.FAIL_ON_UNWRAPPED_TYPE_IDENTIFIERS, true);
-    MSGPACK_MAPPER.setSerializationInclusion(JsonInclude.Include.NON_NULL);
-
-    YAML_MAPPER.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
-    YAML_MAPPER.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
-    YAML_MAPPER.configure(SerializationFeature.FAIL_ON_SELF_REFERENCES, true);
-    YAML_MAPPER.configure(SerializationFeature.FAIL_ON_UNWRAPPED_TYPE_IDENTIFIERS, true);
-    YAML_MAPPER.setSerializationInclusion(JsonInclude.Include.NON_NULL);
+  static void configure(ObjectMapper mapper) {
+    mapper.registerModule(new JavaTimeModule());
+    mapper.registerModule(new Jdk8Module());
+    mapper.registerModule(new KotlinModule());
+    mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+    mapper.configure(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES, false);
+    mapper.configure(DeserializationFeature.FAIL_ON_IGNORED_PROPERTIES, false);
+    mapper.configure(DeserializationFeature.FAIL_ON_NUMBERS_FOR_ENUMS, true);
+    mapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
+    mapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
+    mapper.configure(SerializationFeature.FAIL_ON_SELF_REFERENCES, true);
+    mapper.configure(SerializationFeature.FAIL_ON_UNWRAPPED_TYPE_IDENTIFIERS, true);
+    mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
   }
 
   public static void main(String[] args) {
@@ -98,6 +78,64 @@ public class Wire {
 
     return parse((Class<T>) value.getClass(), byteify(value));
   }
+
+
+  /**
+   *
+   * @param cls
+   * @param data
+   * @param <T>
+   * @return
+   */
+  public static <T> T load(Class<T> cls, byte[] data) {
+    if (data == null) {
+      return null;
+    }
+
+    try {
+      return CBOR_MAPPER.readValue(data, cls);
+    } catch (Throwable e) {
+      throw new WireException(e);
+    }
+  }
+
+  public static <T> T load(Class<T> cls, Buffer buffer) {
+    return unpack(cls, buffer.getByteBuf().nioBuffer());
+  }
+
+  public static <T> T load(Class<T> cls, ByteBuf buffer) {
+    return unpack(cls, buffer.nioBuffer());
+  }
+
+  public static <T> T load(Class<T> cls, ByteBuffer buffer) {
+    if (buffer == null) {
+      return null;
+    }
+
+    try {
+      return CBOR_MAPPER.readValue(new ByteBufferBackedInputStream(buffer), cls);
+    } catch (Throwable e) {
+      throw new WireException(e);
+    }
+  }
+
+  public static byte[] dump(Object obj) {
+    try {
+      return CBOR_MAPPER.writeValueAsBytes(obj);
+    } catch (Throwable e) {
+      throw new WireException(e);
+    }
+  }
+
+  public static void dump(Object obj, ByteBuf buf) {
+    try {
+      final DataOutput out = new ByteBufOutputStream(buf);
+      CBOR_MAPPER.writeValue(out, obj);
+    } catch (Throwable e) {
+      throw new WireException(e);
+    }
+  }
+
 
   public static <T> T unpack(Class<T> cls, byte[] data) {
     if (data == null) {

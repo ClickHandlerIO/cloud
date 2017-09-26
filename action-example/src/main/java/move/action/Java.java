@@ -9,8 +9,10 @@ public class Java {
     MainKt.getA().AllocateInventory.singleBuilder(request -> {
       request.setId("id");
     }).subscribe(
-        r -> {},
-        e -> {}
+        r -> {
+        },
+        e -> {
+        }
     );
   }
 }
