@@ -14,9 +14,27 @@ buildscript {
 
 allprojects {
     apply plugin: 'maven'
+    apply plugin: 'maven-publish'
 
     group = 'io.clickhandler'
     version = '0.8.0-SNAPSHOT'
+
+    publishing {
+        publications {
+            maven(MavenPublication) {
+            }
+        }
+
+        repositories {
+            maven {
+                url "https://repo.axismedtech.com/content/repositories/snapshots/"
+                credentials {
+                    username "$mavenUser"
+                    password "$mavenPassword"
+                }
+            }
+        }
+    }
 
 //    uploadArchives {
 //        repositories {
@@ -66,4 +84,3 @@ subprojects {
         maven { url "https://kotlin.bintray.com/kotlinx" }
     }
 }
-
