@@ -483,7 +483,7 @@ public class SqlDatabase extends AbstractIdleService implements SqlExecutor {
             settings = new Settings();
             settings.setRenderSchema(false);
             settings.setExecuteWithOptimisticLocking(false);
-            settings.setRenderNameStyle(RenderNameStyle.QUOTED);
+            settings.setRenderNameStyle(RenderNameStyle.UPPER);
             settings.setRenderKeywordStyle(RenderKeywordStyle.UPPER);
             settings.setReflectionCaching(true);
             settings.setParamType(ParamType.INDEXED);
